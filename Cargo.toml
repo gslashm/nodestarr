@@ -1,0 +1,108 @@
+[package]
+name = "berth"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "A lightweight, self-hosted manager for Docker containers and Compose stacks, with Proxmox awareness."
+license = "AGPL-3.0-or-later"
+authors = ["gslashm"]
+repository = "https://github.com/your-user/berth"
+readme = "README.md"
+default-run = "berth"
+
+[[bin]]
+name = "berth"
+path = "src/main.rs"
+
+[lib]
+name = "berth"
+path = "src/lib.rs"
+
+[dependencies]
+# Async runtime and web server
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "fs", "process", "io-util", "sync", "signal"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "ws", "macros", "original-uri", "matched-path"] }
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http = "1"
+bytes = "1"
+# Raw Docker API calls for responses whose shape differs between versions
+hyper = { version = "1", default-features = false, features = ["client", "http1"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+http-body-util = "0.1"
+
+# Docker Engine API (unix socket / TCP)
+bollard = { version = "0.21", default-features = false, features = ["http", "pipe"] }
+
+# Outbound HTTP (registries, Proxmox, app APIs, notifications)
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "http2", "rustls-no-provider", "system-proxy", "query", "form"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+
+# Storage and serialization
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+
+# Security
+argon2 = "0.6"
+hmac = "0.13"
+sha1 = "0.11"
+sha2 = "0.11"
+getrandom = { version = "0.4", features = ["std"] }
+base64 = "0.23"
+hex = "0.4"
+data-encoding = "2"
+
+# Scheduling and time
+croner = { version = "4", default-features = false, features = ["chrono"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+chrono-tz = "0.10"
+
+# Backups
+tar = { version = "0.4", default-features = false }
+zstd = { version = "0.14", default-features = false }
+flate2 = "1"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+globset = { version = "0.4", default-features = false }
+
+# Integrations
+rumqttc = { version = "0.25", default-features = false, features = ["use-rustls-no-provider"] }
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls", "builder", "hostname", "ring", "rustls-native-certs"] }
+minijinja = { version = "3", default-features = false, features = ["builtins", "serde", "json", "urlencode"] }
+
+# Compose editing and diffs
+saphyr-parser = "0.2"
+similar = { version = "3", default-features = false, features = ["text", "inline"] }
+
+# CLI, logging, errors, utilities
+clap = { version = "4", default-features = false, features = ["std", "derive", "env", "help", "usage", "error-context"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "ansi", "std"] }
+thiserror = "2"
+anyhow = "1"
+rust-embed = { version = "8", features = ["include-exclude"] }
+mime_guess = "2"
+ipnet = "2"
+percent-encoding = "2"
+url = "2"
+parking_lot = "0.12"
+shell-words = "1"
+rustix = { version = "1", default-features = false, features = ["std", "fs", "system", "process"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 1
