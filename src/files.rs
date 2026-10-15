@@ -65,17 +65,18 @@ pub async fn list_versions(db: &Db, path: &str) -> Result<Vec<FileVersion>> {
 }
 
 pub async fn version_content(db: &Db, id: i64) -> Result<(String, String)> {
-    let row: Option<(String, Vec<u8>)> = db
+    let row: Option<(String, i64, Vec<u8>)> = db
         .call(move |c| {
             use rusqlite::OptionalExtension;
-            Ok(c.query_row("SELECT path, content FROM file_versions WHERE id = ?1", [id], |r| {
-                Ok((r.get(0)?, r.get(1)?))
+            Ok(c.query_row("SELECT path, size, content FROM file_versions WHERE id = ?1", [id], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
             })
             .optional()?)
         })
         .await?;
-    let (path, blob) = row.ok_or_else(|| AppError::not_found("file version"))?;
-    let raw = zstd::bulk::decompress(&blob, 64 * 1024 * 1024).map_err(|e| AppError::Other(e.into()))?;
+    let (path, size, blob) = row.ok_or_else(|| AppError::not_found("file version"))?;
+    // `size` is the original length, so the buffer is allocated exactly once.
+    let raw = zstd::bulk::decompress(&blob, size.max(0) as usize).map_err(|e| AppError::Other(e.into()))?;
     Ok((path, String::from_utf8_lossy(&raw).into_owned()))
 }
 

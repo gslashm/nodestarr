@@ -254,7 +254,7 @@ impl AuthService {
             return Err(AppError::bad_request("usernames use letters, digits and _ - . @ (max 64)"));
         }
         password::validate(password).map_err(AppError::BadRequest)?;
-        let hash = password::hash(password)?;
+        let hash = password::hash_async(password).await?;
         let now = crate::util::now();
         self.db
             .call(move |c| {
@@ -333,7 +333,7 @@ impl AuthService {
 
     pub async fn set_password(&self, user_id: i64, new_password: &str, keep_session: Option<String>) -> Result<()> {
         password::validate(new_password).map_err(AppError::BadRequest)?;
-        let hash = password::hash(new_password)?;
+        let hash = password::hash_async(new_password).await?;
         self.db
             .call(move |c| {
                 c.execute(
@@ -360,8 +360,7 @@ impl AuthService {
 
     pub async fn check_password(&self, user_id: i64, password: &str) -> Result<bool> {
         let hash = self.password_hash_of(user_id).await?;
-        let pw = password.to_string();
-        Ok(tokio::task::spawn_blocking(move || password::verify(&pw, &hash)).await?)
+        Ok(password::verify_async(password, &hash).await)
     }
 
     /// Verifies a username and password, creating a session.
@@ -390,15 +389,11 @@ impl AuthService {
                 })
                 .await?
         };
-        let pw = pw.to_string();
         let (ok, user) = match row {
-            Some((id, hash, totp)) => {
-                let ok = tokio::task::spawn_blocking(move || password::verify(&pw, &hash)).await?;
-                (ok, Some((id, totp)))
-            }
+            Some((id, hash, totp)) => (password::verify_async(pw, &hash).await, Some((id, totp))),
             None => {
                 // Same work as a real check, so timing doesn't reveal usernames.
-                let _ = tokio::task::spawn_blocking(move || password::verify(&pw, password::dummy_hash())).await;
+                password::verify_dummy(pw).await;
                 (false, None)
             }
         };

@@ -91,6 +91,10 @@ parking_lot = "0.12"
 shell-words = "1"
 rustix = { version = "1", default-features = false, features = ["std", "fs", "system", "process"] }
 
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+# glibc allocator tuning at startup (see main.rs)
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3"
 

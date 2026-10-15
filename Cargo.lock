@@ -1430,6 +1430,7 @@ dependencies = [
  "hyper-util",
  "ipnet",
  "lettre",
+ "libc",
  "mime_guess",
  "minijinja",
  "parking_lot",

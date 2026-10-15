@@ -10,6 +10,9 @@ use clap::Parser;
 use nodestarr::config::{Cli, Command};
 
 fn main() -> ExitCode {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    tune_allocator();
+
     let cli = Cli::parse();
     let boot = cli.boot.clone();
 
@@ -55,5 +58,24 @@ fn main() -> ExitCode {
             eprintln!("error: {err:#}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Makes glibc hand large freed buffers back to the system.
+///
+/// After a large buffer is freed, glibc raises its mmap threshold, so the
+/// next ones come from per-thread arenas and stay resident once freed. Every
+/// sign-in hashes with Argon2id in a 19 MiB buffer, so a few sign-ins used to
+/// leave about 20 MiB parked in each thread's arena. A fixed threshold keeps
+/// large buffers in their own mappings, which freeing returns, and two arenas
+/// are plenty for a mostly idle server. (musl, used in the Docker image,
+/// already returns large buffers.)
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn tune_allocator() {
+    // SAFETY: mallopt only changes allocator parameters, and this runs before
+    // any other thread starts.
+    unsafe {
+        libc::mallopt(libc::M_MMAP_THRESHOLD, 256 * 1024);
+        libc::mallopt(libc::M_ARENA_MAX, 2);
     }
 }
