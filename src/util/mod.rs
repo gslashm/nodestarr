@@ -10,18 +10,12 @@ use sha2::{Digest, Sha256};
 
 /// Current unix time in seconds.
 pub fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
 /// Current unix time in milliseconds.
 pub fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 /// Fills a buffer with cryptographically secure random bytes.
@@ -164,11 +158,7 @@ pub fn human_bytes(bytes: u64) -> String {
         value /= 1024.0;
         unit += 1;
     }
-    if unit == 0 {
-        format!("{bytes} B")
-    } else {
-        format!("{value:.1} {}", UNITS[unit])
-    }
+    if unit == 0 { format!("{bytes} B") } else { format!("{value:.1} {}", UNITS[unit]) }
 }
 
 /// Formats a duration in seconds as e.g. "3d 4h" or "12m 5s".
@@ -232,14 +222,8 @@ mod tests {
 
     #[test]
     fn redact_url_strips_secrets() {
-        assert_eq!(
-            redact_url("https://user:pw@example.com/api?token=abc"),
-            "https://example.com/api"
-        );
-        assert_eq!(
-            redact_url("https://discord.com/api/webhooks/123/secret"),
-            "https://discord.com/…"
-        );
+        assert_eq!(redact_url("https://user:pw@example.com/api?token=abc"), "https://example.com/api");
+        assert_eq!(redact_url("https://discord.com/api/webhooks/123/secret"), "https://discord.com/…");
     }
 
     #[test]

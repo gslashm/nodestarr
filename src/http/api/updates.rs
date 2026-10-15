@@ -23,13 +23,8 @@ pub fn routes() -> Router<App> {
 
 async fn overview(State(app): State<App>) -> Result<Json<Value>> {
     let ctx = ViewContext::load(&app).await;
-    let items: Vec<_> = app
-        .docker
-        .list()
-        .into_iter()
-        .map(|s| container_view(&app, &ctx, s))
-        .filter(|v| !v.prefs.hidden)
-        .collect();
+    let items: Vec<_> =
+        app.docker.list().into_iter().map(|s| container_view(&app, &ctx, s)).filter(|v| !v.prefs.hidden).collect();
     let settings = app.settings.get();
     let schedule: Vec<Value> = crate::scheduler::next_runs(&settings)
         .into_iter()

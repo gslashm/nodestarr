@@ -26,7 +26,13 @@ pub struct ActionOptions {
 
 /// Performs a container action. Quick actions run inline; recreate runs as
 /// a task and returns its id.
-pub async fn container_action(app: &App, key: &str, action: Action, opts: ActionOptions, actor: &Actor) -> Result<Option<String>> {
+pub async fn container_action(
+    app: &App,
+    key: &str,
+    action: Action,
+    opts: ActionOptions,
+    actor: &Actor,
+) -> Result<Option<String>> {
     let entry = app.docker.get(key).ok_or_else(|| AppError::not_found("container"))?;
     let s = entry.summary.clone();
     let name = display_name(app, &entry);
@@ -110,10 +116,19 @@ pub fn start_recreate(app: &App, key: &str, actor: &Actor) -> Result<String> {
         } else {
             let cfg = app2.docker.image_meta(&s.image_id).await.and_then(|m| m.config.clone());
             let body = recreate::body_from_inspect(&entry.inspect, cfg.as_ref(), &s.image);
-            let rec = recreate::replace(&app2.docker.api, &s.id, body, crate::updates::apply::stop_timeout(&app2), &|l| ctx.log(l)).await?;
+            let rec =
+                recreate::replace(&app2.docker.api, &s.id, body, crate::updates::apply::stop_timeout(&app2), &|l| {
+                    ctx.log(l)
+                })
+                .await?;
             recreate::finalize(&app2.docker.api, &rec).await?;
         }
-        app2.note(NewActivity::new("container.recreated", Severity::Info, format!("{name} recreated")).target(&identity, &name).actor(&actor2)).await;
+        app2.note(
+            NewActivity::new("container.recreated", Severity::Info, format!("{name} recreated"))
+                .target(&identity, &name)
+                .actor(&actor2),
+        )
+        .await;
         Ok(serde_json::Value::Null)
     }))
 }
@@ -158,7 +173,13 @@ pub struct StackActionOptions {
     pub remove_orphans: bool,
 }
 
-pub fn stack_action(app: &App, name: &str, action: StackAction, opts: StackActionOptions, actor: &Actor) -> Result<String> {
+pub fn stack_action(
+    app: &App,
+    name: &str,
+    action: StackAction,
+    opts: StackActionOptions,
+    actor: &Actor,
+) -> Result<String> {
     let stack = app.compose.stack_ref(name)?;
     let self_in_stack = app.docker.in_stack(name).iter().any(|e| e.summary.is_self);
     if self_in_stack && matches!(action, StackAction::Down | StackAction::Stop) && opts.services.is_empty() {
@@ -174,12 +195,8 @@ pub fn stack_action(app: &App, name: &str, action: StackAction, opts: StackActio
     } else {
         format!("{} {} in {name}", action.verb(), opts.services.join(", "))
     };
-    let self_service = app
-        .docker
-        .in_stack(name)
-        .iter()
-        .find(|e| e.summary.is_self)
-        .and_then(|e| e.summary.service.clone());
+    let self_service =
+        app.docker.in_stack(name).iter().find(|e| e.summary.is_self).and_then(|e| e.summary.service.clone());
     let spec = TaskSpec::new("compose", title.clone(), actor).lock(format!("stack:{name}"));
     let (app2, actor2, name2) = (app.clone(), actor.clone(), name.to_string());
     Ok(app.tasks.spawn(spec, move |ctx| async move {
@@ -192,7 +209,9 @@ pub fn stack_action(app: &App, name: &str, action: StackAction, opts: StackActio
                 opts.services = project.services.keys().filter(|s| *s != own).cloned().collect();
                 ctx.log(format!("Skipping '{own}' (Nodestarr itself); update Nodestarr from Settings > System"));
             } else if opts.services.iter().any(|s| s == own) && !matches!(action, StackAction::Pull) {
-                return Err(AppError::forbidden("Nodestarr can't restart or recreate its own service through compose; use Settings > System"));
+                return Err(AppError::forbidden(
+                    "Nodestarr can't restart or recreate its own service through compose; use Settings > System",
+                ));
             }
         }
         let svcs: Vec<&str> = opts.services.iter().map(String::as_str).collect();
@@ -238,7 +257,12 @@ pub fn stack_action(app: &App, name: &str, action: StackAction, opts: StackActio
             }
         }
         app2.bus.publish(crate::events::Event::StacksChanged);
-        app2.note(NewActivity::new("stack.action", Severity::Info, title).target(format!("stack:{name2}"), &name2).actor(&actor2)).await;
+        app2.note(
+            NewActivity::new("stack.action", Severity::Info, title)
+                .target(format!("stack:{name2}"), &name2)
+                .actor(&actor2),
+        )
+        .await;
         Ok(json!({}))
     }))
 }

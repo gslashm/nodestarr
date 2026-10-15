@@ -44,7 +44,10 @@ fn read_cpu() -> Option<(u64, u64, usize)> {
     }
     let idle = vals[3] + vals.get(4).copied().unwrap_or(0);
     let total: u64 = vals.iter().take(8).sum();
-    let cpus = stat.lines().filter(|l| l.starts_with("cpu") && l.as_bytes().get(3).is_some_and(|b| b.is_ascii_digit())).count();
+    let cpus = stat
+        .lines()
+        .filter(|l| l.starts_with("cpu") && l.as_bytes().get(3).is_some_and(|b| b.is_ascii_digit()))
+        .count();
     Some((total, idle, cpus.max(1)))
 }
 
@@ -57,7 +60,12 @@ fn meminfo() -> Option<(u64, u64, u64, u64)> {
             .and_then(|v| v.parse::<u64>().ok())
             .map(|kb| kb * 1024)
     };
-    Some((get("MemTotal:")?, get("MemAvailable:").unwrap_or(0), get("SwapTotal:").unwrap_or(0), get("SwapFree:").unwrap_or(0)))
+    Some((
+        get("MemTotal:")?,
+        get("MemAvailable:").unwrap_or(0),
+        get("SwapTotal:").unwrap_or(0),
+        get("SwapFree:").unwrap_or(0),
+    ))
 }
 
 /// Total and available memory in bytes.
@@ -93,16 +101,7 @@ pub fn sample(_app: &App) -> Option<HostStats> {
         .and_then(|u| u.split_whitespace().next().and_then(|x| x.parse::<f64>().ok()))
         .map(|f| f as u64)
         .unwrap_or(0);
-    let stats = HostStats {
-        cpu,
-        cpus,
-        mem_total,
-        mem_available,
-        swap_total,
-        swap_free,
-        load,
-        uptime,
-    };
+    let stats = HostStats { cpu, cpus, mem_total, mem_available, swap_total, swap_free, load, uptime };
     *LAST.lock() = Some((crate::util::now(), stats.clone()));
     Some(stats)
 }

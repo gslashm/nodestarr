@@ -39,17 +39,16 @@ async fn list(State(app): State<App>) -> Result<Json<Value>> {
         .list()
         .into_iter()
         .map(|s| {
-            let pending = s
-                .containers
-                .iter()
-                .filter(|c| updates.get(&c.identity).is_some_and(|u| u.has_update()))
-                .count();
+            let pending =
+                s.containers.iter().filter(|c| updates.get(&c.identity).is_some_and(|u| u.has_update())).count();
             let mut v = serde_json::to_value(&s).unwrap_or_default();
             v["updates"] = json!(pending);
             v
         })
         .collect();
-    Ok(Json(json!({ "stacks": stacks, "compose_available": app.compose.available(), "compose_version": app.compose.version() })))
+    Ok(Json(
+        json!({ "stacks": stacks, "compose_available": app.compose.available(), "compose_version": app.compose.version() }),
+    ))
 }
 
 async fn detail(State(app): State<App>, Path(name): Path<String>) -> Result<Json<Value>> {
@@ -89,7 +88,8 @@ async fn action(
     Path((name, action)): Path<(String, String)>,
     body: Option<Json<StackActionOptions>>,
 ) -> Result<Json<Value>> {
-    let action: StackAction = serde_json::from_value(Value::String(action.clone())).map_err(|_| AppError::bad_request(format!("unknown action '{action}'")))?;
+    let action: StackAction = serde_json::from_value(Value::String(action.clone()))
+        .map_err(|_| AppError::bad_request(format!("unknown action '{action}'")))?;
     let opts = body.map(|Json(b)| b).unwrap_or_default();
     let task = crate::ops::stack_action(&app, &name, action, opts, &p.actor())?;
     Ok(Json(json!({ "task_id": task })))
@@ -139,7 +139,12 @@ async fn diff(State(app): State<App>, Path(name): Path<String>, Json(b): Json<Ed
     Ok(Json(json!({ "files": out })))
 }
 
-async fn save_files(State(app): State<App>, Auth(p): Auth, Path(name): Path<String>, Json(b): Json<EditBody>) -> Result<Json<Value>> {
+async fn save_files(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(name): Path<String>,
+    Json(b): Json<EditBody>,
+) -> Result<Json<Value>> {
     let stack = app.compose.stack_ref(&name)?;
     for f in &b.files {
         if !ComposeService::is_stack_file(&stack, &f.path) {
@@ -152,7 +157,15 @@ async fn save_files(State(app): State<App>, Auth(p): Auth, Path(name): Path<Stri
     let actor = p.actor();
     let mut saved = Vec::new();
     for f in &b.files {
-        if crate::files::write_with_history(&app.db, FsPath::new(&f.path), &f.content, &actor, Some(format!("stack {name}"))).await? {
+        if crate::files::write_with_history(
+            &app.db,
+            FsPath::new(&f.path),
+            &f.content,
+            &actor,
+            Some(format!("stack {name}")),
+        )
+        .await?
+        {
             saved.push(f.path.clone());
         }
     }
@@ -160,9 +173,23 @@ async fn save_files(State(app): State<App>, Auth(p): Auth, Path(name): Path<Stri
     app.bus.publish(Event::StacksChanged);
     if !saved.is_empty() {
         app.note(
-            NewActivity::new("stack.edited", Severity::Info, format!("Edited {} in stack {name}", saved.iter().map(|s| FsPath::new(s).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()).collect::<Vec<_>>().join(", ")))
-                .target(format!("stack:{name}"), &name)
-                .actor(&actor),
+            NewActivity::new(
+                "stack.edited",
+                Severity::Info,
+                format!(
+                    "Edited {} in stack {name}",
+                    saved
+                        .iter()
+                        .map(|s| FsPath::new(s)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+            .target(format!("stack:{name}"), &name)
+            .actor(&actor),
         )
         .await;
     }
@@ -179,7 +206,11 @@ struct HistoryQuery {
     path: String,
 }
 
-async fn history(State(app): State<App>, Path(name): Path<String>, Query(q): Query<HistoryQuery>) -> Result<Json<Value>> {
+async fn history(
+    State(app): State<App>,
+    Path(name): Path<String>,
+    Query(q): Query<HistoryQuery>,
+) -> Result<Json<Value>> {
     let stack = app.compose.stack_ref(&name)?;
     if !ComposeService::is_stack_file(&stack, &q.path) {
         return Err(AppError::forbidden("not a file of this stack"));
@@ -200,11 +231,17 @@ struct CreateBody {
 async fn create(State(app): State<App>, Auth(p): Auth, Json(b): Json<CreateBody>) -> Result<Json<Value>> {
     let stack = app.compose.create_stack(&b.name, &b.compose, b.env.as_deref()).await?;
     let actor = p.actor();
-    app.note(NewActivity::new("stack.created", Severity::Success, format!("Stack {} created in {}", stack.name, stack.dir)).target(format!("stack:{}", stack.name), &stack.name).actor(&actor)).await;
+    app.note(
+        NewActivity::new("stack.created", Severity::Success, format!("Stack {} created in {}", stack.name, stack.dir))
+            .target(format!("stack:{}", stack.name), &stack.name)
+            .actor(&actor),
+    )
+    .await;
     app.bus.publish(Event::StacksChanged);
     let task = if b.deploy {
         // The new stack isn't in the inventory yet, so run compose directly.
-        let spec = TaskSpec::new("compose", format!("Deploy stack {}", stack.name), &actor).lock(format!("stack:{}", stack.name));
+        let spec = TaskSpec::new("compose", format!("Deploy stack {}", stack.name), &actor)
+            .lock(format!("stack:{}", stack.name));
         let app2 = app.clone();
         let st = stack.clone();
         Some(app.tasks.spawn(spec, move |ctx| async move {
@@ -226,7 +263,12 @@ struct RemoveQuery {
     remove_volumes: bool,
 }
 
-async fn remove(State(app): State<App>, Auth(p): Auth, Path(name): Path<String>, Query(q): Query<RemoveQuery>) -> Result<Json<Value>> {
+async fn remove(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(name): Path<String>,
+    Query(q): Query<RemoveQuery>,
+) -> Result<Json<Value>> {
     let stack = app.compose.stack_ref(&name)?;
     if app.docker.in_stack(&name).iter().any(|e| e.summary.is_self) {
         return Err(AppError::forbidden("this stack contains Nodestarr itself"));
@@ -248,7 +290,12 @@ async fn remove(State(app): State<App>, Auth(p): Auth, Path(name): Path<String>,
         }
         app2.compose.invalidate(&stack.name);
         app2.bus.publish(Event::StacksChanged);
-        app2.note(NewActivity::new("stack.removed", Severity::Warning, format!("Stack {} removed", stack.name)).target(format!("stack:{}", stack.name), &stack.name).actor(&actor)).await;
+        app2.note(
+            NewActivity::new("stack.removed", Severity::Warning, format!("Stack {} removed", stack.name))
+                .target(format!("stack:{}", stack.name), &stack.name)
+                .actor(&actor),
+        )
+        .await;
         Ok(json!({ "trash": moved }))
     });
     Ok(Json(json!({ "task_id": task })))

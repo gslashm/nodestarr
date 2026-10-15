@@ -13,7 +13,10 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use bollard::query_parameters::{CreateImageOptions, ListContainersOptions, ListImagesOptions, PruneImagesOptions, RemoveImageOptions, TagImageOptions};
+use bollard::query_parameters::{
+    CreateImageOptions, ListContainersOptions, ListImagesOptions, PruneImagesOptions, RemoveImageOptions,
+    TagImageOptions,
+};
 use futures_util::StreamExt;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -108,10 +111,8 @@ pub async fn run_update(
     actor: &Actor,
     trigger: Trigger,
 ) -> Result<serde_json::Value> {
-    let entry = app
-        .docker
-        .by_identity(identity)
-        .ok_or_else(|| AppError::not_found("container (it may have been removed)"))?;
+    let entry =
+        app.docker.by_identity(identity).ok_or_else(|| AppError::not_found("container (it may have been removed)"))?;
     if entry.summary.is_self {
         return crate::selfupdate::start(app, ctx, &entry, req.tag.as_deref()).await;
     }
@@ -121,7 +122,8 @@ pub async fn run_update(
     let name = display_name(app, &entry);
 
     let old_ref = s.image.clone();
-    let old_parsed = ImageRef::parse(&old_ref).ok_or_else(|| AppError::bad_request("container image reference is not valid"))?;
+    let old_parsed =
+        ImageRef::parse(&old_ref).ok_or_else(|| AppError::bad_request("container image reference is not valid"))?;
     let new_ref = match &req.tag {
         Some(tag) => match crate::compose::yaml_edit::plan_tag_edit(&old_ref, tag).map_err(AppError::BadRequest)? {
             crate::compose::yaml_edit::TagEdit::Literal(v) => v,
@@ -140,7 +142,11 @@ pub async fn run_update(
             ctx.progress(0.05);
             crate::backups::run_container_backup(app, ctx, &entry, crate::backups::BackupKind::PreUpdate)
                 .await
-                .map_err(|e| AppError::conflict(format!("pre-update backup failed, update aborted: {e} (retry with 'skip backup' to update anyway)")))?;
+                .map_err(|e| {
+                    AppError::conflict(format!(
+                        "pre-update backup failed, update aborted: {e} (retry with 'skip backup' to update anyway)"
+                    ))
+                })?;
         } else {
             ctx.log("Backup folder not available, skipping the pre-update backup");
         }
@@ -187,7 +193,22 @@ pub async fn run_update(
             if let Some(tag) = &rollback_tag {
                 let _ = restore_compose_after_failure(app, ctx, &entry, tag, &old_ref, actor).await;
             }
-            record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), attempted_version.as_deref(), rollback_tag.as_deref(), None, "failed", trigger, ctx.id(), &err.to_string()).await;
+            record_history(
+                app,
+                identity,
+                &name,
+                &old_ref,
+                &new_ref,
+                from_version.as_deref(),
+                attempted_version.as_deref(),
+                rollback_tag.as_deref(),
+                None,
+                "failed",
+                trigger,
+                ctx.id(),
+                &err.to_string(),
+            )
+            .await;
             notify_failure(app, &name, identity, &format!("Update failed: {err}"), false);
             return Err(err);
         }
@@ -200,7 +221,9 @@ pub async fn run_update(
     ctx.progress(0.8);
     let new_id = match &applied {
         Applied::Standalone(r) => r.new_id.clone(),
-        Applied::Compose { stack, service, .. } => find_service_container(app, &stack.name, service).await.unwrap_or_default(),
+        Applied::Compose { stack, service, .. } => {
+            find_service_container(app, &stack.name, service).await.unwrap_or_default()
+        }
     };
     let verdict = if new_id.is_empty() {
         Err("the new container could not be found".to_string())
@@ -216,12 +239,28 @@ pub async fn run_update(
                 }
             }
             app.docker.refresh(&new_id).await;
-            let to_version = app.docker.get(&new_id).and_then(|e| e.summary.version.clone()).or_else(|| attempted_version.clone());
+            let to_version =
+                app.docker.get(&new_id).and_then(|e| e.summary.version.clone()).or_else(|| attempted_version.clone());
             let files_json = match &applied {
                 Applied::Compose { files: Some(f), .. } => Some(serde_json::to_string(f).unwrap_or_default()),
                 _ => None,
             };
-            record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), to_version.as_deref(), rollback_tag.as_deref(), files_json, "applied", trigger, ctx.id(), "").await;
+            record_history(
+                app,
+                identity,
+                &name,
+                &old_ref,
+                &new_ref,
+                from_version.as_deref(),
+                to_version.as_deref(),
+                rollback_tag.as_deref(),
+                files_json,
+                "applied",
+                trigger,
+                ctx.id(),
+                "",
+            )
+            .await;
             let _ = app
                 .prefs
                 .update(identity, |p| {
@@ -271,17 +310,57 @@ pub async fn run_update(
                     Ok(()) => "rolled back to the previous version".to_string(),
                     Err(e) => format!("rollback also failed: {e}"),
                 };
-                record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), attempted_version.as_deref(), rollback_tag.as_deref(), None, "rolled_back", trigger, ctx.id(), &format!("{reason}; {outcome}")).await;
-                app.note(
-                    NewActivity::new("update.rolled_back", Severity::Error, format!("{name}: update failed ({reason}), {outcome}"))
-                        .target(identity, &name)
-                        .actor(actor),
+                record_history(
+                    app,
+                    identity,
+                    &name,
+                    &old_ref,
+                    &new_ref,
+                    from_version.as_deref(),
+                    attempted_version.as_deref(),
+                    rollback_tag.as_deref(),
+                    None,
+                    "rolled_back",
+                    trigger,
+                    ctx.id(),
+                    &format!("{reason}; {outcome}"),
                 )
                 .await;
-                notify_failure(app, &name, identity, &format!("{reason}. Nodestarr {outcome}; this version will be skipped by auto-update."), true);
+                app.note(
+                    NewActivity::new(
+                        "update.rolled_back",
+                        Severity::Error,
+                        format!("{name}: update failed ({reason}), {outcome}"),
+                    )
+                    .target(identity, &name)
+                    .actor(actor),
+                )
+                .await;
+                notify_failure(
+                    app,
+                    &name,
+                    identity,
+                    &format!("{reason}. Nodestarr {outcome}; this version will be skipped by auto-update."),
+                    true,
+                );
                 Err(AppError::conflict(format!("update failed ({reason}); {outcome}")))
             } else {
-                record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), attempted_version.as_deref(), rollback_tag.as_deref(), None, "failed", trigger, ctx.id(), &reason).await;
+                record_history(
+                    app,
+                    identity,
+                    &name,
+                    &old_ref,
+                    &new_ref,
+                    from_version.as_deref(),
+                    attempted_version.as_deref(),
+                    rollback_tag.as_deref(),
+                    None,
+                    "failed",
+                    trigger,
+                    ctx.id(),
+                    &reason,
+                )
+                .await;
                 notify_failure(app, &name, identity, &reason, false);
                 Err(AppError::conflict(format!("update applied but verification failed: {reason}")))
             }
@@ -289,7 +368,14 @@ pub async fn run_update(
     }
 }
 
-async fn apply_change(app: &App, ctx: &TaskCtx, entry: &Entry, new_ref: &str, tag: Option<&str>, actor: &Actor) -> Result<Applied> {
+async fn apply_change(
+    app: &App,
+    ctx: &TaskCtx,
+    entry: &Entry,
+    new_ref: &str,
+    tag: Option<&str>,
+    actor: &Actor,
+) -> Result<Applied> {
     let s = &entry.summary;
     if let (Some(stack_name), Some(service)) = (&s.stack, &s.service) {
         let stack = app.compose.stack_ref(stack_name)?;
@@ -298,7 +384,14 @@ async fn apply_change(app: &App, ctx: &TaskCtx, entry: &Entry, new_ref: &str, ta
             let changes = app.compose.plan_tag_change(&stack, service, tag).await?;
             for c in &changes {
                 ctx.log(format!("Editing {}", c.path));
-                crate::files::write_with_history(&app.db, std::path::Path::new(&c.path), &c.after, actor, Some(format!("switch {service} to {tag}"))).await?;
+                crate::files::write_with_history(
+                    &app.db,
+                    std::path::Path::new(&c.path),
+                    &c.after,
+                    actor,
+                    Some(format!("switch {service} to {tag}")),
+                )
+                .await?;
             }
             app.compose.invalidate(stack_name);
             files = Some(changes);
@@ -392,7 +485,14 @@ async fn rollback_applied(
 }
 
 /// Best effort recovery when `compose up` itself failed.
-async fn restore_compose_after_failure(app: &App, ctx: &TaskCtx, entry: &Entry, rollback_tag: &str, old_ref: &str, _actor: &Actor) -> Result<()> {
+async fn restore_compose_after_failure(
+    app: &App,
+    ctx: &TaskCtx,
+    entry: &Entry,
+    rollback_tag: &str,
+    old_ref: &str,
+    _actor: &Actor,
+) -> Result<()> {
     let s = &entry.summary;
     if let (Some(stack_name), Some(service)) = (&s.stack, &s.service) {
         retag(app, rollback_tag, old_ref).await?;
@@ -441,18 +541,12 @@ async fn recreate_network_dependents(app: &App, ctx: &TaskCtx, old: &Entry) {
 /// Finds the current container of a compose service straight from Docker.
 pub async fn find_service_container(app: &App, project: &str, service: &str) -> Option<String> {
     let mut filters = HashMap::new();
-    filters.insert(
-        "label".to_string(),
-        vec![format!("{LABEL_PROJECT}={project}"), format!("{LABEL_SERVICE}={service}")],
-    );
+    filters
+        .insert("label".to_string(), vec![format!("{LABEL_PROJECT}={project}"), format!("{LABEL_SERVICE}={service}")]);
     let list = app
         .docker
         .api
-        .list_containers(Some(ListContainersOptions {
-            all: true,
-            filters: Some(filters),
-            ..Default::default()
-        }))
+        .list_containers(Some(ListContainersOptions { all: true, filters: Some(filters), ..Default::default() }))
         .await
         .ok()?;
     let mut list: Vec<_> = list.into_iter().collect();
@@ -509,7 +603,10 @@ pub async fn pull(app: &App, ctx: &TaskCtx, r: &ImageRef) -> Result<()> {
             last_status.insert(id.clone(), status.clone());
             if id.is_empty() {
                 ctx.log(status);
-            } else if status.contains("complete") || status.contains("Already exists") || status.starts_with("Pulling fs") {
+            } else if status.contains("complete")
+                || status.contains("Already exists")
+                || status.starts_with("Pulling fs")
+            {
                 ctx.log(format!("{id}: {status}"));
             }
         }
@@ -676,7 +773,13 @@ pub fn start_rollback(app: &App, key: &str, history_id: Option<i64>, actor: &Act
     Ok(app.tasks.spawn(spec, move |ctx| async move { run_rollback(&app2, &ctx, &identity, history_id, &actor).await }))
 }
 
-async fn run_rollback(app: &App, ctx: &TaskCtx, identity: &str, history_id: Option<i64>, actor: &Actor) -> Result<serde_json::Value> {
+async fn run_rollback(
+    app: &App,
+    ctx: &TaskCtx,
+    identity: &str,
+    history_id: Option<i64>,
+    actor: &Actor,
+) -> Result<serde_json::Value> {
     struct Row {
         id: i64,
         from_ref: String,
@@ -754,7 +857,8 @@ async fn run_rollback(app: &App, ctx: &TaskCtx, identity: &str, history_id: Opti
         })
         .await;
     let task_id = ctx.id().to_string();
-    let (id2, name2, from2, to2, fv) = (identity.to_string(), name.clone(), from_ref.clone(), to_ref.clone(), from_version.clone());
+    let (id2, name2, from2, to2, fv) =
+        (identity.to_string(), name.clone(), from_ref.clone(), to_ref.clone(), from_version.clone());
     app.updates
         .db()
         .call(move |c| {
@@ -778,8 +882,13 @@ async fn run_rollback(app: &App, ctx: &TaskCtx, identity: &str, history_id: Opti
     )
     .await;
     app.notifier.send(
-        Notification::new("update.rolled_back", Severity::Warning, format!("{name} rolled back"), format!("Now running {from_ref}"))
-            .target(identity, &name),
+        Notification::new(
+            "update.rolled_back",
+            Severity::Warning,
+            format!("{name} rolled back"),
+            format!("Now running {from_ref}"),
+        )
+        .target(identity, &name),
     );
     Ok(json!({ "rolled_back_to": from_ref }))
 }

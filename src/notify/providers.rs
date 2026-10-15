@@ -51,7 +51,12 @@ async fn check(resp: reqwest::Response, service: &str) -> Result<()> {
     Err(AppError::upstream(format!("{service} returned HTTP {status}: {}", crate::util::truncate(body.trim(), 300))))
 }
 
-pub async fn deliver(http: &reqwest::Client, settings: &Settings, p: &NotificationProvider, n: &Notification) -> Result<()> {
+pub async fn deliver(
+    http: &reqwest::Client,
+    settings: &Settings,
+    p: &NotificationProvider,
+    n: &Notification,
+) -> Result<()> {
     let instance = settings.general.instance_name.clone();
     let timeout = Duration::from_secs(20);
     match &p.config {
@@ -72,7 +77,8 @@ pub async fn deliver(http: &reqwest::Client, settings: &Settings, p: &Notificati
             if let Some(u) = &n.url {
                 embed["url"] = json!(u);
             }
-            let mut body = json!({ "embeds": [embed], "allowed_mentions": { "parse": ["users", "roles", "everyone"] } });
+            let mut body =
+                json!({ "embeds": [embed], "allowed_mentions": { "parse": ["users", "roles", "everyone"] } });
             if !username.is_empty() {
                 body["username"] = json!(username);
             }
@@ -94,7 +100,8 @@ pub async fn deliver(http: &reqwest::Client, settings: &Settings, p: &Notificati
             check(resp, "Slack").await
         }
         ProviderConfig::Telegram { bot_token, chat_id, topic_id } => {
-            let mut text = format!("{} <b>{}</b>\n{}", emoji(n.severity), html_escape(&n.title), html_escape(&n.message));
+            let mut text =
+                format!("{} <b>{}</b>\n{}", emoji(n.severity), html_escape(&n.title), html_escape(&n.message));
             for (k, v) in &n.fields {
                 text.push_str(&format!("\n<b>{}:</b> {}", html_escape(k), html_escape(v)));
             }
@@ -180,7 +187,8 @@ pub async fn deliver(http: &reqwest::Client, settings: &Settings, p: &Notificati
             if let Some(u) = &n.url {
                 form.push(("url", u.clone()));
             }
-            let resp = http.post("https://api.pushover.net/1/messages.json").form(&form).timeout(timeout).send().await?;
+            let resp =
+                http.post("https://api.pushover.net/1/messages.json").form(&form).timeout(timeout).send().await?;
             check(resp, "Pushover").await
         }
         ProviderConfig::Webhook { url, method, headers, body_template } => {
@@ -206,7 +214,8 @@ pub async fn deliver(http: &reqwest::Client, settings: &Settings, p: &Notificati
                     .and_then(|t| t.render(minijinja::value::Serde(&payload)))
                     .map_err(|e| AppError::bad_request(format!("template error: {e}")))?
             };
-            let method = reqwest::Method::from_bytes(method.to_ascii_uppercase().as_bytes()).unwrap_or(reqwest::Method::POST);
+            let method =
+                reqwest::Method::from_bytes(method.to_ascii_uppercase().as_bytes()).unwrap_or(reqwest::Method::POST);
             let mut req = http.request(method, url).timeout(timeout);
             let has_ct = headers.keys().any(|k| k.eq_ignore_ascii_case("content-type"));
             for (k, v) in headers {
@@ -246,9 +255,7 @@ async fn send_email(
     use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
     let from: Mailbox = from.parse().map_err(|e| AppError::bad_request(format!("invalid from address: {e}")))?;
-    let mut builder = Message::builder()
-        .from(from)
-        .subject(format!("[{instance}] {}", n.title));
+    let mut builder = Message::builder().from(from).subject(format!("[{instance}] {}", n.title));
     for addr in to {
         let mb: Mailbox = addr.parse().map_err(|e| AppError::bad_request(format!("invalid recipient {addr}: {e}")))?;
         builder = builder.to(mb);
@@ -265,7 +272,13 @@ async fn send_email(
     let link = n
         .url
         .as_ref()
-        .map(|u| format!("<p><a href=\"{}\" style=\"color:#2fb6a6\">Open in {}</a></p>", html_escape(u), html_escape(instance)))
+        .map(|u| {
+            format!(
+                "<p><a href=\"{}\" style=\"color:#2fb6a6\">Open in {}</a></p>",
+                html_escape(u),
+                html_escape(instance)
+            )
+        })
         .unwrap_or_default();
     let html = format!(
         "<div style=\"font-family:system-ui,sans-serif;max-width:560px\">\
@@ -294,11 +307,7 @@ async fn send_email(
     if !username.is_empty() {
         transport = transport.credentials(Credentials::new(username.to_string(), password.to_string()));
     }
-    transport
-        .build()
-        .send(email)
-        .await
-        .map_err(|e| AppError::upstream(format!("SMTP: {e}")))?;
+    transport.build().send(email).await.map_err(|e| AppError::upstream(format!("SMTP: {e}")))?;
     Ok(())
 }
 
@@ -308,7 +317,8 @@ mod tests {
 
     #[test]
     fn bodies() {
-        let n = Notification::new("update.applied", Severity::Success, "Sonarr updated", "4.0.9 → 4.0.10").field("Image", "lscr.io/linuxserver/sonarr:latest");
+        let n = Notification::new("update.applied", Severity::Success, "Sonarr updated", "4.0.9 → 4.0.10")
+            .field("Image", "lscr.io/linuxserver/sonarr:latest");
         let b = plain_body(&n);
         assert!(b.contains("Image: lscr.io"));
         assert_eq!(html_escape("<a&b>"), "&lt;a&amp;b&gt;");

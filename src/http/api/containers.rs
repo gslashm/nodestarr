@@ -171,7 +171,8 @@ async fn action(
     Path((id, action)): Path<(String, String)>,
     body: Option<Json<crate::ops::ActionOptions>>,
 ) -> Result<Json<Value>> {
-    let action: Action = serde_json::from_value(Value::String(action.clone())).map_err(|_| AppError::bad_request(format!("unknown action '{action}'")))?;
+    let action: Action = serde_json::from_value(Value::String(action.clone()))
+        .map_err(|_| AppError::bad_request(format!("unknown action '{action}'")))?;
     let opts = body.map(|Json(b)| b).unwrap_or_default();
     let task = crate::ops::container_action(&app, &id, action, opts, &p.actor()).await?;
     Ok(Json(json!({ "ok": true, "task_id": task })))
@@ -208,7 +209,12 @@ struct ExecBody {
     user: Option<String>,
 }
 
-async fn exec(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Json(b): Json<ExecBody>) -> Result<Json<Value>> {
+async fn exec(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    Json(b): Json<ExecBody>,
+) -> Result<Json<Value>> {
     p.require_admin()?;
     let e = entry(&app, &id)?;
     if b.command.trim().is_empty() {
@@ -216,9 +222,13 @@ async fn exec(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Jso
     }
     let name = display_name(&app, &e);
     app.note(
-        NewActivity::new("container.exec", Severity::Info, format!("Ran `{}` in {name}", crate::util::truncate(&b.command, 120)))
-            .target(&e.summary.identity, &name)
-            .actor(&p.actor()),
+        NewActivity::new(
+            "container.exec",
+            Severity::Info,
+            format!("Ran `{}` in {name}", crate::util::truncate(&b.command, 120)),
+        )
+        .target(&e.summary.identity, &name)
+        .actor(&p.actor()),
     )
     .await;
     let cmd = vec!["sh".to_string(), "-c".to_string(), b.command.clone()];
@@ -227,7 +237,9 @@ async fn exec(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Jso
         crate::docker::exec::capture(&app.docker.api, &e.summary.id, cmd, b.user.as_deref().filter(|u| !u.is_empty())),
     )
     .await
-    .map_err(|_| AppError::conflict("the command took longer than 2 minutes; use the console for long-running commands"))??;
+    .map_err(|_| {
+        AppError::conflict("the command took longer than 2 minutes; use the console for long-running commands")
+    })??;
     Ok(Json(serde_json::to_value(out)?))
 }
 
@@ -263,12 +275,17 @@ async fn get_prefs(State(app): State<App>, Path(id): Path<String>) -> Result<Jso
     Ok(Json(v))
 }
 
-async fn put_prefs(State(app): State<App>, Path(id): Path<String>, Json(mut incoming): Json<Value>) -> Result<Json<Value>> {
+async fn put_prefs(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    Json(mut incoming): Json<Value>,
+) -> Result<Json<Value>> {
     let e = entry(&app, &id)?;
     let identity = e.summary.identity.clone();
     let current = serde_json::to_value(&*app.prefs.get(&identity))?;
     merge_secrets(&mut incoming, &current);
-    let prefs: ContainerPrefs = serde_json::from_value(incoming).map_err(|e| AppError::bad_request(format!("invalid preferences: {e}")))?;
+    let prefs: ContainerPrefs =
+        serde_json::from_value(incoming).map_err(|e| AppError::bad_request(format!("invalid preferences: {e}")))?;
     for g in &prefs.backup.exclude {
         globset::Glob::new(g).map_err(|e| AppError::bad_request(format!("invalid exclude '{g}': {e}")))?;
     }
@@ -298,7 +315,12 @@ async fn get_spec(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>)
 }
 
 /// Applies an edited spec to a standalone container by recreating it.
-async fn put_spec(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Json(spec): Json<ContainerSpec>) -> Result<Json<Value>> {
+async fn put_spec(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    Json(spec): Json<ContainerSpec>,
+) -> Result<Json<Value>> {
     let e = entry(&app, &id)?;
     if e.summary.stack.is_some() {
         return Err(AppError::bad_request("this container belongs to a compose stack; edit the compose file instead"));
@@ -309,34 +331,61 @@ async fn put_spec(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>,
     let (body, extra_networks) = spec.to_create_body()?;
     let name = display_name(&app, &e);
     let identity = e.summary.identity.clone();
-    let task_spec = TaskSpec::new("recreate", format!("Apply changes to {name}"), &p.actor()).target(identity.clone(), name.clone());
+    let task_spec = TaskSpec::new("recreate", format!("Apply changes to {name}"), &p.actor())
+        .target(identity.clone(), name.clone());
     let (app2, actor, cid) = (app.clone(), p.actor(), e.summary.id.clone());
     let task = app.tasks.spawn(task_spec, move |ctx| async move {
-        let target = ImageRef::parse(body.image.as_deref().unwrap_or_default()).ok_or_else(|| AppError::bad_request("invalid image"))?;
+        let target = ImageRef::parse(body.image.as_deref().unwrap_or_default())
+            .ok_or_else(|| AppError::bad_request("invalid image"))?;
         if app2.docker.inspect_image_fresh(&target.familiar()).await.is_none() {
             crate::updates::apply::pull(&app2, &ctx, &target).await?;
         }
-        let rec = crate::docker::recreate::replace(&app2.docker.api, &cid, body, crate::updates::apply::stop_timeout(&app2), &|l| ctx.log(l)).await?;
+        let rec = crate::docker::recreate::replace(
+            &app2.docker.api,
+            &cid,
+            body,
+            crate::updates::apply::stop_timeout(&app2),
+            &|l| ctx.log(l),
+        )
+        .await?;
         for net in &extra_networks {
             let _ = app2
                 .docker
                 .api
-                .connect_network(net, bollard::models::NetworkConnectRequest { container: rec.new_id.clone(), endpoint_config: None })
+                .connect_network(
+                    net,
+                    bollard::models::NetworkConnectRequest { container: rec.new_id.clone(), endpoint_config: None },
+                )
                 .await;
         }
-        match crate::docker::actions::wait_until_stable(&app2.docker.api, &rec.new_id, std::time::Duration::from_secs(5), std::time::Duration::from_secs(60), &ctx.cancel_token()).await? {
+        match crate::docker::actions::wait_until_stable(
+            &app2.docker.api,
+            &rec.new_id,
+            std::time::Duration::from_secs(5),
+            std::time::Duration::from_secs(60),
+            &ctx.cancel_token(),
+        )
+        .await?
+        {
             crate::docker::actions::Stability::Stable => {
                 crate::docker::recreate::finalize(&app2.docker.api, &rec).await?;
             }
             crate::docker::actions::Stability::Failed(msg) | crate::docker::actions::Stability::TimedOut(msg) => {
                 if rec.was_running {
                     crate::docker::recreate::revert(&app2.docker.api, &rec, &|l| ctx.log(l)).await?;
-                    return Err(AppError::conflict(format!("the changed container didn't stay up ({msg}); the previous one was restored")));
+                    return Err(AppError::conflict(format!(
+                        "the changed container didn't stay up ({msg}); the previous one was restored"
+                    )));
                 }
                 crate::docker::recreate::finalize(&app2.docker.api, &rec).await?;
             }
         }
-        app2.note(NewActivity::new("container.edited", Severity::Info, format!("{name} recreated with new settings")).target(&identity, &name).actor(&actor)).await;
+        app2.note(
+            NewActivity::new("container.edited", Severity::Info, format!("{name} recreated with new settings"))
+                .target(&identity, &name)
+                .actor(&actor),
+        )
+        .await;
         Ok(json!({ "id": rec.new_id }))
     });
     Ok(Json(json!({ "task_id": task })))
@@ -390,7 +439,10 @@ async fn create(State(app): State<App>, Auth(p): Auth, Json(b): Json<CreateBody>
         for net in &extra_networks {
             app2.docker
                 .api
-                .connect_network(net, bollard::models::NetworkConnectRequest { container: resp.id.clone(), endpoint_config: None })
+                .connect_network(
+                    net,
+                    bollard::models::NetworkConnectRequest { container: resp.id.clone(), endpoint_config: None },
+                )
                 .await?;
         }
         if start {
@@ -398,7 +450,11 @@ async fn create(State(app): State<App>, Auth(p): Auth, Json(b): Json<CreateBody>
             crate::docker::actions::start(&app2.docker.api, &resp.id).await?;
         }
         app2.docker.refresh(&resp.id).await;
-        app2.note(NewActivity::new("container.created", Severity::Success, format!("Container {label} created")).actor(&actor)).await;
+        app2.note(
+            NewActivity::new("container.created", Severity::Success, format!("Container {label} created"))
+                .actor(&actor),
+        )
+        .await;
         Ok(json!({ "id": resp.id }))
     });
     Ok(Json(json!({ "task_id": task })))
@@ -434,13 +490,23 @@ struct FileQuery {
     path: String,
 }
 
-async fn list_files(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Query(q): Query<FileQuery>) -> Result<Json<Value>> {
+async fn list_files(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    Query(q): Query<FileQuery>,
+) -> Result<Json<Value>> {
     p.require_admin()?;
     let e = entry(&app, &id)?;
     Ok(Json(serde_json::to_value(crate::files::list_dir(&e, &q.root, &q.path).await?)?))
 }
 
-async fn read_file(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Query(q): Query<FileQuery>) -> Result<Json<Value>> {
+async fn read_file(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    Query(q): Query<FileQuery>,
+) -> Result<Json<Value>> {
     p.require_admin()?;
     let e = entry(&app, &id)?;
     Ok(Json(serde_json::to_value(crate::files::read_file(&e, &q.root, &q.path).await?)?))
@@ -456,7 +522,12 @@ struct SaveFileBody {
     apply: Option<String>,
 }
 
-async fn save_file(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Json(b): Json<SaveFileBody>) -> Result<Json<Value>> {
+async fn save_file(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    Json(b): Json<SaveFileBody>,
+) -> Result<Json<Value>> {
     let e = entry(&app, &id)?;
     let name = display_name(&app, &e);
     let actor = p.actor();
@@ -483,14 +554,13 @@ async fn save_file(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>
     Ok(Json(serde_json::to_value(saved)?))
 }
 
-async fn file_versions(State(app): State<App>, Path(id): Path<String>, Query(q): Query<FileQuery>) -> Result<Json<Value>> {
+async fn file_versions(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    Query(q): Query<FileQuery>,
+) -> Result<Json<Value>> {
     let e = entry(&app, &id)?;
-    let root = e
-        .summary
-        .mounts
-        .iter()
-        .find(|m| m.destination == q.root)
-        .ok_or_else(|| AppError::not_found("mount"))?;
+    let root = e.summary.mounts.iter().find(|m| m.destination == q.root).ok_or_else(|| AppError::not_found("mount"))?;
     let base = FsPath::new(&root.source);
     let path = crate::util::fsx::confine(base, &q.path)?;
     Ok(Json(serde_json::to_value(crate::files::list_versions(&app.db, &path.to_string_lossy()).await?)?))
@@ -509,19 +579,19 @@ struct RestoreVersionBody {
     version_id: i64,
 }
 
-async fn restore_file_version(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Json(b): Json<RestoreVersionBody>) -> Result<Json<Value>> {
+async fn restore_file_version(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    Json(b): Json<RestoreVersionBody>,
+) -> Result<Json<Value>> {
     let e = entry(&app, &id)?;
     let (vpath, content) = crate::files::version_content(&app.db, b.version_id).await?;
     let current = crate::files::read_file(&e, &b.root, &b.path).await?;
     if current.path != vpath {
         return Err(AppError::bad_request("that version belongs to a different file"));
     }
-    let save = crate::files::SaveFile {
-        root: b.root,
-        path: b.path,
-        content,
-        etag: None,
-    };
+    let save = crate::files::SaveFile { root: b.root, path: b.path, content, etag: None };
     let saved = crate::files::save_file(&app.db, &e, &save, &p.actor()).await?;
     Ok(Json(serde_json::to_value(saved)?))
 }
@@ -536,7 +606,12 @@ async fn check(State(app): State<App>, Path(id): Path<String>) -> Result<Json<Va
     Ok(Json(serde_json::to_value(info)?))
 }
 
-async fn update(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, body: Option<Json<UpdateRequest>>) -> Result<Json<Value>> {
+async fn update(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    body: Option<Json<UpdateRequest>>,
+) -> Result<Json<Value>> {
     let req = body.map(|Json(b)| b).unwrap_or_default();
     let trigger = if p.via == crate::auth::AuthVia::ApiKey { Trigger::Api } else { Trigger::Manual };
     let task = crate::updates::apply::start_update(&app, &id, req, &p.actor(), trigger)?;
@@ -548,7 +623,12 @@ struct RollbackBody {
     history_id: Option<i64>,
 }
 
-async fn rollback(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, body: Option<Json<RollbackBody>>) -> Result<Json<Value>> {
+async fn rollback(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    body: Option<Json<RollbackBody>>,
+) -> Result<Json<Value>> {
     let b = body.map(|Json(b)| b).unwrap_or_default();
     let task = crate::updates::apply::start_rollback(&app, &id, b.history_id, &p.actor())?;
     Ok(Json(json!({ "task_id": task })))
@@ -589,7 +669,11 @@ struct TagPreviewQuery {
 }
 
 /// Shows exactly which file edit a tag switch would make.
-async fn tag_preview(State(app): State<App>, Path(id): Path<String>, Query(q): Query<TagPreviewQuery>) -> Result<Json<Value>> {
+async fn tag_preview(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    Query(q): Query<TagPreviewQuery>,
+) -> Result<Json<Value>> {
     let e = entry(&app, &id)?;
     let s = &e.summary;
     let new_ref = match crate::compose::yaml_edit::plan_tag_edit(&s.image, &q.tag).map_err(AppError::BadRequest)? {
@@ -603,10 +687,8 @@ async fn tag_preview(State(app): State<App>, Path(id): Path<String>, Query(q): Q
         }
         _ => Vec::new(),
     };
-    let diffs: Vec<Value> = changes
-        .iter()
-        .map(|c| json!({ "path": c.path, "diff": unified_diff(&c.before, &c.after, &c.path) }))
-        .collect();
+    let diffs: Vec<Value> =
+        changes.iter().map(|c| json!({ "path": c.path, "diff": unified_diff(&c.before, &c.after, &c.path) })).collect();
     Ok(Json(json!({ "from": s.image, "to": new_ref, "files": diffs })))
 }
 
@@ -621,11 +703,11 @@ pub fn unified_diff(before: &str, after: &str, name: &str) -> String {
 
 async fn releases(State(app): State<App>, Path(id): Path<String>) -> Result<Json<Value>> {
     let e = entry(&app, &id)?;
-    let source = app
-        .updates
-        .get(&e.summary.identity)
-        .and_then(|i| i.source.clone())
-        .or(app.docker.image_meta(&e.summary.image_id).await.and_then(|m| m.source_url().map(str::to_string)));
+    let source = app.updates.get(&e.summary.identity).and_then(|i| i.source.clone()).or(app
+        .docker
+        .image_meta(&e.summary.image_id)
+        .await
+        .and_then(|m| m.source_url().map(str::to_string)));
     let Some(repo) = crate::updates::releases::repo_for(e.summary.app.as_deref(), source.as_deref()) else {
         return Ok(Json(json!({ "repo": null, "releases": [] })));
     };
@@ -644,7 +726,11 @@ struct SkipBody {
     digest: Option<String>,
 }
 
-async fn skip_version(State(app): State<App>, Path(id): Path<String>, body: Option<Json<SkipBody>>) -> Result<Json<Value>> {
+async fn skip_version(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    body: Option<Json<SkipBody>>,
+) -> Result<Json<Value>> {
     let e = entry(&app, &id)?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     let digest = match b.digest {

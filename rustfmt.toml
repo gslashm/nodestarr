@@ -1,0 +1,3 @@
+# Formatting is enforced in CI with `cargo fmt --check`.
+max_width = 120
+use_small_heuristics = "Max"

@@ -140,7 +140,12 @@ async fn observe(app: &App, rule: &AlertRule, state: &mut AlertState, now: i64) 
                     target: format!("disk:{}", d.path),
                     name: d.path.clone(),
                     active: used > t,
-                    message: format!("{} is {:.0}% full ({} free)", d.path, used, crate::util::human_bytes(d.usage.available)),
+                    message: format!(
+                        "{} is {:.0}% full ({} free)",
+                        d.path,
+                        used,
+                        crate::util::human_bytes(d.usage.available)
+                    ),
                 }
             })
             .collect(),
@@ -162,7 +167,11 @@ async fn observe(app: &App, rule: &AlertRule, state: &mut AlertState, now: i64) 
                         target: e.summary.identity.clone(),
                         name: name_of(e),
                         active: used > t,
-                        message: format!("Memory at {:.0}% of its {} limit", used, crate::util::human_bytes(s.mem_limit)),
+                        message: format!(
+                            "Memory at {:.0}% of its {} limit",
+                            used,
+                            crate::util::human_bytes(s.mem_limit)
+                        ),
                     })
                 })
                 .collect()
@@ -295,7 +304,12 @@ async fn evaluate(app: &App) {
                 if !o.active {
                     state.dismissed.remove(&key);
                     if let Some((id, _)) = state.firing.get(&key) {
-                        actions.push(Action::Resolve { rule: rule.clone(), key: key.clone(), id: *id, name: o.name.clone() });
+                        actions.push(Action::Resolve {
+                            rule: rule.clone(),
+                            key: key.clone(),
+                            id: *id,
+                            name: o.name.clone(),
+                        });
                     }
                 }
                 continue;
@@ -312,7 +326,12 @@ async fn evaluate(app: &App) {
                 state.pending.remove(&key);
                 state.dismissed.remove(&key);
                 if let Some((id, _)) = state.firing.get(&key) {
-                    actions.push(Action::Resolve { rule: rule.clone(), key: key.clone(), id: *id, name: o.name.clone() });
+                    actions.push(Action::Resolve {
+                        rule: rule.clone(),
+                        key: key.clone(),
+                        id: *id,
+                        name: o.name.clone(),
+                    });
                 }
             }
         }
@@ -360,12 +379,17 @@ async fn apply(app: &App, action: Action) {
             };
             app.bus.publish(Event::Alert(std::sync::Arc::new(view)));
             if !matches!(rule.kind, AlertKind::UnexpectedExit | AlertKind::Oom) {
-                let display = if name.contains(':') { name.split(':').next_back().unwrap_or(&name).to_string() } else { name };
+                let display =
+                    if name.contains(':') { name.split(':').next_back().unwrap_or(&name).to_string() } else { name };
                 app.notifier.send(Notification::new(
                     "alert.resolved",
                     Severity::Success,
                     format!("Resolved: {display}"),
-                    format!("{} is back to normal after {}", rule_label(rule.kind), crate::util::human_duration(now - started)),
+                    format!(
+                        "{} is back to normal after {}",
+                        rule_label(rule.kind),
+                        crate::util::human_duration(now - started)
+                    ),
                 ));
             }
         }
@@ -390,7 +414,8 @@ fn rule_label(kind: AlertKind) -> &'static str {
 
 async fn fire(app: &App, rule: &AlertRule, target: &str, name: &str, message: &str) -> Result<()> {
     let now = crate::util::now();
-    let (rid, tgt, nm, msg, sev) = (rule.id.clone(), target.to_string(), name.to_string(), message.to_string(), rule.severity);
+    let (rid, tgt, nm, msg, sev) =
+        (rule.id.clone(), target.to_string(), name.to_string(), message.to_string(), rule.severity);
     let id = app
         .db
         .call(move |c| {
@@ -401,12 +426,7 @@ async fn fire(app: &App, rule: &AlertRule, target: &str, name: &str, message: &s
             Ok(c.last_insert_rowid())
         })
         .await?;
-    app.monitor
-        .inner
-        .alerts
-        .lock()
-        .firing
-        .insert((rule.id.clone(), target.to_string()), (id, now));
+    app.monitor.inner.alerts.lock().firing.insert((rule.id.clone(), target.to_string()), (id, now));
     let view = AlertView {
         id,
         rule_id: rule.id.clone(),
@@ -420,7 +440,8 @@ async fn fire(app: &App, rule: &AlertRule, target: &str, name: &str, message: &s
     app.bus.publish(Event::Alert(std::sync::Arc::new(view)));
     let kind = notification_kind(rule.kind);
     let is_container = !target.contains(':') || target.starts_with("compose:") || target.starts_with("container:");
-    let mut n = Notification::new(kind, rule.severity, format!("{name}: {}", rule_label(rule.kind)), message.to_string());
+    let mut n =
+        Notification::new(kind, rule.severity, format!("{name}: {}", rule_label(rule.kind)), message.to_string());
     if is_container {
         n = n.target(target, name);
     }
@@ -452,7 +473,9 @@ fn handle_lifecycle(app: &App, ev: &Lifecycle) -> Option<(AlertKind, String)> {
             let killed_recently = state.kills.get(&ev.id).is_some_and(|t| ev.ts - t <= 30);
             state.kills.retain(|_, t| ev.ts - *t <= 120);
             match ev.exit_code {
-                Some(code) if code != 0 && !killed_recently => Some((AlertKind::UnexpectedExit, format!("Exited unexpectedly with code {code}"))),
+                Some(code) if code != 0 && !killed_recently => {
+                    Some((AlertKind::UnexpectedExit, format!("Exited unexpectedly with code {code}")))
+                }
                 _ => None,
             }
         }

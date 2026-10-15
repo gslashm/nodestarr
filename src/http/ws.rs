@@ -117,15 +117,10 @@ async fn console_session(app: App, container: String, q: ConsoleQuery, p: Princi
     let StartExecResults::Attached { mut output, mut input } = app.docker.api.start_exec(&exec_id, None).await? else {
         return Err(AppError::conflict("exec did not attach"));
     };
-    let _ = tx
-        .send(Message::Text(json!({"type": "ready", "shell": shell}).to_string().into()))
-        .await;
+    let _ = tx.send(Message::Text(json!({"type": "ready", "shell": shell}).to_string().into())).await;
     if let (Some(cols), Some(rows)) = (q.cols, q.rows) {
-        let _ = app
-            .docker
-            .api
-            .resize_exec(&exec_id, bollard::exec::ResizeExecOptions { height: rows, width: cols })
-            .await;
+        let _ =
+            app.docker.api.resize_exec(&exec_id, bollard::exec::ResizeExecOptions { height: rows, width: cols }).await;
     }
     let auth = app.auth.clone();
     let revoked = auth.revoked(p);
@@ -221,7 +216,9 @@ fn revoked_future(app: &App, p: Principal) -> Revoked {
     Box::pin(async move { auth.revoked(p).await })
 }
 
-type TaggedStream = std::pin::Pin<Box<dyn futures_util::Stream<Item = std::result::Result<(Option<String>, Vec<LogLine>), String>> + Send>>;
+type TaggedStream = std::pin::Pin<
+    Box<dyn futures_util::Stream<Item = std::result::Result<(Option<String>, Vec<LogLine>), String>> + Send>,
+>;
 
 /// Sends log batches to the socket, coalescing bursts into one frame per
 /// 100 ms, until the stream ends, the client leaves or its access ends.
@@ -309,7 +306,8 @@ pub async fn stack_logs(
         .iter()
         .map(|e| {
             let label = e.summary.service.clone().unwrap_or_else(|| e.summary.name.clone());
-            let s = crate::docker::logs::follow(&app.docker.api, &e.summary.id, &query).map(move |r| r.map(|lines| (Some(label.clone()), lines)));
+            let s = crate::docker::logs::follow(&app.docker.api, &e.summary.id, &query)
+                .map(move |r| r.map(|lines| (Some(label.clone()), lines)));
             Box::pin(s) as TaggedStream
         })
         .collect();

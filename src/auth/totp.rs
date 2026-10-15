@@ -43,13 +43,10 @@ pub fn verify(secret_b32: &str, code: &str, now: i64) -> Option<i64> {
         return None;
     }
     let wanted: u32 = code.parse().ok()?;
-    let key = data_encoding::BASE32_NOPAD
-        .decode(secret_b32.trim_end_matches('=').to_ascii_uppercase().as_bytes())
-        .ok()?;
+    let key =
+        data_encoding::BASE32_NOPAD.decode(secret_b32.trim_end_matches('=').to_ascii_uppercase().as_bytes()).ok()?;
     let step = now / STEP;
-    (-1..=1)
-        .map(|d| step + d)
-        .find(|s| *s >= 0 && code_at(&key, *s as u64) == wanted)
+    (-1..=1).map(|d| step + d).find(|s| *s >= 0 && code_at(&key, *s as u64) == wanted)
 }
 
 /// The current code for a secret (used by tests and the setup preview).

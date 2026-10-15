@@ -52,9 +52,7 @@ impl ServerCertVerifier for PinVerifier {
         }
         match &self.expected {
             Some(expected) if expected.as_slice() == digest.as_slice() => Ok(ServerCertVerified::assertion()),
-            Some(_) => Err(rustls::Error::General(
-                "certificate fingerprint does not match the pinned one".into(),
-            )),
+            Some(_) => Err(rustls::Error::General("certificate fingerprint does not match the pinned one".into())),
             None if self.record.is_some() => Ok(ServerCertVerified::assertion()),
             None => Err(rustls::Error::General("no certificate fingerprint configured".into())),
         }
@@ -83,13 +81,12 @@ impl ServerCertVerifier for PinVerifier {
     }
 }
 
-fn pinned_config(expected: Option<Vec<u8>>, record: Option<Arc<Mutex<Option<String>>>>) -> Result<rustls::ClientConfig> {
+fn pinned_config(
+    expected: Option<Vec<u8>>,
+    record: Option<Arc<Mutex<Option<String>>>>,
+) -> Result<rustls::ClientConfig> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let verifier = PinVerifier {
-        expected,
-        record,
-        provider: provider.clone(),
-    };
+    let verifier = PinVerifier { expected, record, provider: provider.clone() };
     Ok(rustls::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .map_err(|e| AppError::Other(anyhow::anyhow!("TLS setup: {e}")))?
@@ -154,12 +151,7 @@ impl PveClient {
     }
 
     pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let resp = self
-            .http
-            .get(format!("{}{path}", self.base))
-            .header("Authorization", &self.auth)
-            .send()
-            .await?;
+        let resp = self.http.get(format!("{}{path}", self.base)).header("Authorization", &self.auth).send().await?;
         Self::handle(resp).await
     }
 
@@ -175,12 +167,7 @@ impl PveClient {
     }
 
     pub async fn delete<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let resp = self
-            .http
-            .delete(format!("{}{path}", self.base))
-            .header("Authorization", &self.auth)
-            .send()
-            .await?;
+        let resp = self.http.delete(format!("{}{path}", self.base)).header("Authorization", &self.auth).send().await?;
         Self::handle(resp).await
     }
 }

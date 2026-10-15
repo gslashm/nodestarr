@@ -26,12 +26,7 @@ impl<S: Send + Sync> FromRequestParts<S> for Auth {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<Principal>()
-            .cloned()
-            .map(Auth)
-            .ok_or(AppError::Unauthorized)
+        parts.extensions.get::<Principal>().cloned().map(Auth).ok_or(AppError::Unauthorized)
     }
 }
 
@@ -121,7 +116,12 @@ fn query_param(uri: &Uri, name: &str) -> Option<String> {
 fn is_public(path: &str) -> bool {
     matches!(
         path,
-        "/api/v1/health" | "/api/v1/auth/status" | "/api/v1/auth/login" | "/api/v1/auth/mfa" | "/api/v1/auth/setup" | "/api/v1/auth/logout"
+        "/api/v1/health"
+            | "/api/v1/auth/status"
+            | "/api/v1/auth/login"
+            | "/api/v1/auth/mfa"
+            | "/api/v1/auth/setup"
+            | "/api/v1/auth/logout"
     ) || !(path.starts_with("/api/") || path == "/metrics")
 }
 
@@ -141,10 +141,8 @@ async fn resolve(app: &App, headers: &HeaderMap, uri: &Uri, ip: IpAddr, peer: Ip
     if sec.auth_mode == AuthMode::External {
         let trusted = CidrList::parse_lossy(&sec.trusted_proxies);
         if trusted.contains(peer) {
-            if let Some(user) = headers
-                .get(sec.external_header.as_str())
-                .and_then(|v| v.to_str().ok())
-                .filter(|u| !u.is_empty())
+            if let Some(user) =
+                headers.get(sec.external_header.as_str()).and_then(|v| v.to_str().ok()).filter(|u| !u.is_empty())
             {
                 return Some((
                     Principal {
@@ -204,7 +202,12 @@ async fn resolve(app: &App, headers: &HeaderMap, uri: &Uri, ip: IpAddr, peer: Ip
     None
 }
 
-pub async fn authenticate(State(app): State<App>, ConnectInfo(addr): ConnectInfo<SocketAddr>, mut req: Request, next: Next) -> Response {
+pub async fn authenticate(
+    State(app): State<App>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    mut req: Request,
+    next: Next,
+) -> Response {
     let settings = app.settings.get();
     let trusted = CidrList::parse_lossy(&settings.security.trusted_proxies);
     let xff = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()).map(str::to_string);

@@ -33,10 +33,7 @@ async fn get_json(http: &reqwest::Client, url: &str, headers: &[(&str, &str)]) -
 }
 
 fn key(creds: &Creds) -> Result<&str> {
-    creds
-        .api_key
-        .as_deref()
-        .ok_or_else(|| AppError::conflict("no API key found; add one in the container's settings"))
+    creds.api_key.as_deref().ok_or_else(|| AppError::conflict("no API key found; add one in the container's settings"))
 }
 
 fn level_of(t: &str) -> String {
@@ -47,7 +44,13 @@ fn level_of(t: &str) -> String {
     }
 }
 
-pub async fn status(http: &reqwest::Client, kind: &str, entry: &Entry, creds: &Creds, st: &mut AppStatus) -> Result<()> {
+pub async fn status(
+    http: &reqwest::Client,
+    kind: &str,
+    entry: &Entry,
+    creds: &Creds,
+    st: &mut AppStatus,
+) -> Result<()> {
     let base = creds.base_url.trim_end_matches('/');
     match kind {
         "arr" => {
@@ -60,7 +63,9 @@ pub async fn status(http: &reqwest::Client, kind: &str, entry: &Entry, creds: &C
                         st.reachable = true;
                         st.version = s["version"].as_str().map(str::to_string);
                         st.branch = s["branch"].as_str().map(str::to_string);
-                        if let Ok(Value::Array(items)) = get_json(http, &format!("{base}/api/{v}/health"), &[("X-Api-Key", k)]).await {
+                        if let Ok(Value::Array(items)) =
+                            get_json(http, &format!("{base}/api/{v}/health"), &[("X-Api-Key", k)]).await
+                        {
                             st.health = items
                                 .iter()
                                 .map(|h| HealthIssue {
@@ -72,12 +77,16 @@ pub async fn status(http: &reqwest::Client, kind: &str, entry: &Entry, creds: &C
                                 .collect();
                         }
                         if entry.summary.app.as_deref() != Some("prowlarr") {
-                            if let Ok(q) = get_json(http, &format!("{base}/api/{v}/queue/status"), &[("X-Api-Key", k)]).await {
+                            if let Ok(q) =
+                                get_json(http, &format!("{base}/api/{v}/queue/status"), &[("X-Api-Key", k)]).await
+                            {
                                 if let Some(n) = q["totalCount"].as_i64() {
                                     st.details.insert("Queue".into(), n.to_string());
                                 }
                             }
-                        } else if let Ok(Value::Array(ix)) = get_json(http, &format!("{base}/api/{v}/indexerstatus"), &[("X-Api-Key", k)]).await {
+                        } else if let Ok(Value::Array(ix)) =
+                            get_json(http, &format!("{base}/api/{v}/indexerstatus"), &[("X-Api-Key", k)]).await
+                        {
                             st.details.insert("Failing indexers".into(), ix.len().to_string());
                         }
                         return Ok(());
@@ -98,7 +107,11 @@ pub async fn status(http: &reqwest::Client, kind: &str, entry: &Entry, creds: &C
                         .iter()
                         .map(|i| HealthIssue {
                             level: "warning".into(),
-                            message: format!("{}: {}", i["object"].as_str().unwrap_or(""), i["issue"].as_str().unwrap_or("")),
+                            message: format!(
+                                "{}: {}",
+                                i["object"].as_str().unwrap_or(""),
+                                i["issue"].as_str().unwrap_or("")
+                            ),
                             source: None,
                             wiki: None,
                         })
@@ -147,7 +160,11 @@ pub async fn status(http: &reqwest::Client, kind: &str, entry: &Entry, creds: &C
             st.reachable = true;
             st.version = info["response"]["data"]["tautulli_version"].as_str().map(str::to_string);
             if let Ok(a) = get_json(http, &format!("{base}/api/v2?apikey={k}&cmd=get_activity"), &[]).await {
-                if let Some(n) = a["response"]["data"]["stream_count"].as_str().and_then(|s| s.parse::<u32>().ok()).or(a["response"]["data"]["stream_count"].as_u64().map(|n| n as u32)) {
+                if let Some(n) = a["response"]["data"]["stream_count"]
+                    .as_str()
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .or(a["response"]["data"]["stream_count"].as_u64().map(|n| n as u32))
+                {
                     st.details.insert("Streams".into(), n.to_string());
                 }
             }
@@ -190,7 +207,10 @@ pub async fn status(http: &reqwest::Client, kind: &str, entry: &Entry, creds: &C
             let client = qbit_login(http, base, creds).await?;
             let version = client.get(format!("{base}/api/v2/app/version")).send().await?;
             if !version.status().is_success() {
-                return Err(AppError::upstream(format!("HTTP {} (set qBittorrent credentials in Settings > Integrations)", version.status())));
+                return Err(AppError::upstream(format!(
+                    "HTTP {} (set qBittorrent credentials in Settings > Integrations)",
+                    version.status()
+                )));
             }
             st.reachable = true;
             st.version = Some(version.text().await?.trim().trim_start_matches('v').to_string());
@@ -334,7 +354,10 @@ pub async fn arr_backup(http: &reqwest::Client, entry: &Entry, creds: &Creds, di
         match c["status"].as_str() {
             Some("completed") => break,
             Some("failed") | Some("aborted") | Some("cancelled") => {
-                return Err(AppError::upstream(format!("the app's backup {}", c["status"].as_str().unwrap_or("failed"))));
+                return Err(AppError::upstream(format!(
+                    "the app's backup {}",
+                    c["status"].as_str().unwrap_or("failed")
+                )));
             }
             _ => {}
         }

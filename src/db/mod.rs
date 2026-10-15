@@ -28,9 +28,7 @@ impl Db {
         }
         let conn = Connection::open(path)?;
         Self::configure(&conn)?;
-        let db = Self {
-            conn: Arc::new(Mutex::new(conn)),
-        };
+        let db = Self { conn: Arc::new(Mutex::new(conn)) };
         db.migrate_blocking()?;
         // Keep the database private: it holds password hashes and API tokens.
         #[cfg(unix)]
@@ -45,9 +43,7 @@ impl Db {
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         Self::configure(&conn)?;
-        let db = Self {
-            conn: Arc::new(Mutex::new(conn)),
-        };
+        let db = Self { conn: Arc::new(Mutex::new(conn)) };
         db.migrate_blocking()?;
         Ok(db)
     }
@@ -119,9 +115,10 @@ impl Db {
             let sql = format!("SELECT value FROM {table} WHERE {} = ?1", kv_key_column(table));
             let raw: Option<String> = c.query_row(&sql, [&key], |r| r.get(0)).optional()?;
             match raw {
-                Some(text) => Ok(Some(serde_json::from_str(&text).map_err(|e| {
-                    AppError::Other(anyhow::anyhow!("corrupt {table} entry {key}: {e}"))
-                })?)),
+                Some(text) => Ok(Some(
+                    serde_json::from_str(&text)
+                        .map_err(|e| AppError::Other(anyhow::anyhow!("corrupt {table} entry {key}: {e}")))?,
+                )),
                 None => Ok(None),
             }
         })
@@ -153,14 +150,8 @@ impl Db {
             tx.execute("DELETE FROM activity WHERE ts < ?1", [cutoffs.activity])?;
             tx.execute("DELETE FROM tasks WHERE created_at < ?1", [cutoffs.tasks])?;
             tx.execute("DELETE FROM sessions WHERE expires_at < ?1", [crate::util::now()])?;
-            tx.execute(
-                "DELETE FROM alerts WHERE resolved_at IS NOT NULL AND resolved_at < ?1",
-                [cutoffs.alerts],
-            )?;
-            tx.execute(
-                "DELETE FROM update_history WHERE ts < ?1",
-                [cutoffs.update_history],
-            )?;
+            tx.execute("DELETE FROM alerts WHERE resolved_at IS NOT NULL AND resolved_at < ?1", [cutoffs.alerts])?;
+            tx.execute("DELETE FROM update_history WHERE ts < ?1", [cutoffs.update_history])?;
             // Keep the 25 most recent versions of each edited file.
             tx.execute(
                 "DELETE FROM file_versions WHERE id IN (
@@ -199,21 +190,13 @@ mod tests {
     #[tokio::test]
     async fn migrations_apply_and_kv_roundtrip() {
         let db = Db::open_in_memory().unwrap();
-        db.put_json("settings", "main".into(), &serde_json::json!({"a": 1}))
-            .await
-            .unwrap();
+        db.put_json("settings", "main".into(), &serde_json::json!({"a": 1})).await.unwrap();
         let v: Option<serde_json::Value> = db.get_json("settings", "main".into()).await.unwrap();
         assert_eq!(v.unwrap()["a"], 1);
-        db.put_json("container_prefs", "compose:x/y".into(), &serde_json::json!({"b": 2}))
-            .await
-            .unwrap();
-        let v: Option<serde_json::Value> =
-            db.get_json("container_prefs", "compose:x/y".into()).await.unwrap();
+        db.put_json("container_prefs", "compose:x/y".into(), &serde_json::json!({"b": 2})).await.unwrap();
+        let v: Option<serde_json::Value> = db.get_json("container_prefs", "compose:x/y".into()).await.unwrap();
         assert_eq!(v.unwrap()["b"], 2);
-        let version: i64 = db
-            .call(|c| Ok(c.query_row("PRAGMA user_version", [], |r| r.get(0))?))
-            .await
-            .unwrap();
+        let version: i64 = db.call(|c| Ok(c.query_row("PRAGMA user_version", [], |r| r.get(0))?)).await.unwrap();
         assert_eq!(version, MIGRATIONS.len() as i64);
     }
 }

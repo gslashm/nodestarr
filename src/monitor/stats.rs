@@ -12,7 +12,7 @@ use rusqlite::params;
 use serde::Serialize;
 
 use crate::app::App;
-use crate::docker::stats::{self, RawSample, Rates};
+use crate::docker::stats::{self, Rates, RawSample};
 use crate::error::Result;
 use crate::events::Event;
 
@@ -53,13 +53,8 @@ impl LiveStat {
 
 /// Samples every running container once and updates the latest values.
 pub async fn sample_all(app: &App) -> Vec<LiveStat> {
-    let running: Vec<(String, String)> = app
-        .docker
-        .list()
-        .iter()
-        .filter(|c| c.is_running())
-        .map(|c| (c.id.clone(), c.identity.clone()))
-        .collect();
+    let running: Vec<(String, String)> =
+        app.docker.list().iter().filter(|c| c.is_running()).map(|c| (c.id.clone(), c.identity.clone())).collect();
     let api = app.docker.api.clone();
     let samples: Vec<(String, String, Option<RawSample>)> = stream::iter(running)
         .map(|(id, identity)| {
@@ -95,7 +90,12 @@ pub async fn sample_all(app: &App) -> Vec<LiveStat> {
 }
 
 /// Persists one history row per container (bucketed to the interval).
-pub async fn record(app: &App, samples: &[LiveStat], host: Option<&crate::monitor::host::HostStats>, interval: i64) -> Result<()> {
+pub async fn record(
+    app: &App,
+    samples: &[LiveStat],
+    host: Option<&crate::monitor::host::HostStats>,
+    interval: i64,
+) -> Result<()> {
     struct Row {
         identity: String,
         cpu: f64,
@@ -283,11 +283,7 @@ pub async fn run(app: App) {
                 tracing::warn!(%err, "metrics rollup failed");
             }
         }
-        let wait = if viewers > 0 {
-            settings.monitoring.live_secs.max(1) as u64
-        } else {
-            sample_secs as u64
-        };
+        let wait = if viewers > 0 { settings.monitoring.live_secs.max(1) as u64 } else { sample_secs as u64 };
         // Wake early when a viewer connects.
         let notify = app.monitor.inner.wake.clone();
         tokio::select! {

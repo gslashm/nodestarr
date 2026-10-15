@@ -8,14 +8,9 @@ use std::path::{Component, Path, PathBuf};
 /// permissions and ownership when replacing it, so editing an app's config
 /// file never changes who can read it.
 pub fn atomic_write(path: &Path, contents: &[u8]) -> std::io::Result<()> {
-    let dir = path
-        .parent()
-        .ok_or_else(|| std::io::Error::other("path has no parent directory"))?;
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| std::io::Error::other("path has no file name"))?
-        .to_string_lossy()
-        .to_string();
+    let dir = path.parent().ok_or_else(|| std::io::Error::other("path has no parent directory"))?;
+    let file_name =
+        path.file_name().ok_or_else(|| std::io::Error::other("path has no file name"))?.to_string_lossy().to_string();
     let tmp = dir.join(format!(".{file_name}.nodestarr-tmp-{}", crate::util::short_id()));
 
     let existing = std::fs::metadata(path).ok();
@@ -88,10 +83,7 @@ pub fn confine(root: &Path, relative: &str) -> std::io::Result<PathBuf> {
     if resolved.starts_with(&root_real) {
         Ok(resolved)
     } else {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "path escapes root",
-        ))
+        Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "path escapes root"))
     }
 }
 
@@ -109,11 +101,7 @@ pub fn disk_usage(path: &Path) -> std::io::Result<DiskUsage> {
     let total = st.f_blocks.saturating_mul(frsize);
     let free = st.f_bfree.saturating_mul(frsize);
     let available = st.f_bavail.saturating_mul(frsize);
-    Ok(DiskUsage {
-        total,
-        used: total.saturating_sub(free),
-        available,
-    })
+    Ok(DiskUsage { total, used: total.saturating_sub(free), available })
 }
 
 /// Recursively sums file sizes under `path`, skipping anything the

@@ -53,7 +53,10 @@ impl Action {
 
     /// Actions that interrupt a running app (subject to the Plex guard).
     pub fn is_disruptive(self) -> bool {
-        matches!(self, Action::Stop | Action::Restart | Action::Kill | Action::Recreate | Action::Remove | Action::Pause)
+        matches!(
+            self,
+            Action::Stop | Action::Restart | Action::Kill | Action::Recreate | Action::Remove | Action::Pause
+        )
     }
 }
 
@@ -73,27 +76,14 @@ pub async fn start(api: &Docker, id: &str) -> Result<()> {
 /// stop timeout (or Docker's default of 10s).
 pub async fn stop(api: &Docker, id: &str, timeout: Option<u32>) -> Result<()> {
     ok_if_not_modified(
-        api.stop_container(
-            id,
-            Some(StopContainerOptions {
-                t: timeout.map(|t| t as i32),
-                signal: None,
-            }),
-        )
-        .await,
+        api.stop_container(id, Some(StopContainerOptions { t: timeout.map(|t| t as i32), signal: None })).await,
     )
 }
 
 pub async fn restart(api: &Docker, id: &str, timeout: Option<u32>) -> Result<()> {
-    api.restart_container(
-        id,
-        Some(RestartContainerOptions {
-            t: timeout.map(|t| t as i32),
-            signal: None,
-        }),
-    )
-    .await
-    .map_err(Into::into)
+    api.restart_container(id, Some(RestartContainerOptions { t: timeout.map(|t| t as i32), signal: None }))
+        .await
+        .map_err(Into::into)
 }
 
 pub async fn pause(api: &Docker, id: &str) -> Result<()> {
@@ -105,33 +95,15 @@ pub async fn unpause(api: &Docker, id: &str) -> Result<()> {
 }
 
 pub async fn kill(api: &Docker, id: &str, signal: &str) -> Result<()> {
-    api.kill_container(
-        id,
-        Some(KillContainerOptions {
-            signal: signal.to_string(),
-        }),
-    )
-    .await
-    .map_err(Into::into)
+    api.kill_container(id, Some(KillContainerOptions { signal: signal.to_string() })).await.map_err(Into::into)
 }
 
 pub async fn remove(api: &Docker, id: &str, force: bool, volumes: bool) -> Result<()> {
-    api.remove_container(
-        id,
-        Some(RemoveContainerOptions {
-            v: volumes,
-            force,
-            link: false,
-        }),
-    )
-    .await
-    .map_err(Into::into)
+    api.remove_container(id, Some(RemoveContainerOptions { v: volumes, force, link: false })).await.map_err(Into::into)
 }
 
 pub async fn rename(api: &Docker, id: &str, name: &str) -> Result<()> {
-    api.rename_container(id, RenameContainerOptions { name: name.to_string() })
-        .await
-        .map_err(Into::into)
+    api.rename_container(id, RenameContainerOptions { name: name.to_string() }).await.map_err(Into::into)
 }
 
 /// Snapshot of what matters while waiting for a container to settle.
@@ -148,18 +120,15 @@ pub struct RunState {
 pub async fn run_state(api: &Docker, id: &str) -> Result<RunState> {
     let inspect = api.inspect_container(id, None::<InspectContainerOptions>).await?;
     let state = inspect.state.unwrap_or_default();
-    let health = state
-        .health
-        .and_then(|h| h.status)
-        .and_then(|s| {
-            use bollard::models::HealthStatusEnum as H;
-            match s {
-                H::HEALTHY => Some("healthy".to_string()),
-                H::UNHEALTHY => Some("unhealthy".to_string()),
-                H::STARTING => Some("starting".to_string()),
-                _ => None,
-            }
-        });
+    let health = state.health.and_then(|h| h.status).and_then(|s| {
+        use bollard::models::HealthStatusEnum as H;
+        match s {
+            H::HEALTHY => Some("healthy".to_string()),
+            H::UNHEALTHY => Some("unhealthy".to_string()),
+            H::STARTING => Some("starting".to_string()),
+            _ => None,
+        }
+    });
     Ok(RunState {
         running: state.running.unwrap_or(false),
         restarting: state.restarting.unwrap_or(false),
@@ -221,7 +190,10 @@ pub async fn wait_until_stable(
         let s = run_state(api, id).await?;
         if s.restart_count > base_restarts || s.restarting {
             let code = s.exit_code.filter(|c| *c != 0).map(|c| format!(" (exit code {c})")).unwrap_or_default();
-            return Ok(Stability::Failed(format!("the container keeps restarting{code}{}", last_output(api, id).await)));
+            return Ok(Stability::Failed(format!(
+                "the container keeps restarting{code}{}",
+                last_output(api, id).await
+            )));
         }
         if !s.running {
             return Ok(Stability::Failed(format!(

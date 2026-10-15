@@ -6,8 +6,8 @@
 
 use std::process::ExitCode;
 
-use nodestarr::config::{Cli, Command};
 use clap::Parser;
+use nodestarr::config::{Cli, Command};
 
 fn main() -> ExitCode {
     let cli = Cli::parse();

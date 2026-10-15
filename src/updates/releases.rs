@@ -81,11 +81,7 @@ fn cache() -> &'static Mutex<HashMap<String, (Instant, ReleaseNotes)>> {
 
 /// Extracts "owner/repo" from a GitHub URL.
 pub fn github_repo(url: &str) -> Option<String> {
-    let rest = url
-        .trim()
-        .trim_end_matches(".git")
-        .split("github.com/")
-        .nth(1)?;
+    let rest = url.trim().trim_end_matches(".git").split("github.com/").nth(1)?;
     let mut parts = rest.split('/').filter(|p| !p.is_empty());
     let owner = parts.next()?;
     let repo = parts.next()?;
@@ -136,9 +132,7 @@ pub async fn fetch(app: &App, repo: &str) -> Result<ReleaseNotes> {
         200 => {}
         404 => return Err(AppError::not_found(format!("releases for {repo}"))),
         403 | 429 => {
-            return Err(AppError::upstream(
-                "GitHub rate limit reached; add a GitHub token in Settings > Updates",
-            ));
+            return Err(AppError::upstream("GitHub rate limit reached; add a GitHub token in Settings > Updates"));
         }
         s => return Err(AppError::upstream(format!("GitHub returned HTTP {s}"))),
     }
@@ -168,10 +162,16 @@ mod tests {
 
     #[test]
     fn repo_parsing() {
-        assert_eq!(github_repo("https://github.com/linuxserver/docker-sonarr").as_deref(), Some("linuxserver/docker-sonarr"));
+        assert_eq!(
+            github_repo("https://github.com/linuxserver/docker-sonarr").as_deref(),
+            Some("linuxserver/docker-sonarr")
+        );
         assert_eq!(github_repo("https://github.com/immich-app/immich.git").as_deref(), Some("immich-app/immich"));
         assert_eq!(github_repo("https://gitlab.com/x/y"), None);
-        assert_eq!(repo_for(Some("sonarr"), Some("https://github.com/linuxserver/docker-sonarr")).as_deref(), Some("Sonarr/Sonarr"));
+        assert_eq!(
+            repo_for(Some("sonarr"), Some("https://github.com/linuxserver/docker-sonarr")).as_deref(),
+            Some("Sonarr/Sonarr")
+        );
         assert_eq!(repo_for(None, Some("https://github.com/a/b")).as_deref(), Some("a/b"));
     }
 }

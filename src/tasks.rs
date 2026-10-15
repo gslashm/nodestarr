@@ -84,14 +84,7 @@ pub struct TaskSpec {
 
 impl TaskSpec {
     pub fn new(kind: &'static str, title: impl Into<String>, actor: &Actor) -> Self {
-        Self {
-            kind,
-            title: title.into(),
-            target: None,
-            target_name: None,
-            actor: actor.clone(),
-            lock_key: None,
-        }
+        Self { kind, title: title.into(), target: None, target_name: None, actor: actor.clone(), lock_key: None }
     }
 
     pub fn target(mut self, identity: impl Into<String>, name: impl Into<String>) -> Self {
@@ -159,10 +152,7 @@ impl TaskCtx {
     pub fn flush(&self) {
         let lines = std::mem::take(&mut *self.state.pending.lock());
         if !lines.is_empty() {
-            self.bus.publish(Event::TaskLog {
-                id: self.id.clone(),
-                lines,
-            });
+            self.bus.publish(Event::TaskLog { id: self.id.clone(), lines });
         }
         let snap = self.state.snapshot.lock().clone();
         self.bus.publish(Event::Task(Arc::new(snap)));
@@ -182,11 +172,7 @@ impl TaskCtx {
 
     /// Returns an error if the task was cancelled; call between steps.
     pub fn check_cancelled(&self) -> Result<()> {
-        if self.is_cancelled() {
-            Err(AppError::conflict("cancelled"))
-        } else {
-            Ok(())
-        }
+        if self.is_cancelled() { Err(AppError::conflict("cancelled")) } else { Ok(()) }
     }
 
     pub fn cancel_token(&self) -> CancellationToken {
@@ -209,34 +195,20 @@ struct Inner {
 impl TaskManager {
     pub fn new(db: Db, bus: EventBus) -> Self {
         Self {
-            inner: Arc::new(Inner {
-                db,
-                bus,
-                tasks: Mutex::new(HashMap::new()),
-                locks: Mutex::new(HashMap::new()),
-            }),
+            inner: Arc::new(Inner { db, bus, tasks: Mutex::new(HashMap::new()), locks: Mutex::new(HashMap::new()) }),
         }
     }
 
     fn lock_for(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
-        self.inner
-            .locks
-            .lock()
-            .entry(key.to_string())
-            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
-            .clone()
+        self.inner.locks.lock().entry(key.to_string()).or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))).clone()
     }
 
     /// True while a task holding `key` is queued or running.
     pub fn is_busy(&self, key: &str) -> bool {
-        self.inner
-            .tasks
-            .lock()
-            .values()
-            .any(|t| {
-                let s = t.snapshot.lock();
-                !s.status.is_finished() && s.target.as_deref() == Some(key)
-            })
+        self.inner.tasks.lock().values().any(|t| {
+            let s = t.snapshot.lock();
+            !s.status.is_finished() && s.target.as_deref() == Some(key)
+        })
     }
 
     /// Starts a task in the background and returns its id.
@@ -298,11 +270,7 @@ impl TaskManager {
             cancel: CancellationToken::new(),
         });
         self.inner.tasks.lock().insert(id.clone(), state.clone());
-        let ctx = TaskCtx {
-            state: state.clone(),
-            bus: self.inner.bus.clone(),
-            id: id.clone(),
-        };
+        let ctx = TaskCtx { state: state.clone(), bus: self.inner.bus.clone(), id: id.clone() };
         ctx.flush();
 
         let manager = self.clone();
@@ -424,19 +392,14 @@ impl TaskManager {
 
     /// Active and recently finished tasks, newest first.
     pub async fn list(&self, limit: usize) -> Result<Vec<TaskSnapshot>> {
-        let mut live: Vec<TaskSnapshot> = self
-            .inner
-            .tasks
-            .lock()
-            .values()
-            .map(|t| t.snapshot.lock().clone())
-            .collect();
+        let mut live: Vec<TaskSnapshot> = self.inner.tasks.lock().values().map(|t| t.snapshot.lock().clone()).collect();
         let known: std::collections::HashSet<String> = live.iter().map(|t| t.id.clone()).collect();
         let stored = self
             .inner
             .db
             .call(move |c| {
-                let mut stmt = c.prepare(&format!("SELECT {STORED_COLUMNS} FROM tasks ORDER BY created_at DESC LIMIT ?1"))?;
+                let mut stmt =
+                    c.prepare(&format!("SELECT {STORED_COLUMNS} FROM tasks ORDER BY created_at DESC LIMIT ?1"))?;
                 let rows = stmt.query_map([limit as i64], stored_snapshot)?;
                 Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
             })
@@ -475,17 +438,13 @@ impl TaskManager {
 
     /// Number of queued or running tasks.
     pub fn active_count(&self) -> usize {
-        self.inner
-            .tasks
-            .lock()
-            .values()
-            .filter(|t| !t.snapshot.lock().status.is_finished())
-            .count()
+        self.inner.tasks.lock().values().filter(|t| !t.snapshot.lock().status.is_finished()).count()
     }
 }
 
 /// Columns read back for persisted (finished) tasks, in [`stored_snapshot`] order.
-const STORED_COLUMNS: &str = "id, kind, title, target, target_name, status, actor, created_at, started_at, finished_at, result, error";
+const STORED_COLUMNS: &str =
+    "id, kind, title, target, target_name, status, actor, created_at, started_at, finished_at, result, error";
 
 fn stored_snapshot(r: &rusqlite::Row<'_>) -> rusqlite::Result<TaskSnapshot> {
     let status: String = r.get(5)?;
@@ -542,9 +501,7 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         let tm = TaskManager::new(db, EventBus::new());
         let err = tm
-            .run(TaskSpec::new("test", "Failing", &Actor::system()), |_| async move {
-                Err(AppError::conflict("boom"))
-            })
+            .run(TaskSpec::new("test", "Failing", &Actor::system()), |_| async move { Err(AppError::conflict("boom")) })
             .await
             .unwrap_err();
         assert!(err.to_string().contains("boom"));

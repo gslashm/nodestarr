@@ -26,10 +26,7 @@ pub async fn reset_password(boot: &BootConfig, username: &str, password: Option<
                 "UPDATE users SET password_hash = ?1, updated_at = ?2 WHERE username = ?3",
                 rusqlite::params![hash, crate::util::now(), user],
             )?;
-            c.execute(
-                "DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE username = ?1)",
-                [&user],
-            )?;
+            c.execute("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE username = ?1)", [&user])?;
             Ok(n)
         })
         .await?;
@@ -65,14 +62,10 @@ pub async fn healthcheck(boot: &BootConfig) -> anyhow::Result<()> {
     let host = if boot.listen.ip().is_unspecified() { "127.0.0.1".to_string() } else { boot.listen.ip().to_string() };
     // A raw HTTP/1.0 request keeps this path free of TLS and proxy settings.
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let mut stream = tokio::time::timeout(
-        std::time::Duration::from_secs(4),
-        tokio::net::TcpStream::connect((host.as_str(), port)),
-    )
-    .await??;
-    stream
-        .write_all(format!("GET /api/v1/health HTTP/1.0\r\nHost: {host}\r\n\r\n").as_bytes())
-        .await?;
+    let mut stream =
+        tokio::time::timeout(std::time::Duration::from_secs(4), tokio::net::TcpStream::connect((host.as_str(), port)))
+            .await??;
+    stream.write_all(format!("GET /api/v1/health HTTP/1.0\r\nHost: {host}\r\n\r\n").as_bytes()).await?;
     let mut buf = vec![0u8; 256];
     let n = tokio::time::timeout(std::time::Duration::from_secs(4), stream.read(&mut buf)).await??;
     let head = String::from_utf8_lossy(&buf[..n]);

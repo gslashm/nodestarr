@@ -64,9 +64,7 @@ impl AppError {
             AppError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             AppError::Upstream(_) => StatusCode::BAD_GATEWAY,
             AppError::Docker(_) => StatusCode::BAD_GATEWAY,
-            AppError::Db(_) | AppError::Io(_) | AppError::Other(_) => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
+            AppError::Db(_) | AppError::Io(_) | AppError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -91,10 +89,7 @@ impl From<bollard::errors::Error> for AppError {
     fn from(err: bollard::errors::Error) -> Self {
         use bollard::errors::Error as E;
         match err {
-            E::DockerResponseServerError {
-                status_code,
-                message,
-            } => match status_code {
+            E::DockerResponseServerError { status_code, message } => match status_code {
                 400 => AppError::BadRequest(message),
                 404 => AppError::NotFound(message),
                 409 => AppError::Conflict(message),
@@ -137,22 +132,10 @@ impl IntoResponse for AppError {
 /// Returns true when a Docker error just means "already in that state"
 /// (HTTP 304), which container actions treat as success.
 pub fn is_not_modified(err: &bollard::errors::Error) -> bool {
-    matches!(
-        err,
-        bollard::errors::Error::DockerResponseServerError {
-            status_code: 304,
-            ..
-        }
-    )
+    matches!(err, bollard::errors::Error::DockerResponseServerError { status_code: 304, .. })
 }
 
 /// True for Docker "no such container/image" errors.
 pub fn is_not_found(err: &bollard::errors::Error) -> bool {
-    matches!(
-        err,
-        bollard::errors::Error::DockerResponseServerError {
-            status_code: 404,
-            ..
-        }
-    )
+    matches!(err, bollard::errors::Error::DockerResponseServerError { status_code: 404, .. })
 }

@@ -31,13 +31,7 @@ impl CidrList {
 
     /// Parses leniently, skipping invalid entries (settings are validated on save).
     pub fn parse_lossy(entries: &[String]) -> Self {
-        Self(
-            entries
-                .iter()
-                .filter_map(|e| Self::parse(std::slice::from_ref(e)).ok())
-                .flat_map(|l| l.0)
-                .collect(),
-        )
+        Self(entries.iter().filter_map(|e| Self::parse(std::slice::from_ref(e)).ok()).flat_map(|l| l.0).collect())
     }
 
     pub fn contains(&self, ip: IpAddr) -> bool {
@@ -79,12 +73,7 @@ pub fn default_local_networks() -> Vec<String> {
 
 /// Determines the real client address. If the TCP peer is a trusted proxy,
 /// the right-most untrusted entry of X-Forwarded-For (or X-Real-IP) is used.
-pub fn client_ip(
-    peer: SocketAddr,
-    forwarded_for: Option<&str>,
-    real_ip: Option<&str>,
-    trusted: &CidrList,
-) -> IpAddr {
+pub fn client_ip(peer: SocketAddr, forwarded_for: Option<&str>, real_ip: Option<&str>, trusted: &CidrList) -> IpAddr {
     let peer_ip = canonical(peer.ip());
     if trusted.is_empty() || !trusted.contains(peer_ip) {
         return peer_ip;
@@ -113,11 +102,7 @@ pub fn primary_ipv4() -> Option<IpAddr> {
     let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
     sock.connect("192.0.2.1:9").ok()?;
     let ip = sock.local_addr().ok()?.ip();
-    if ip.is_unspecified() || ip.is_loopback() {
-        None
-    } else {
-        Some(ip)
-    }
+    if ip.is_unspecified() || ip.is_loopback() { None } else { Some(ip) }
 }
 
 #[cfg(test)]
@@ -144,18 +129,12 @@ mod tests {
         let proxy: SocketAddr = "172.17.0.2:5000".parse().unwrap();
         let direct: SocketAddr = "192.168.1.50:5000".parse().unwrap();
         // Untrusted peer: header ignored (prevents spoofing).
-        assert_eq!(
-            client_ip(direct, Some("1.2.3.4"), None, &trusted),
-            "192.168.1.50".parse::<IpAddr>().unwrap()
-        );
+        assert_eq!(client_ip(direct, Some("1.2.3.4"), None, &trusted), "192.168.1.50".parse::<IpAddr>().unwrap());
         // Trusted peer: right-most untrusted hop wins.
         assert_eq!(
             client_ip(proxy, Some("8.8.8.8, 1.2.3.4, 172.17.0.9"), None, &trusted),
             "1.2.3.4".parse::<IpAddr>().unwrap()
         );
-        assert_eq!(
-            client_ip(proxy, None, Some("5.6.7.8"), &trusted),
-            "5.6.7.8".parse::<IpAddr>().unwrap()
-        );
+        assert_eq!(client_ip(proxy, None, Some("5.6.7.8"), &trusted), "5.6.7.8".parse::<IpAddr>().unwrap());
     }
 }

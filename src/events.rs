@@ -27,26 +27,46 @@ pub enum Event {
     /// A container appeared or changed.
     Container(Arc<ContainerSummary>),
     /// A container was removed.
-    ContainerRemoved { id: String, identity: String },
+    ContainerRemoved {
+        id: String,
+        identity: String,
+    },
     /// Compose stacks changed on disk or in Docker; clients should refetch.
     StacksChanged,
     Task(Arc<TaskSnapshot>),
-    TaskLog { id: String, lines: Vec<String> },
+    TaskLog {
+        id: String,
+        lines: Vec<String>,
+    },
     Activity(Arc<ActivityEntry>),
-    Update { identity: String, info: Arc<UpdateInfo> },
+    Update {
+        identity: String,
+        info: Arc<UpdateInfo>,
+    },
     /// An update check of all containers started or finished.
-    UpdateCheck { running: bool, last_check: Option<i64> },
+    UpdateCheck {
+        running: bool,
+        last_check: Option<i64>,
+    },
     Stats(Arc<Vec<LiveStat>>),
     /// Docker host CPU, memory and load (sent with live stats).
     Host(Arc<HostStats>),
     Uptime(Arc<UptimeStatus>),
-    App { identity: String, status: Arc<AppStatus> },
+    App {
+        identity: String,
+        status: Arc<AppStatus>,
+    },
     Alert(Arc<AlertView>),
-    Toast { level: Severity, message: String },
+    Toast {
+        level: Severity,
+        message: String,
+    },
     /// Settings were saved; clients refetch what they display.
     Settings,
     /// Per-container preferences changed.
-    Prefs { identity: String },
+    Prefs {
+        identity: String,
+    },
 }
 
 #[derive(Clone)]
@@ -76,9 +96,6 @@ impl EventBus {
     }
 
     pub fn toast(&self, level: Severity, message: impl Into<String>) {
-        self.publish(Event::Toast {
-            level,
-            message: message.into(),
-        });
+        self.publish(Event::Toast { level, message: message.into() });
     }
 }

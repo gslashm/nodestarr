@@ -26,9 +26,8 @@ pub struct Version {
     pub flavor: String,
 }
 
-const PRE_MARKERS: &[&str] = &[
-    "alpha", "beta", "rc", "pre", "preview", "dev", "nightly", "snapshot", "canary", "test", "unstable",
-];
+const PRE_MARKERS: &[&str] =
+    &["alpha", "beta", "rc", "pre", "preview", "dev", "nightly", "snapshot", "canary", "test", "unstable"];
 
 impl Version {
     pub fn parse(tag: &str) -> Option<Self> {
@@ -190,15 +189,13 @@ fn natural_cmp(a: &str, b: &str) -> Ordering {
                     o => return o,
                 }
             }
-            (Some(x), Some(y)) => {
-                match x.cmp(y) {
-                    Ordering::Equal => {
-                        ai.next();
-                        bi.next();
-                    }
-                    o => return o,
+            (Some(x), Some(y)) => match x.cmp(y) {
+                Ordering::Equal => {
+                    ai.next();
+                    bi.next();
                 }
-            }
+                o => return o,
+            },
         }
     }
 }
@@ -318,10 +315,8 @@ mod tests {
 
     #[test]
     fn sorting() {
-        let mut tags: Vec<String> = ["1.2.0", "latest", "1.10.0", "1.2.0-rc1", "develop", "1.9.9"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let mut tags: Vec<String> =
+            ["1.2.0", "latest", "1.10.0", "1.2.0-rc1", "develop", "1.9.9"].iter().map(|s| s.to_string()).collect();
         sort_tags_desc(&mut tags);
         assert_eq!(tags, vec!["latest", "develop", "1.10.0", "1.9.9", "1.2.0", "1.2.0-rc1"]);
     }

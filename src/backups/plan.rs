@@ -75,7 +75,8 @@ impl BackupPlan {
 }
 
 /// Host or container paths that never hold app data worth backing up.
-const SYSTEM_PREFIXES: &[&str] = &["/etc", "/dev", "/proc", "/sys", "/run", "/var/run", "/tmp", "/usr", "/lib", "/lib64", "/bin", "/sbin", "/boot"];
+const SYSTEM_PREFIXES: &[&str] =
+    &["/etc", "/dev", "/proc", "/sys", "/run", "/var/run", "/tmp", "/usr", "/lib", "/lib64", "/bin", "/sbin", "/boot"];
 
 /// Matches whole path components, so "/runner" is not mistaken for "/run".
 fn is_system_path(p: &str) -> bool {
@@ -89,12 +90,7 @@ fn env_map(entry: &Entry) -> std::collections::HashMap<String, String> {
         .config
         .as_ref()
         .and_then(|c| c.env.as_ref())
-        .map(|v| {
-            v.iter()
-                .filter_map(|kv| kv.split_once('='))
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect()
-        })
+        .map(|v| v.iter().filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.to_string())).collect())
         .unwrap_or_default()
 }
 
@@ -248,7 +244,11 @@ pub fn plan(app: &App, entry: &Entry) -> BackupPlan {
             BackupStrategy::Stop => Method::Stop,
             BackupStrategy::Live => Method::Live,
             BackupStrategy::Auto => {
-                if info.is_some_and(|a| a.sqlite) { Method::Pause } else { Method::Live }
+                if info.is_some_and(|a| a.sqlite) {
+                    Method::Pause
+                } else {
+                    Method::Live
+                }
             }
         }
     };

@@ -126,10 +126,7 @@ impl IntegrationService {
         });
         self.inner.statuses.write().insert(identity.to_string(), arc.clone());
         if changed {
-            self.inner.bus.publish(Event::App {
-                identity: identity.to_string(),
-                status: arc,
-            });
+            self.inner.bus.publish(Event::App { identity: identity.to_string(), status: arc });
         }
         previous
     }
@@ -141,12 +138,7 @@ impl IntegrationService {
 
 /// The integration kind for a container, if any.
 pub fn kind_of(entry: &Entry) -> Option<&'static str> {
-    entry
-        .summary
-        .app
-        .as_deref()
-        .and_then(crate::docker::apps::by_slug)
-        .and_then(|a| a.integration)
+    entry.summary.app.as_deref().and_then(crate::docker::apps::by_slug).and_then(|a| a.integration)
 }
 
 /// Credentials for a container: preferences override discovery; discovery
@@ -155,7 +147,10 @@ pub async fn creds_for(app: &App, entry: &Entry) -> Result<Creds> {
     let identity = &entry.summary.identity;
     let prefs = app.prefs.get(identity);
     if let Some((c, at)) = app.integrations.inner.creds.lock().get(identity) {
-        if crate::util::now() - at < 600 && prefs.integration.base_url.is_empty() && prefs.integration.api_key.is_empty() {
+        if crate::util::now() - at < 600
+            && prefs.integration.base_url.is_empty()
+            && prefs.integration.api_key.is_empty()
+        {
             return Ok(c.clone());
         }
     }
@@ -174,13 +169,11 @@ pub async fn creds_for(app: &App, entry: &Entry) -> Result<Creds> {
         creds.state = CredState::Configured;
     }
     if creds.base_url.is_empty() {
-        return Err(AppError::conflict("Nodestarr can't work out how to reach this app; set its URL in the container's settings"));
+        return Err(AppError::conflict(
+            "Nodestarr can't work out how to reach this app; set its URL in the container's settings",
+        ));
     }
-    app.integrations
-        .inner
-        .creds
-        .lock()
-        .insert(identity.clone(), (creds.clone(), crate::util::now()));
+    app.integrations.inner.creds.lock().insert(identity.clone(), (creds.clone(), crate::util::now()));
     Ok(creds)
 }
 
@@ -234,7 +227,9 @@ pub async fn poll(app: &App, entry: &Entry) -> Option<Arc<AppStatus>> {
     if !new_issues.is_empty() {
         let worst = if new_issues.iter().any(|h| h.level == "error") { Severity::Error } else { Severity::Warning };
         let body = new_issues.iter().map(|h| format!("• {}", h.message)).collect::<Vec<_>>().join("\n");
-        app.notifier.send(Notification::new("app.health", worst, format!("{name} reports a problem"), body).target(&identity, &name));
+        app.notifier.send(
+            Notification::new("app.health", worst, format!("{name} reports a problem"), body).target(&identity, &name),
+        );
     }
     app.integrations.status(&identity)
 }

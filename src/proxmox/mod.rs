@@ -15,7 +15,7 @@ use crate::app::App;
 use crate::docker::DockerService;
 use crate::error::{AppError, Result};
 use crate::notify::Notification;
-use crate::settings::{Severity, SettingsStore};
+use crate::settings::{SettingsStore, Severity};
 use crate::tasks::{TaskCtx, TaskSpec};
 
 use self::client::PveClient;
@@ -174,14 +174,7 @@ impl ProxmoxService {
     /// `docker` provides the Docker host's name, used to recognize the guest
     /// Nodestarr runs in when no guest ID is configured.
     pub fn new(settings: SettingsStore, docker: DockerService) -> Self {
-        Self {
-            inner: Arc::new(Inner {
-                settings,
-                docker,
-                client: Mutex::new(None),
-                overview: RwLock::new(None),
-            }),
-        }
+        Self { inner: Arc::new(Inner { settings, docker, client: Mutex::new(None), overview: RwLock::new(None) }) }
     }
 
     /// The guest Nodestarr runs in: the configured ID, or the one guest whose
@@ -203,7 +196,10 @@ impl ProxmoxService {
         if !s.proxmox.enabled {
             return Err(AppError::conflict("Proxmox integration is not enabled (Settings > Proxmox)"));
         }
-        let key = format!("{}|{}|{}|{:?}|{}", s.proxmox.url, s.proxmox.token_id, s.proxmox.token_secret, s.proxmox.tls_mode, s.proxmox.fingerprint);
+        let key = format!(
+            "{}|{}|{}|{:?}|{}",
+            s.proxmox.url, s.proxmox.token_id, s.proxmox.token_secret, s.proxmox.tls_mode, s.proxmox.fingerprint
+        );
         let mut guard = self.inner.client.lock();
         if let Some((k, c)) = guard.as_ref() {
             if *k == key {
@@ -257,7 +253,9 @@ impl ProxmoxService {
                 rootfs_total: v_u64(&status["rootfs"]["total"]),
                 loadavg: status["loadavg"]
                     .as_array()
-                    .map(|a| a.iter().map(|x| x.as_str().map(str::to_string).unwrap_or_else(|| x.to_string())).collect())
+                    .map(|a| {
+                        a.iter().map(|x| x.as_str().map(str::to_string).unwrap_or_else(|| x.to_string())).collect()
+                    })
                     .unwrap_or_default(),
                 uptime: v_u64(&status["uptime"]),
                 pve_version: status["pveversion"].as_str().unwrap_or_default().to_string(),
@@ -287,7 +285,10 @@ impl ProxmoxService {
                         netin: v_u64(&r["netin"]),
                         netout: v_u64(&r["netout"]),
                         uptime: v_u64(&r["uptime"]),
-                        tags: r["tags"].as_str().map(|t| t.split([';', ',']).filter(|x| !x.is_empty()).map(str::to_string).collect()).unwrap_or_default(),
+                        tags: r["tags"]
+                            .as_str()
+                            .map(|t| t.split([';', ',']).filter(|x| !x.is_empty()).map(str::to_string).collect())
+                            .unwrap_or_default(),
                         template: v_u64(&r["template"]) == 1,
                         is_self: Some(vmid) == configured_self,
                     });
@@ -296,7 +297,10 @@ impl ProxmoxService {
                     ov.storages.push(Storage {
                         storage: r["storage"].as_str().unwrap_or_default().to_string(),
                         kind: r["plugintype"].as_str().unwrap_or_default().to_string(),
-                        content: r["content"].as_str().map(|c| c.split(',').map(str::to_string).collect()).unwrap_or_default(),
+                        content: r["content"]
+                            .as_str()
+                            .map(|c| c.split(',').map(str::to_string).collect())
+                            .unwrap_or_default(),
                         used: v_u64(&r["disk"]),
                         total: v_u64(&r["maxdisk"]),
                         active: r["status"].as_str() == Some("available"),
@@ -326,11 +330,7 @@ impl ProxmoxService {
 
     async fn guest(&self, vmid: u32) -> Result<Guest> {
         let ov = self.overview(30).await?;
-        ov.guests
-            .iter()
-            .find(|g| g.vmid == vmid)
-            .cloned()
-            .ok_or_else(|| AppError::not_found(format!("guest {vmid}")))
+        ov.guests.iter().find(|g| g.vmid == vmid).cloned().ok_or_else(|| AppError::not_found(format!("guest {vmid}")))
     }
 
     /// RRD data for the node (vmid None) or a guest.
@@ -365,7 +365,8 @@ impl ProxmoxService {
     pub async fn backups(&self, storage: &str) -> Result<Vec<BackupFile>> {
         let c = self.client()?;
         let node = self.node(&c).await?;
-        let mut list: Vec<BackupFile> = c.get(&format!("/nodes/{node}/storage/{storage}/content?content=backup")).await?;
+        let mut list: Vec<BackupFile> =
+            c.get(&format!("/nodes/{node}/storage/{storage}/content?content=backup")).await?;
         list.sort_by_key(|b| std::cmp::Reverse(b.ctime.unwrap_or(0)));
         Ok(list)
     }
@@ -379,9 +380,7 @@ impl ProxmoxService {
     pub async fn task_log(&self, upid: &str) -> Result<Vec<String>> {
         let c = self.client()?;
         let node = node_from_upid(upid).ok_or_else(|| AppError::bad_request("invalid task id"))?;
-        let lines: Vec<Value> = c
-            .get(&format!("/nodes/{node}/tasks/{}/log?limit=1000", percent_encode(upid)))
-            .await?;
+        let lines: Vec<Value> = c.get(&format!("/nodes/{node}/tasks/{}/log?limit=1000", percent_encode(upid))).await?;
         Ok(lines.iter().filter_map(|l| l["t"].as_str().map(str::to_string)).collect())
     }
 
@@ -466,7 +465,8 @@ async fn follow_upid(app: &App, ctx: &TaskCtx, upid: &str) -> Result<()> {
             return Err(AppError::conflict("stopped following the task (it keeps running on Proxmox)"));
         }
         let status: Value = c.get(&format!("/nodes/{node}/tasks/{enc}/status")).await?;
-        if let Ok(lines) = c.get::<Vec<Value>>(&format!("/nodes/{node}/tasks/{enc}/log?start={shown}&limit=500")).await {
+        if let Ok(lines) = c.get::<Vec<Value>>(&format!("/nodes/{node}/tasks/{enc}/log?start={shown}&limit=500")).await
+        {
             for l in &lines {
                 if let Some(t) = l["t"].as_str() {
                     if t != "no content" {
@@ -495,9 +495,8 @@ pub fn detect_self(guests: &[Guest], host_name: &str) -> Option<u32> {
     if host.is_empty() {
         return None;
     }
-    let mut matches = guests
-        .iter()
-        .filter(|g| !g.template && g.status == "running" && g.name.eq_ignore_ascii_case(host));
+    let mut matches =
+        guests.iter().filter(|g| !g.template && g.status == "running" && g.name.eq_ignore_ascii_case(host));
     match (matches.next(), matches.next()) {
         (Some(g), None) => Some(g.vmid),
         _ => None,
@@ -513,31 +512,57 @@ fn guard_self(app: &App, vmid: u32, confirm_self: bool) -> Result<()> {
     Ok(())
 }
 
-pub async fn guest_action(app: &App, vmid: u32, action: GuestAction, confirm_self: bool, actor: &Actor) -> Result<String> {
+pub async fn guest_action(
+    app: &App,
+    vmid: u32,
+    action: GuestAction,
+    confirm_self: bool,
+    actor: &Actor,
+) -> Result<String> {
     if action.disruptive() {
         guard_self(app, vmid, confirm_self)?;
     }
     let g = app.proxmox.guest(vmid).await?;
-    let spec = TaskSpec::new("proxmox", format!("{} {} {}", capitalize(action.path()), g.kind.to_uppercase(), g.name), actor).lock(format!("pve:{vmid}"));
+    let spec =
+        TaskSpec::new("proxmox", format!("{} {} {}", capitalize(action.path()), g.kind.to_uppercase(), g.name), actor)
+            .lock(format!("pve:{vmid}"));
     let app2 = app.clone();
     let actor2 = actor.clone();
     Ok(app.tasks.spawn(spec, move |ctx| async move {
         let c = app2.proxmox.client()?;
-        let upid: String = c.post(&format!("/nodes/{}/{}/{vmid}/status/{}", g.node, g.kind, action.path()), &[]).await?;
+        let upid: String =
+            c.post(&format!("/nodes/{}/{}/{vmid}/status/{}", g.node, g.kind, action.path()), &[]).await?;
         follow_upid(&app2, &ctx, &upid).await?;
-        app2.note(NewActivity::new("proxmox.task", Severity::Info, format!("{} {} ({vmid})", capitalize(action.path()), g.name)).actor(&actor2)).await;
+        app2.note(
+            NewActivity::new(
+                "proxmox.task",
+                Severity::Info,
+                format!("{} {} ({vmid})", capitalize(action.path()), g.name),
+            )
+            .actor(&actor2),
+        )
+        .await;
         let _ = app2.proxmox.overview(0).await;
         Ok(json!({ "upid": upid }))
     }))
 }
 
-pub async fn create_snapshot(app: &App, vmid: u32, name: &str, description: &str, include_ram: bool, actor: &Actor) -> Result<String> {
+pub async fn create_snapshot(
+    app: &App,
+    vmid: u32,
+    name: &str,
+    description: &str,
+    include_ram: bool,
+    actor: &Actor,
+) -> Result<String> {
     let valid = !name.is_empty()
         && name.len() <= 40
         && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
     if !valid {
-        return Err(AppError::bad_request("snapshot names start with a letter and use letters, digits, '-' and '_' (max 40)"));
+        return Err(AppError::bad_request(
+            "snapshot names start with a letter and use letters, digits, '-' and '_' (max 40)",
+        ));
     }
     let g = app.proxmox.guest(vmid).await?;
     let spec = TaskSpec::new("proxmox", format!("Snapshot {} ({name})", g.name), actor).lock(format!("pve:{vmid}"));
@@ -550,18 +575,24 @@ pub async fn create_snapshot(app: &App, vmid: u32, name: &str, description: &str
         }
         let upid: String = c.post(&format!("/nodes/{}/{}/{vmid}/snapshot", g.node, g.kind), &form).await?;
         follow_upid(&app2, &ctx, &upid).await?;
-        app2.note(NewActivity::new("proxmox.task", Severity::Success, format!("Snapshot '{name}' of {} created", g.name)).actor(&actor2)).await;
+        app2.note(
+            NewActivity::new("proxmox.task", Severity::Success, format!("Snapshot '{name}' of {} created", g.name))
+                .actor(&actor2),
+        )
+        .await;
         Ok(json!({ "upid": upid }))
     }))
 }
 
 pub async fn delete_snapshot(app: &App, vmid: u32, name: &str, actor: &Actor) -> Result<String> {
     let g = app.proxmox.guest(vmid).await?;
-    let spec = TaskSpec::new("proxmox", format!("Delete snapshot {name} of {}", g.name), actor).lock(format!("pve:{vmid}"));
+    let spec =
+        TaskSpec::new("proxmox", format!("Delete snapshot {name} of {}", g.name), actor).lock(format!("pve:{vmid}"));
     let (app2, name) = (app.clone(), name.to_string());
     Ok(app.tasks.spawn(spec, move |ctx| async move {
         let c = app2.proxmox.client()?;
-        let upid: String = c.delete(&format!("/nodes/{}/{}/{vmid}/snapshot/{}", g.node, g.kind, percent_encode(&name))).await?;
+        let upid: String =
+            c.delete(&format!("/nodes/{}/{}/{vmid}/snapshot/{}", g.node, g.kind, percent_encode(&name))).await?;
         follow_upid(&app2, &ctx, &upid).await?;
         Ok(json!({ "upid": upid }))
     }))
@@ -574,9 +605,15 @@ pub async fn rollback_snapshot(app: &App, vmid: u32, name: &str, confirm_self: b
     let (app2, name, actor2) = (app.clone(), name.to_string(), actor.clone());
     Ok(app.tasks.spawn(spec, move |ctx| async move {
         let c = app2.proxmox.client()?;
-        let upid: String = c.post(&format!("/nodes/{}/{}/{vmid}/snapshot/{}/rollback", g.node, g.kind, percent_encode(&name)), &[]).await?;
+        let upid: String = c
+            .post(&format!("/nodes/{}/{}/{vmid}/snapshot/{}/rollback", g.node, g.kind, percent_encode(&name)), &[])
+            .await?;
         follow_upid(&app2, &ctx, &upid).await?;
-        app2.note(NewActivity::new("proxmox.task", Severity::Warning, format!("{} rolled back to snapshot '{name}'", g.name)).actor(&actor2)).await;
+        app2.note(
+            NewActivity::new("proxmox.task", Severity::Warning, format!("{} rolled back to snapshot '{name}'", g.name))
+                .actor(&actor2),
+        )
+        .await;
         Ok(json!({ "upid": upid }))
     }))
 }
@@ -697,7 +734,8 @@ mod tests {
 
     #[test]
     fn detects_the_guest_by_host_name() {
-        let guests = vec![guest(100, "docker", "running"), guest(101, "media", "running"), guest(102, "Docker", "stopped")];
+        let guests =
+            vec![guest(100, "docker", "running"), guest(101, "media", "running"), guest(102, "Docker", "stopped")];
         assert_eq!(detect_self(&guests, "docker"), Some(100));
         assert_eq!(detect_self(&guests, "DOCKER"), Some(100));
         assert_eq!(detect_self(&guests, ""), None);
@@ -710,7 +748,10 @@ mod tests {
 
     #[test]
     fn upid_node() {
-        assert_eq!(node_from_upid("UPID:pve:0000F00D:0001:6713:vzdump:100:nodestarr@pve!nodestarr:").as_deref(), Some("pve"));
+        assert_eq!(
+            node_from_upid("UPID:pve:0000F00D:0001:6713:vzdump:100:nodestarr@pve!nodestarr:").as_deref(),
+            Some("pve")
+        );
         assert_eq!(node_from_upid("garbage"), None);
     }
 }

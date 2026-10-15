@@ -124,7 +124,11 @@ struct TestBody {
 }
 
 async fn uptime_test(State(app): State<App>, Json(b): Json<TestBody>) -> Result<Json<Value>> {
-    let expect = if b.expect_status.trim().is_empty() { app.settings.get().uptime.expect_status.clone() } else { b.expect_status };
+    let expect = if b.expect_status.trim().is_empty() {
+        app.settings.get().uptime.expect_status.clone()
+    } else {
+        b.expect_status
+    };
     let result = crate::monitor::uptime::test(&app, b.url.trim(), &expect, &b.keyword).await?;
     Ok(Json(serde_json::to_value(result)?))
 }
@@ -134,7 +138,11 @@ struct BeatsQuery {
     range: Option<String>,
 }
 
-async fn uptime_beats(State(app): State<App>, Path(id): Path<String>, Query(q): Query<BeatsQuery>) -> Result<Json<Value>> {
+async fn uptime_beats(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    Query(q): Query<BeatsQuery>,
+) -> Result<Json<Value>> {
     let since = crate::util::now() - range_secs(q.range.as_deref().or(Some("24h")));
     let beats = crate::monitor::uptime::beats(&app, &id, since).await?;
     Ok(Json(json!({ "id": id, "status": app.uptime.get(&id), "beats": beats })))

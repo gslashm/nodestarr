@@ -41,11 +41,8 @@ pub async fn start(app: &App, ctx: &TaskCtx, entry: &Entry, tag: Option<&str>) -
     let target = ImageRef::parse(&new_ref).ok_or_else(|| AppError::bad_request("invalid image"))?;
     ctx.log(format!("Pulling {}", target.familiar()));
     crate::updates::apply::pull(app, ctx, &target).await?;
-    let pulled = app
-        .docker
-        .inspect_image_fresh(&new_ref)
-        .await
-        .ok_or_else(|| AppError::conflict("image missing after pull"))?;
+    let pulled =
+        app.docker.inspect_image_fresh(&new_ref).await.ok_or_else(|| AppError::conflict("image missing after pull"))?;
     if pulled.id == s.image_id && tag.is_none() {
         ctx.log("Nodestarr is already up to date");
         return Ok(json!({ "changed": false }));
@@ -109,7 +106,9 @@ pub async fn run_helper(boot: &BootConfig, container: &str, image: &str) -> anyh
     let log = |l: String| println!("{l}");
     let rec = recreate::replace(&api, container, body, Some(30), &log).await?;
     let cancel = tokio_util::sync::CancellationToken::new();
-    match actions::wait_until_stable(&api, &rec.new_id, Duration::from_secs(10), Duration::from_secs(120), &cancel).await {
+    match actions::wait_until_stable(&api, &rec.new_id, Duration::from_secs(10), Duration::from_secs(120), &cancel)
+        .await
+    {
         Ok(actions::Stability::Stable) => {
             println!("new Nodestarr container is up; removing the old one");
             recreate::finalize(&api, &rec).await?;
@@ -137,10 +136,9 @@ pub async fn check_for_release(app: &App) {
     };
     let Ok(v) = resp.json::<serde_json::Value>().await else { return };
     let Some(tag) = v["tag_name"].as_str() else { return };
-    let (Some(latest), Some(current)) = (
-        crate::registry::version::Version::parse(tag),
-        crate::registry::version::Version::parse(crate::VERSION),
-    ) else {
+    let (Some(latest), Some(current)) =
+        (crate::registry::version::Version::parse(tag), crate::registry::version::Version::parse(crate::VERSION))
+    else {
         return;
     };
     let newer = latest.core > current.core;
@@ -148,8 +146,13 @@ pub async fn check_for_release(app: &App) {
     let already: Option<String> = app.db.get_json("settings", "nodestarr_release".into()).await.ok().flatten();
     if newer && already.as_deref() != Some(key.as_str()) {
         app.notifier.send(
-            Notification::new("system.update", Severity::Info, format!("Nodestarr {tag} is available"), format!("You run {}. Update from Settings > System.", crate::VERSION))
-                .link(app, "/system"),
+            Notification::new(
+                "system.update",
+                Severity::Info,
+                format!("Nodestarr {tag} is available"),
+                format!("You run {}. Update from Settings > System.", crate::VERSION),
+            )
+            .link(app, "/system"),
         );
         let _ = app.db.put_json("settings", "nodestarr_release".into(), &key).await;
     }

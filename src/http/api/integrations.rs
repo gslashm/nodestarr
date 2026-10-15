@@ -45,7 +45,9 @@ async fn list(State(app): State<App>) -> Json<Value> {
             })
         })
         .collect();
-    items.sort_by(|a, b| a["name"].as_str().unwrap_or("").to_lowercase().cmp(&b["name"].as_str().unwrap_or("").to_lowercase()));
+    items.sort_by(|a, b| {
+        a["name"].as_str().unwrap_or("").to_lowercase().cmp(&b["name"].as_str().unwrap_or("").to_lowercase())
+    });
     Json(json!({
         "enabled": settings.integrations.enabled,
         "poll_secs": settings.integrations.poll_secs,

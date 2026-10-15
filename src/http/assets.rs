@@ -78,9 +78,13 @@ pub async fn serve(State(app): State<App>, req: Request) -> Response {
         return (StatusCode::NOT_FOUND, "not found").into_response();
     }
     let headers = req.headers();
-    let (data, encoding) = if accepts(headers, "br") && let Some(d) = load(&app, &format!("{path}.br")) {
+    let (data, encoding) = if accepts(headers, "br")
+        && let Some(d) = load(&app, &format!("{path}.br"))
+    {
         (Some(d), Some("br"))
-    } else if accepts(headers, "gzip") && let Some(d) = load(&app, &format!("{path}.gz")) {
+    } else if accepts(headers, "gzip")
+        && let Some(d) = load(&app, &format!("{path}.gz"))
+    {
         (Some(d), Some("gzip"))
     } else {
         (load(&app, path), None)
@@ -97,7 +101,10 @@ pub async fn serve(State(app): State<App>, req: Request) -> Response {
     let mime = mime_guess::from_path(path).first_or_octet_stream();
     let mut resp = data.into_owned().into_response();
     let h = resp.headers_mut();
-    h.insert(header::CONTENT_TYPE, HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")));
+    h.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
     if let Some(enc) = encoding {
         h.insert(header::CONTENT_ENCODING, HeaderValue::from_static(enc));
         h.insert(header::VARY, HeaderValue::from_static("Accept-Encoding"));
@@ -105,7 +112,11 @@ pub async fn serve(State(app): State<App>, req: Request) -> Response {
     let immutable = path.starts_with("assets/");
     h.insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static(if immutable { "public, max-age=31536000, immutable" } else { "public, max-age=3600" }),
+        HeaderValue::from_static(if immutable {
+            "public, max-age=31536000, immutable"
+        } else {
+            "public, max-age=3600"
+        }),
     );
     resp
 }

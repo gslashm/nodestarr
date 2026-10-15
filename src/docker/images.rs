@@ -26,18 +26,12 @@ pub struct ImageMeta {
 impl ImageMeta {
     pub fn from_inspect(i: ImageInspect) -> Self {
         let config = i.config.clone();
-        let labels = config
-            .as_ref()
-            .and_then(|c| c.labels.clone())
-            .unwrap_or_default();
+        let labels = config.as_ref().and_then(|c| c.labels.clone()).unwrap_or_default();
         let env = config
             .as_ref()
             .and_then(|c| c.env.as_ref())
             .map(|vars| {
-                vars.iter()
-                    .filter_map(|kv| kv.split_once('='))
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect()
+                vars.iter().filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.to_string())).collect()
             })
             .unwrap_or_default();
         Self {
@@ -46,10 +40,7 @@ impl ImageMeta {
             repo_digests: i.repo_digests.unwrap_or_default(),
             labels,
             env,
-            created: i
-                .created
-                .as_ref()
-                .and_then(|d| crate::util::parse_rfc3339(&d.to_string())),
+            created: i.created.as_ref().and_then(|d| crate::util::parse_rfc3339(&d.to_string())),
             os: i.os.unwrap_or_else(|| "linux".into()),
             arch: i.architecture.unwrap_or_else(|| "amd64".into()),
             variant: i.variant.filter(|v| !v.is_empty()),

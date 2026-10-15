@@ -32,8 +32,7 @@ pub struct SettingsStore {
 impl SettingsStore {
     /// Loads settings from the database (or defaults on first run).
     pub async fn load(db: Db) -> Result<Self> {
-        let stored: Option<serde_json::Value> =
-            db.get_json("settings", SETTINGS_KEY.to_string()).await?;
+        let stored: Option<serde_json::Value> = db.get_json("settings", SETTINGS_KEY.to_string()).await?;
         let settings = match stored {
             Some(value) => match serde_json::from_value::<Settings>(value) {
                 Ok(s) => s,
@@ -51,11 +50,7 @@ impl SettingsStore {
             }
         };
         let (tx, _) = watch::channel(Arc::new(settings));
-        Ok(Self {
-            db,
-            tx: Arc::new(tx),
-            write_lock: Arc::new(tokio::sync::Mutex::new(())),
-        })
+        Ok(Self { db, tx: Arc::new(tx), write_lock: Arc::new(tokio::sync::Mutex::new(())) })
     }
 
     /// Current settings snapshot.
@@ -77,9 +72,7 @@ impl SettingsStore {
         let mut next = (*self.get()).clone();
         f(&mut next)?;
         next.validate().map_err(AppError::BadRequest)?;
-        self.db
-            .put_json("settings", SETTINGS_KEY.to_string(), &next)
-            .await?;
+        self.db.put_json("settings", SETTINGS_KEY.to_string(), &next).await?;
         let next = Arc::new(next);
         self.tx.send_replace(next.clone());
         Ok(next)

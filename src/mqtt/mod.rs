@@ -319,7 +319,13 @@ async fn publish_states(app: &App, client: &AsyncClient, s: &MqttSettings) {
         });
         publish_json(client, update_topic(s, &id), &upd, true).await;
     }
-    publish_json(client, format!("{}/summary", s.base_topic), &json!({ "running": running, "updates": available }), true).await;
+    publish_json(
+        client,
+        format!("{}/summary", s.base_topic),
+        &json!({ "running": running, "updates": available }),
+        true,
+    )
+    .await;
 }
 
 async fn publish_discovery(app: &App, client: &AsyncClient, s: &MqttSettings) {
@@ -367,10 +373,17 @@ async fn handle_command(app: &App, s: &MqttSettings, topic: &str, payload: &str)
     let result = match payload {
         "start" => crate::ops::container_action(app, &key, Action::Start, Default::default(), &actor).await.map(|_| ()),
         "stop" => crate::ops::container_action(app, &key, Action::Stop, Default::default(), &actor).await.map(|_| ()),
-        "restart" => crate::ops::container_action(app, &key, Action::Restart, Default::default(), &actor).await.map(|_| ()),
-        "update" | "install" => {
-            crate::updates::apply::start_update(app, &key, Default::default(), &actor, crate::updates::apply::Trigger::Mqtt).map(|_| ())
+        "restart" => {
+            crate::ops::container_action(app, &key, Action::Restart, Default::default(), &actor).await.map(|_| ())
         }
+        "update" | "install" => crate::updates::apply::start_update(
+            app,
+            &key,
+            Default::default(),
+            &actor,
+            crate::updates::apply::Trigger::Mqtt,
+        )
+        .map(|_| ()),
         _ => return,
     };
     if let Err(err) = result {
@@ -399,12 +412,17 @@ pub fn start(app: App) {
     });
 }
 
-async fn run_session(app: &App, s: &MqttSettings, settings_rx: &mut tokio::sync::watch::Receiver<Arc<crate::settings::Settings>>) {
+async fn run_session(
+    app: &App,
+    s: &MqttSettings,
+    settings_rx: &mut tokio::sync::watch::Receiver<Arc<crate::settings::Settings>>,
+) {
     let (client, mut eventloop) = AsyncClient::new(options(s), 64);
     *app.mqtt.inner.client.lock() = Some(client.clone());
     let mut bus = app.bus.subscribe();
     let mut refresh = tokio::time::interval(Duration::from_secs(300));
-    let mut stats_tick = tokio::time::interval(Duration::from_secs(app.settings.get().monitoring.sample_secs.max(15) as u64));
+    let mut stats_tick =
+        tokio::time::interval(Duration::from_secs(app.settings.get().monitoring.sample_secs.max(15) as u64));
     let mut dirty = false;
     let mut debounce = tokio::time::interval(Duration::from_secs(2));
     let original = s.clone();
@@ -491,7 +509,8 @@ pub async fn test(s: &MqttSettings) -> crate::error::Result<()> {
     if s.host.trim().is_empty() {
         return Err(AppError::bad_request("enter the broker's host name or IP address"));
     }
-    let mut o = MqttOptions::new(format!("{}-test-{}", s.client_id, crate::util::random_token(4)), s.host.trim(), s.port);
+    let mut o =
+        MqttOptions::new(format!("{}-test-{}", s.client_id, crate::util::random_token(4)), s.host.trim(), s.port);
     o.set_keep_alive(Duration::from_secs(10));
     o.set_clean_session(true);
     if !s.username.is_empty() {

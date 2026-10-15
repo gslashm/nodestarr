@@ -55,18 +55,12 @@ fn level_rank(level: &str) -> u8 {
 
 /// Installs the global subscriber. Safe to call once.
 pub fn init(filter: &str) {
-    let env_filter = EnvFilter::try_new(filter)
-        .or_else(|_| EnvFilter::try_new("info"))
-        .expect("valid default filter");
+    let env_filter = EnvFilter::try_new(filter).or_else(|_| EnvFilter::try_new("info")).expect("valid default filter");
     let stdout_layer = tracing_subscriber::fmt::layer()
         .with_target(true)
         .with_ansi(std::env::var_os("NO_COLOR").is_none() && atty_stdout())
         .compact();
-    let _ = tracing_subscriber::registry()
-        .with(env_filter)
-        .with(stdout_layer)
-        .with(RingLayer)
-        .try_init();
+    let _ = tracing_subscriber::registry().with(env_filter).with(stdout_layer).with(RingLayer).try_init();
 }
 
 fn atty_stdout() -> bool {

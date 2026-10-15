@@ -40,14 +40,7 @@ fn default_true() -> bool {
 
 impl Default for LogQuery {
     fn default() -> Self {
-        Self {
-            tail: Some("500".into()),
-            since: None,
-            until: None,
-            timestamps: true,
-            stdout: true,
-            stderr: true,
-        }
+        Self { tail: Some("500".into()), since: None, until: None, timestamps: true, stdout: true, stderr: true }
     }
 }
 
@@ -116,11 +109,7 @@ fn make_line(kind: &'static str, raw: String, timestamps: bool) -> LogLine {
     if timestamps {
         if let Some((ts, rest)) = raw.split_once(' ') {
             if ts.len() >= 20 && ts.as_bytes().get(4) == Some(&b'-') {
-                return LogLine {
-                    ts: Some(ts.to_string()),
-                    s: kind,
-                    t: rest.to_string(),
-                };
+                return LogLine { ts: Some(ts.to_string()), s: kind, t: rest.to_string() };
             }
         }
     }
@@ -217,7 +206,11 @@ mod tests {
         let mut lines = Vec::new();
         s.push(LogOutput::StdOut { message: Bytes::from("2024-01-01T00:00:00.000000000Z hel") }, true, &mut lines);
         assert!(lines.is_empty());
-        s.push(LogOutput::StdOut { message: Bytes::from("lo\r\n2024-01-01T00:00:01.000000000Z world\n") }, true, &mut lines);
+        s.push(
+            LogOutput::StdOut { message: Bytes::from("lo\r\n2024-01-01T00:00:01.000000000Z world\n") },
+            true,
+            &mut lines,
+        );
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0].t, "hello");
         assert_eq!(lines[0].ts.as_deref(), Some("2024-01-01T00:00:00.000000000Z"));

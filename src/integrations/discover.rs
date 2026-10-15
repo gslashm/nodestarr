@@ -30,9 +30,14 @@ pub async fn read_config(app: &App, entry: &Entry, container_path: &str) -> Opti
             }
         }
     }
-    let out = crate::docker::exec::capture(&app.docker.api, &entry.summary.id, vec!["cat".into(), container_path.into()], None)
-        .await
-        .ok()?;
+    let out = crate::docker::exec::capture(
+        &app.docker.api,
+        &entry.summary.id,
+        vec!["cat".into(), container_path.into()],
+        None,
+    )
+    .await
+    .ok()?;
     (out.exit_code == Some(0) && !out.stdout.is_empty()).then_some(out.stdout)
 }
 
@@ -115,7 +120,9 @@ pub async fn discover(app: &App, entry: &Entry) -> Creds {
             if let Some(xml) = read_config(app, entry, "/config/config.xml").await {
                 api_key = xml_element(&xml, "ApiKey");
                 url_base = normalize_base(&xml_element(&xml, "UrlBase").unwrap_or_default());
-                if xml_element(&xml, "EnableSsl").is_some_and(|v| v.eq_ignore_ascii_case("true")) && entry.summary.network_mode == "host" {
+                if xml_element(&xml, "EnableSsl").is_some_and(|v| v.eq_ignore_ascii_case("true"))
+                    && entry.summary.network_mode == "host"
+                {
                     https = true;
                     port_override = xml_element(&xml, "SslPort").and_then(|p| p.parse().ok());
                 }
@@ -153,10 +160,9 @@ pub async fn discover(app: &App, entry: &Entry) -> Creds {
             }
         }
         "plex" => {
-            for path in [
-                "/config/Library/Application Support/Plex Media Server/Preferences.xml",
-                "/config/Preferences.xml",
-            ] {
+            for path in
+                ["/config/Library/Application Support/Plex Media Server/Preferences.xml", "/config/Preferences.xml"]
+            {
                 if let Some(xml) = read_config(app, entry, path).await {
                     api_key = xml_attribute(&xml, "PlexOnlineToken");
                     break;
@@ -189,13 +195,7 @@ pub async fn discover(app: &App, entry: &Entry) -> Creds {
     if api_key.is_some() {
         state = CredState::Discovered;
     }
-    let creds = Creds {
-        base_url: String::new(),
-        api_key,
-        username: None,
-        password: None,
-        state,
-    };
+    let creds = Creds { base_url: String::new(), api_key, username: None, password: None, state };
     finish(app, entry, port_override.unwrap_or(port), https, url_base, creds)
 }
 
@@ -220,7 +220,8 @@ mod tests {
 
     #[test]
     fn parses_plex_token() {
-        let xml = r#"<?xml version="1.0"?><Preferences MachineIdentifier="x" PlexOnlineToken="tok-1" FriendlyName="srv"/>"#;
+        let xml =
+            r#"<?xml version="1.0"?><Preferences MachineIdentifier="x" PlexOnlineToken="tok-1" FriendlyName="srv"/>"#;
         assert_eq!(xml_attribute(xml, "PlexOnlineToken").as_deref(), Some("tok-1"));
     }
 

@@ -25,10 +25,7 @@ pub fn self_net(app: &App) -> SelfNet {
     if me.summary.network_mode == "host" {
         return SelfNet::Host;
     }
-    SelfNet::Bridge {
-        networks: me.summary.networks.clone(),
-        gateway: default_gateway(),
-    }
+    SelfNet::Bridge { networks: me.summary.networks.clone(), gateway: default_gateway() }
 }
 
 /// Default IPv4 gateway from /proc/net/route.
@@ -48,11 +45,8 @@ pub fn default_gateway() -> Option<Ipv4Addr> {
 pub fn base_url(app: &App, entry: &Entry, private_port: u16, https: bool) -> Option<String> {
     let s = &entry.summary;
     let scheme = if https { "https" } else { "http" };
-    let published = s
-        .ports
-        .iter()
-        .find(|p| p.private_port == private_port && p.protocol == "tcp")
-        .and_then(|p| p.public_port);
+    let published =
+        s.ports.iter().find(|p| p.private_port == private_port && p.protocol == "tcp").and_then(|p| p.public_port);
     match self_net(app) {
         SelfNet::Host => {
             if s.network_mode == "host" {

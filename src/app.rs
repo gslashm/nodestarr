@@ -21,7 +21,7 @@ use crate::notify::Notifier;
 use crate::prefs::PrefsStore;
 use crate::proxmox::ProxmoxService;
 use crate::registry::RegistryClient;
-use crate::settings::{Severity, SettingsStore};
+use crate::settings::{SettingsStore, Severity};
 use crate::tasks::TaskManager;
 use crate::updates::UpdateService;
 
@@ -101,14 +101,12 @@ pub async fn build(boot: BootConfig) -> anyhow::Result<App> {
     let tasks = TaskManager::new(db.clone(), bus.clone());
     let prefs = PrefsStore::load(db.clone()).await?;
 
-    let api = crate::docker::connect(&boot.docker_host)
-        .await
-        .or_else(|err| {
-            // Start anyway: the inventory loop keeps retrying, and the UI shows
-            // a clear "Docker unreachable" state instead of a crash loop.
-            tracing::error!(%err, "Docker is not reachable yet");
-            crate::docker::connect_lazy(&boot.docker_host)
-        })?;
+    let api = crate::docker::connect(&boot.docker_host).await.or_else(|err| {
+        // Start anyway: the inventory loop keeps retrying, and the UI shows
+        // a clear "Docker unreachable" state instead of a crash loop.
+        tracing::error!(%err, "Docker is not reachable yet");
+        crate::docker::connect_lazy(&boot.docker_host)
+    })?;
     let docker = DockerService::new(api, bus.clone(), settings.clone());
     let compose = ComposeService::new(settings.clone(), docker.clone(), boot.data_dir.clone());
     let registry = RegistryClient::new(http.clone(), settings.clone());
@@ -188,20 +186,18 @@ pub async fn serve(boot: BootConfig) -> anyhow::Result<()> {
 
     let listen = app.boot.listen;
     let router = crate::http::router(app.clone());
-    let listener = tokio::net::TcpListener::bind(listen)
-        .await
-        .with_context(|| format!("binding {listen}"))?;
+    let listener = tokio::net::TcpListener::bind(listen).await.with_context(|| format!("binding {listen}"))?;
     tracing::info!(%listen, "web UI ready");
-    app.note(NewActivity::new("system.started", Severity::Info, format!("Nodestarr {} started", crate::VERSION)).actor(&Actor::system()))
-        .await;
-
-    axum::serve(
-        listener,
-        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    app.note(
+        NewActivity::new("system.started", Severity::Info, format!("Nodestarr {} started", crate::VERSION))
+            .actor(&Actor::system()),
     )
-    .with_graceful_shutdown(shutdown_signal())
-    .await
-    .context("HTTP server failed")?;
+    .await;
+
+    axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .context("HTTP server failed")?;
     tracing::info!("shutting down");
     app.mqtt.shutdown().await;
     Ok(())

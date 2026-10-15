@@ -106,9 +106,5 @@ pub fn container_view(app: &App, ctx: &ViewContext, summary: Arc<ContainerSummar
 
 /// Glob match for hidden-container patterns ("*-old", "nodestarr-updater-*").
 pub fn name_matches(patterns: &[String], name: &str) -> bool {
-    patterns.iter().any(|p| {
-        globset::Glob::new(p)
-            .map(|g| g.compile_matcher().is_match(name))
-            .unwrap_or(false)
-    })
+    patterns.iter().any(|p| globset::Glob::new(p).map(|g| g.compile_matcher().is_match(name)).unwrap_or(false))
 }

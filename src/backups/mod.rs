@@ -49,26 +49,10 @@ impl BackupKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ManifestItem {
-    Mount {
-        destination: String,
-        source: String,
-        prefix: String,
-        files: u64,
-        bytes: u64,
-    },
-    Database {
-        engine: String,
-        path: String,
-        bytes: u64,
-    },
-    Native {
-        path: String,
-        bytes: u64,
-    },
-    ComposeFile {
-        original: String,
-        path: String,
-    },
+    Mount { destination: String, source: String, prefix: String, files: u64, bytes: u64 },
+    Database { engine: String, path: String, bytes: u64 },
+    Native { path: String, bytes: u64 },
+    ComposeFile { original: String, path: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -285,7 +269,8 @@ pub fn sidecar_path(archive: &Path) -> PathBuf {
 pub fn start_backup(app: &App, key: &str, actor: &Actor) -> Result<String> {
     let entry = app.docker.get(key).ok_or_else(|| AppError::not_found("container"))?;
     let name = display_name(app, &entry);
-    let spec = TaskSpec::new("backup", format!("Back up {name}"), actor).target(entry.summary.identity.clone(), name.clone());
+    let spec =
+        TaskSpec::new("backup", format!("Back up {name}"), actor).target(entry.summary.identity.clone(), name.clone());
     let app2 = app.clone();
     let actor = actor.clone();
     Ok(app.tasks.spawn(spec, move |ctx| async move {
@@ -301,14 +286,23 @@ async fn report(app: &App, name: &str, identity: &str, rec: &Result<BackupRecord
     match rec {
         Ok(r) => {
             app.note(
-                NewActivity::new("backup.completed", Severity::Success, format!("{name} backed up ({})", crate::util::human_bytes(r.size as u64)))
-                    .target(identity, name)
-                    .actor(actor),
+                NewActivity::new(
+                    "backup.completed",
+                    Severity::Success,
+                    format!("{name} backed up ({})", crate::util::human_bytes(r.size as u64)),
+                )
+                .target(identity, name)
+                .actor(actor),
             )
             .await;
             app.notifier.send(
-                Notification::new("backup.completed", Severity::Success, format!("{name} backed up"), crate::util::human_bytes(r.size as u64))
-                    .target(identity, name),
+                Notification::new(
+                    "backup.completed",
+                    Severity::Success,
+                    format!("{name} backed up"),
+                    crate::util::human_bytes(r.size as u64),
+                )
+                .target(identity, name),
             );
         }
         Err(err) => {
@@ -319,7 +313,8 @@ async fn report(app: &App, name: &str, identity: &str, rec: &Result<BackupRecord
             )
             .await;
             app.notifier.send(
-                Notification::new("backup.failed", Severity::Error, format!("{name} backup failed"), err.to_string()).target(identity, name),
+                Notification::new("backup.failed", Severity::Error, format!("{name} backup failed"), err.to_string())
+                    .target(identity, name),
             );
         }
     }
@@ -374,15 +369,16 @@ struct Quiesce {
 }
 
 impl Quiesce {
-    async fn begin(api: &bollard::Docker, entry: &Entry, method: Method, ctx: &TaskCtx, timeout: Option<u32>) -> Result<Self> {
+    async fn begin(
+        api: &bollard::Docker,
+        entry: &Entry,
+        method: Method,
+        ctx: &TaskCtx,
+        timeout: Option<u32>,
+    ) -> Result<Self> {
         let s = &entry.summary;
         let was_running = s.state == "running";
-        let q = Self {
-            api: api.clone(),
-            id: s.id.clone(),
-            method,
-            was_running,
-        };
+        let q = Self { api: api.clone(), id: s.id.clone(), method, was_running };
         if was_running {
             match method {
                 Method::Pause => {
@@ -468,11 +464,7 @@ pub async fn run_container_backup(app: &App, ctx: &TaskCtx, entry: &Entry, kind:
             let dump = work.join(fname);
             let bytes = crate::docker::exec::to_file(&app.docker.api, &s.id, db.command.clone(), &dump).await?;
             ctx.log(format!("Database dump: {}", crate::util::human_bytes(bytes)));
-            items.push(ManifestItem::Database {
-                engine: engine.into(),
-                path: format!("db/{fname}"),
-                bytes,
-            });
+            items.push(ManifestItem::Database { engine: engine.into(), path: format!("db/{fname}"), bytes });
             extra_files.push((dump, format!("db/{fname}")));
         }
 
@@ -481,12 +473,12 @@ pub async fn run_container_backup(app: &App, ctx: &TaskCtx, entry: &Entry, kind:
             ctx.log("Asking the app to create its own backup");
             match crate::integrations::native_backup(app, entry, &work).await {
                 Ok(path) => {
-                    let fname = path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_else(|| "backup.zip".into());
+                    let fname = path
+                        .file_name()
+                        .map(|f| f.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "backup.zip".into());
                     let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-                    items.push(ManifestItem::Native {
-                        path: format!("native/{fname}"),
-                        bytes,
-                    });
+                    items.push(ManifestItem::Native { path: format!("native/{fname}"), bytes });
                     extra_files.push((path, format!("native/{fname}")));
                 }
                 Err(err) => {
@@ -525,43 +517,50 @@ pub async fn run_container_backup(app: &App, ctx: &TaskCtx, entry: &Entry, kind:
         let partial2 = partial.clone();
         let cancel = ctx.cancel_token();
         let ctx2 = ctx.clone();
-        let archive_result = tokio::task::spawn_blocking(move || -> std::io::Result<(ArchiveWriter, Vec<ManifestItem>, Vec<String>)> {
-            let globs = build_globs(&excludes);
-            let mut w = ArchiveWriter::create(&partial2, compression, level)?;
-            let mut out_items = Vec::new();
-            let mut warns = Vec::new();
-            for (idx, m) in mounts_owned.iter().enumerate() {
-                let prefix = format!("files/{idx}/");
-                let stats = if m.access == Access::Direct {
-                    ctx2.log(format!("Archiving {} ({})", m.destination, m.source));
-                    let mut warn = |msg: String| {
-                        if warns.len() < 50 {
-                            warns.push(msg);
-                        }
+        let archive_result =
+            tokio::task::spawn_blocking(move || -> std::io::Result<(ArchiveWriter, Vec<ManifestItem>, Vec<String>)> {
+                let globs = build_globs(&excludes);
+                let mut w = ArchiveWriter::create(&partial2, compression, level)?;
+                let mut out_items = Vec::new();
+                let mut warns = Vec::new();
+                for (idx, m) in mounts_owned.iter().enumerate() {
+                    let prefix = format!("files/{idx}/");
+                    let stats = if m.access == Access::Direct {
+                        ctx2.log(format!("Archiving {} ({})", m.destination, m.source));
+                        let mut warn = |msg: String| {
+                            if warns.len() < 50 {
+                                warns.push(msg);
+                            }
+                        };
+                        w.add_dir(Path::new(&m.source), &prefix, &globs, &cancel, &mut warn)?
+                    } else {
+                        let Some((_, tar_path)) = docker_copies.iter().find(|(i, _)| *i == idx) else { continue };
+                        let f = std::fs::File::open(tar_path)?;
+                        w.add_tar_stream(std::io::BufReader::new(f), &prefix, &globs)?
                     };
-                    w.add_dir(Path::new(&m.source), &prefix, &globs, &cancel, &mut warn)?
-                } else {
-                    let Some((_, tar_path)) = docker_copies.iter().find(|(i, _)| *i == idx) else { continue };
-                    let f = std::fs::File::open(tar_path)?;
-                    w.add_tar_stream(std::io::BufReader::new(f), &prefix, &globs)?
-                };
-                ctx2.log(format!("{}: {} files, {}", m.destination, stats.files, crate::util::human_bytes(stats.bytes)));
-                out_items.push(ManifestItem::Mount {
-                    destination: m.destination.clone(),
-                    source: m.source.clone(),
-                    prefix,
-                    files: stats.files,
-                    bytes: stats.bytes,
-                });
-            }
-            Ok((w, out_items, warns))
-        })
-        .await?;
+                    ctx2.log(format!(
+                        "{}: {} files, {}",
+                        m.destination,
+                        stats.files,
+                        crate::util::human_bytes(stats.bytes)
+                    ));
+                    out_items.push(ManifestItem::Mount {
+                        destination: m.destination.clone(),
+                        source: m.source.clone(),
+                        prefix,
+                        files: stats.files,
+                        bytes: stats.bytes,
+                    });
+                }
+                Ok((w, out_items, warns))
+            })
+            .await?;
 
         if let Some(q) = quiesce {
             q.end(ctx).await;
         }
-        let (mut writer, mount_items, walk_warnings) = archive_result.map_err(|e| AppError::conflict(format!("archiving failed: {e}")))?;
+        let (mut writer, mount_items, walk_warnings) =
+            archive_result.map_err(|e| AppError::conflict(format!("archiving failed: {e}")))?;
         items.extend(mount_items);
         warnings.extend(walk_warnings);
         ctx.progress(0.8);
@@ -583,10 +582,7 @@ pub async fn run_container_backup(app: &App, ctx: &TaskCtx, entry: &Entry, kind:
                 let mut all = items;
                 for f in &compose_files {
                     let fname = Path::new(f).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                    all.push(ManifestItem::ComposeFile {
-                        original: f.clone(),
-                        path: format!("compose/{fname}"),
-                    });
+                    all.push(ManifestItem::ComposeFile { original: f.clone(), path: format!("compose/{fname}") });
                 }
                 all
             },
@@ -673,7 +669,8 @@ pub async fn apply_retention(app: &App, identity: &str) -> Result<usize> {
     let pre_update_days = settings.backups.pre_update_retention_days as i64;
     let now = crate::util::now();
     let list = app.backups.list(&root, Some(identity.to_string()), 2000).await?;
-    let (pre, regular): (Vec<_>, Vec<_>) = list.into_iter().filter(|b| !b.pinned).partition(|b| b.kind == "pre-update" || b.kind == "pre-restore");
+    let (pre, regular): (Vec<_>, Vec<_>) =
+        list.into_iter().filter(|b| !b.pinned).partition(|b| b.kind == "pre-update" || b.kind == "pre-restore");
     let mut doomed = Vec::new();
     for (i, b) in regular.iter().enumerate() {
         let too_many = keep > 0 && i >= keep;
@@ -717,12 +714,21 @@ pub async fn run_hook(app: &App, ctx: &TaskCtx, success: bool) {
             .kill_on_drop(true);
         match tokio::time::timeout(timeout, cmd.output()).await {
             Ok(Ok(out)) => {
-                for line in String::from_utf8_lossy(&out.stdout).lines().chain(String::from_utf8_lossy(&out.stderr).lines()).take(200) {
+                for line in String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .chain(String::from_utf8_lossy(&out.stderr).lines())
+                    .take(200)
+                {
                     ctx.log(format!("hook: {line}"));
                 }
                 if !out.status.success() {
                     ctx.log(format!("Hook exited with {}", out.status));
-                    app.notifier.send(Notification::new("backup.failed", Severity::Error, "Post-backup hook failed", format!("{} exited with {}", hook.command, out.status)));
+                    app.notifier.send(Notification::new(
+                        "backup.failed",
+                        Severity::Error,
+                        "Post-backup hook failed",
+                        format!("{} exited with {}", hook.command, out.status),
+                    ));
                 }
             }
             Ok(Err(err)) => ctx.log(format!("Hook could not start: {err}")),
@@ -732,13 +738,23 @@ pub async fn run_hook(app: &App, ctx: &TaskCtx, success: bool) {
     if !hook.exec_container.trim().is_empty() && !hook.exec_command.trim().is_empty() {
         ctx.log(format!("Running '{}' in {}", hook.exec_command, hook.exec_container));
         let cmd = vec!["sh".to_string(), "-c".to_string(), hook.exec_command.clone()];
-        match tokio::time::timeout(timeout, crate::docker::exec::capture(&app.docker.api, &hook.exec_container, cmd, None)).await {
+        match tokio::time::timeout(
+            timeout,
+            crate::docker::exec::capture(&app.docker.api, &hook.exec_container, cmd, None),
+        )
+        .await
+        {
             Ok(Ok(out)) => {
                 for line in out.stdout.lines().chain(out.stderr.lines()).take(200) {
                     ctx.log(format!("hook: {line}"));
                 }
                 if out.exit_code != Some(0) {
-                    app.notifier.send(Notification::new("backup.failed", Severity::Error, "Post-backup hook failed", format!("exit code {:?}", out.exit_code)));
+                    app.notifier.send(Notification::new(
+                        "backup.failed",
+                        Severity::Error,
+                        "Post-backup hook failed",
+                        format!("exit code {:?}", out.exit_code),
+                    ));
                 }
             }
             Ok(Err(err)) => ctx.log(format!("Hook failed: {err}")),
@@ -768,7 +784,8 @@ pub async fn run_scheduled(app: &App) {
             continue;
         }
         let name = display_name(app, &entry);
-        let spec = TaskSpec::new("backup", format!("Scheduled backup of {name}"), &actor).target(entry.summary.identity.clone(), name.clone());
+        let spec = TaskSpec::new("backup", format!("Scheduled backup of {name}"), &actor)
+            .target(entry.summary.identity.clone(), name.clone());
         let app2 = app.clone();
         let e2 = entry.clone();
         let res = app
@@ -790,7 +807,8 @@ pub async fn run_scheduled(app: &App) {
     let spec = TaskSpec::new("backup", "Post-backup hook", &actor);
     let app2 = app.clone();
     let all_ok = failed.is_empty();
-    let has_hook = !settings.backups.hook.command.trim().is_empty() || !settings.backups.hook.exec_command.trim().is_empty();
+    let has_hook =
+        !settings.backups.hook.command.trim().is_empty() || !settings.backups.hook.exec_command.trim().is_empty();
     if has_hook {
         let _ = app
             .tasks
@@ -806,11 +824,26 @@ pub async fn run_scheduled(app: &App) {
     } else {
         format!("{ok} backed up, {} failed:\n{}", failed.len(), failed.join("\n"))
     };
-    app.note(NewActivity::new(if failed.is_empty() { "backup.scheduled" } else { "backup.failed" }, severity, format!("Scheduled backup: {message}")).actor(&actor))
-        .await;
+    app.note(
+        NewActivity::new(
+            if failed.is_empty() { "backup.scheduled" } else { "backup.failed" },
+            severity,
+            format!("Scheduled backup: {message}"),
+        )
+        .actor(&actor),
+    )
+    .await;
     if !failed.is_empty() {
-        app.notifier.send(Notification::new("backup.failed", Severity::Error, "Scheduled backup had failures", message).link(app, "/backups"));
+        app.notifier.send(
+            Notification::new("backup.failed", Severity::Error, "Scheduled backup had failures", message)
+                .link(app, "/backups"),
+        );
     } else {
-        app.notifier.send(Notification::new("backup.completed", Severity::Success, "Scheduled backup finished", message));
+        app.notifier.send(Notification::new(
+            "backup.completed",
+            Severity::Success,
+            "Scheduled backup finished",
+            message,
+        ));
     }
 }

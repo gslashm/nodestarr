@@ -53,13 +53,18 @@ impl<'a> Walker<'a> {
 fn locate(src: &str, span: &Span, value: &str, style: ScalarStyle) -> Option<(usize, usize)> {
     let (s, e) = (span.start.index(), span.end.index());
     let fits = |s: usize, e: usize| {
-        e <= src.len() && s <= e && src.is_char_boundary(s) && src.is_char_boundary(e) && slice_matches(&src[s..e], value, style)
+        e <= src.len()
+            && s <= e
+            && src.is_char_boundary(s)
+            && src.is_char_boundary(e)
+            && slice_matches(&src[s..e], value, style)
     };
     if fits(s, e) {
         return Some((s, e));
     }
     // Fall back to treating the indices as char offsets.
-    let to_byte = |ci: usize| src.char_indices().nth(ci).map(|(b, _)| b).or((ci == src.chars().count()).then_some(src.len()));
+    let to_byte =
+        |ci: usize| src.char_indices().nth(ci).map(|(b, _)| b).or((ci == src.chars().count()).then_some(src.len()));
     let (bs, be) = (to_byte(s)?, to_byte(e)?);
     if fits(bs, be) { Some((bs, be)) } else { None }
 }
@@ -75,9 +80,7 @@ fn slice_matches(slice: &str, value: &str, style: ScalarStyle) -> bool {
 
 /// Reads a scalar value at the top level of the document (e.g. `name`).
 pub fn top_level_scalar(src: &str, key: &str) -> Option<String> {
-    let mut w = Walker {
-        parser: Parser::new_from_str(src),
-    };
+    let mut w = Walker { parser: Parser::new_from_str(src) };
     loop {
         match w.next().ok()?.0 {
             Event::StreamStart | Event::DocumentStart(_) => continue,
@@ -110,9 +113,7 @@ pub fn top_level_scalar(src: &str, key: &str) -> Option<String> {
 /// Returns `Ok(None)` when the service or its `image` key is absent (for
 /// example it is built locally, or inherited through a YAML merge key).
 pub fn find_service_image(src: &str, service: &str) -> Result<Option<ScalarPos>, String> {
-    let mut w = Walker {
-        parser: Parser::new_from_str(src),
-    };
+    let mut w = Walker { parser: Parser::new_from_str(src) };
     // StreamStart, DocumentStart, then the root node.
     loop {
         match w.next()?.0 {
@@ -173,9 +174,9 @@ fn find_in_services(w: &mut Walker<'_>, src: &str, service: &str) -> Result<Opti
                                     };
                                     Ok(Some(ScalarPos { start, end, value, style }))
                                 }
-                                Event::Alias(_) => Err(
-                                    "this service's image comes from a YAML alias; edit the anchor instead".into(),
-                                ),
+                                Event::Alias(_) => {
+                                    Err("this service's image comes from a YAML alias; edit the anchor instead".into())
+                                }
                                 _ => Err("image is not a plain value".into()),
                             };
                         }
@@ -255,25 +256,14 @@ pub fn variables(s: &str) -> Vec<VarRef> {
                     } else {
                         (inner, None)
                     };
-                    out.push(VarRef {
-                        name: name.to_string(),
-                        default,
-                        start: i,
-                        end: i + 3 + close,
-                    });
+                    out.push(VarRef { name: name.to_string(), default, start: i, end: i + 3 + close });
                     i += 3 + close;
                     continue;
                 }
             } else if bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'_' {
-                let len = s[i + 1..]
-                    .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                    .unwrap_or(s.len() - i - 1);
-                out.push(VarRef {
-                    name: s[i + 1..i + 1 + len].to_string(),
-                    default: None,
-                    start: i,
-                    end: i + 1 + len,
-                });
+                let len =
+                    s[i + 1..].find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(s.len() - i - 1);
+                out.push(VarRef { name: s[i + 1..i + 1 + len].to_string(), default: None, start: i, end: i + 1 + len });
                 i += 1 + len;
                 continue;
             }
@@ -317,10 +307,7 @@ pub fn plan_tag_edit(raw: &str, new_tag: &str) -> Result<TagEdit, String> {
             return Ok(TagEdit::EnvImage { name: v.name.clone() });
         }
         if v.end == raw.len() && raw[..v.start].ends_with(':') {
-            return Ok(TagEdit::EnvVar {
-                name: v.name.clone(),
-                value: new_tag.to_string(),
-            });
+            return Ok(TagEdit::EnvVar { name: v.name.clone(), value: new_tag.to_string() });
         }
     }
     Err(format!(
@@ -388,7 +375,10 @@ services:
 
     #[test]
     fn tag_plans() {
-        assert_eq!(plan_tag_edit("lscr.io/linuxserver/sonarr:latest", "develop").unwrap(), TagEdit::Literal("lscr.io/linuxserver/sonarr:develop".into()));
+        assert_eq!(
+            plan_tag_edit("lscr.io/linuxserver/sonarr:latest", "develop").unwrap(),
+            TagEdit::Literal("lscr.io/linuxserver/sonarr:develop".into())
+        );
         assert_eq!(plan_tag_edit("nginx", "1.27").unwrap(), TagEdit::Literal("nginx:1.27".into()));
         assert_eq!(plan_tag_edit("localhost:5000/app", "2").unwrap(), TagEdit::Literal("localhost:5000/app:2".into()));
         assert_eq!(

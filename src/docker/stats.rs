@@ -44,17 +44,8 @@ pub struct Rates {
 }
 
 pub async fn sample(api: &Docker, id: &str) -> Option<RawSample> {
-    let mut stream = api.stats(
-        id,
-        Some(StatsOptions {
-            stream: false,
-            one_shot: true,
-        }),
-    );
-    let stats = tokio::time::timeout(std::time::Duration::from_secs(10), stream.next())
-        .await
-        .ok()??
-        .ok()?;
+    let mut stream = api.stats(id, Some(StatsOptions { stream: false, one_shot: true }));
+    let stats = tokio::time::timeout(std::time::Duration::from_secs(10), stream.next()).await.ok()??.ok()?;
     Some(from_response(&stats))
 }
 
@@ -106,11 +97,7 @@ fn memory_used(m: &bollard::models::ContainerMemoryStats) -> u64 {
     let usage = m.usage.unwrap_or(0);
     let stats: HashMap<String, u64> = m.stats.clone().unwrap_or_default();
     // cgroup v2 exposes inactive_file; v1 exposes total_inactive_file.
-    let cache = stats
-        .get("inactive_file")
-        .or_else(|| stats.get("total_inactive_file"))
-        .copied()
-        .unwrap_or(0);
+    let cache = stats.get("inactive_file").or_else(|| stats.get("total_inactive_file")).copied().unwrap_or(0);
     usage.saturating_sub(cache)
 }
 
@@ -119,11 +106,8 @@ pub fn rates(prev: &RawSample, cur: &RawSample) -> Rates {
     let secs = ((cur.at_ms - prev.at_ms).max(1) as f64) / 1000.0;
     let cpu_delta = cur.cpu_total.saturating_sub(prev.cpu_total) as f64;
     let sys_delta = cur.system_total.saturating_sub(prev.system_total) as f64;
-    let cpu = if sys_delta > 0.0 && cpu_delta > 0.0 {
-        (cpu_delta / sys_delta) * cur.online_cpus as f64 * 100.0
-    } else {
-        0.0
-    };
+    let cpu =
+        if sys_delta > 0.0 && cpu_delta > 0.0 { (cpu_delta / sys_delta) * cur.online_cpus as f64 * 100.0 } else { 0.0 };
     let per_sec = |a: u64, b: u64| b.saturating_sub(a) as f64 / secs;
     Rates {
         cpu: (cpu * 10.0).round() / 10.0,

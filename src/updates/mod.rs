@@ -164,10 +164,7 @@ impl UpdateService {
         if !changed {
             return;
         }
-        self.inner.bus.publish(Event::Update {
-            identity: identity.to_string(),
-            info: arc.clone(),
-        });
+        self.inner.bus.publish(Event::Update { identity: identity.to_string(), info: arc.clone() });
         let json = match serde_json::to_string(&*arc) {
             Ok(j) => j,
             Err(_) => return,
@@ -192,14 +189,7 @@ impl UpdateService {
 
     /// Drops state for identities that no longer exist.
     pub async fn forget_missing(&self, live: &std::collections::HashSet<String>) {
-        let gone: Vec<String> = self
-            .inner
-            .state
-            .read()
-            .keys()
-            .filter(|k| !live.contains(*k))
-            .cloned()
-            .collect();
+        let gone: Vec<String> = self.inner.state.read().keys().filter(|k| !live.contains(*k)).cloned().collect();
         if gone.is_empty() {
             return;
         }
@@ -269,9 +259,7 @@ impl UpdateService {
     pub(crate) fn set_checking(&self, v: bool) {
         self.inner.checking.store(v, std::sync::atomic::Ordering::Relaxed);
         if !v {
-            self.inner
-                .last_check
-                .store(crate::util::now(), std::sync::atomic::Ordering::Relaxed);
+            self.inner.last_check.store(crate::util::now(), std::sync::atomic::Ordering::Relaxed);
         }
         self.inner.bus.publish(crate::events::Event::UpdateCheck { running: v, last_check: self.last_check() });
     }

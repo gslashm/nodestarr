@@ -41,10 +41,8 @@ pub fn routes() -> Router<App> {
 fn cookie(app: &App, headers: &HeaderMap, value: &str, max_age: i64) -> HeaderValue {
     let base = app.settings.get().general.url_base.clone();
     let path = if base.is_empty() { "/".to_string() } else { base };
-    let secure = headers
-        .get("x-forwarded-proto")
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|p| p.eq_ignore_ascii_case("https"));
+    let secure =
+        headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).is_some_and(|p| p.eq_ignore_ascii_case("https"));
     let s = format!(
         "{SESSION_COOKIE}={value}; Path={path}; HttpOnly; SameSite=Lax; Max-Age={max_age}{}",
         if secure { "; Secure" } else { "" }
@@ -90,7 +88,12 @@ struct SetupBody {
     code: String,
 }
 
-async fn setup(State(app): State<App>, ClientIp(ip): ClientIp, headers: HeaderMap, Json(b): Json<SetupBody>) -> Result<Response> {
+async fn setup(
+    State(app): State<App>,
+    ClientIp(ip): ClientIp,
+    headers: HeaderMap,
+    Json(b): Json<SetupBody>,
+) -> Result<Response> {
     crate::auth::complete_setup(&app, &b.username, &b.password, &b.code).await?;
     let ua = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).map(str::to_string);
     let LoginResult::Session { token, max_age, .. } = app.auth.login(&b.username, &b.password, true, ip, ua).await?;
@@ -107,13 +110,21 @@ struct LoginBody {
     remember: bool,
 }
 
-async fn login(State(app): State<App>, ClientIp(ip): ClientIp, headers: HeaderMap, Json(b): Json<LoginBody>) -> Result<Response> {
+async fn login(
+    State(app): State<App>,
+    ClientIp(ip): ClientIp,
+    headers: HeaderMap,
+    Json(b): Json<LoginBody>,
+) -> Result<Response> {
     let ua = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).map(|s| crate::util::truncate(s, 200));
     match app.auth.login(&b.username, &b.password, b.remember, ip, ua).await {
         Ok(LoginResult::Session { token, max_age, mfa_required }) => {
             if !mfa_required {
-                app.note(NewActivity::new("security.login", Severity::Info, format!("{} signed in from {ip}", b.username)).actor(&crate::activity::Actor::user(&b.username)))
-                    .await;
+                app.note(
+                    NewActivity::new("security.login", Severity::Info, format!("{} signed in from {ip}", b.username))
+                        .actor(&crate::activity::Actor::user(&b.username)),
+                )
+                .await;
             }
             let mut resp = Json(json!({ "mfa_required": mfa_required })).into_response();
             resp.headers_mut().insert(header::SET_COOKIE, cookie(&app, &headers, &token, max_age));
@@ -126,7 +137,12 @@ async fn login(State(app): State<App>, ClientIp(ip): ClientIp, headers: HeaderMa
                 "Repeated failed logins",
                 format!("Logins from {ip} are temporarily blocked after too many failed attempts."),
             ));
-            app.note(NewActivity::new("security.login_failed", Severity::Warning, format!("Too many failed logins from {ip}"))).await;
+            app.note(NewActivity::new(
+                "security.login_failed",
+                Severity::Warning,
+                format!("Too many failed logins from {ip}"),
+            ))
+            .await;
             Err(AppError::RateLimited)
         }
         Err(AppError::Unauthorized) => Err(AppError::bad_request("wrong username or password")),
@@ -139,7 +155,12 @@ struct CodeBody {
     code: String,
 }
 
-async fn mfa(State(app): State<App>, ClientIp(ip): ClientIp, headers: HeaderMap, Json(b): Json<CodeBody>) -> Result<Json<Value>> {
+async fn mfa(
+    State(app): State<App>,
+    ClientIp(ip): ClientIp,
+    headers: HeaderMap,
+    Json(b): Json<CodeBody>,
+) -> Result<Json<Value>> {
     let token = session_token(&headers).ok_or(AppError::Unauthorized)?;
     app.auth.complete_mfa(&token, &b.code, ip).await?;
     Ok(Json(json!({ "ok": true })))
@@ -178,7 +199,11 @@ async fn change_password(State(app): State<App>, Auth(p): Auth, Json(b): Json<Pa
         return Err(AppError::bad_request("the current password is wrong"));
     }
     app.auth.set_password(id, &b.new, p.session_hash.clone()).await?;
-    app.note(NewActivity::new("security.password_changed", Severity::Info, format!("{} changed their password", p.username)).actor(&p.actor())).await;
+    app.note(
+        NewActivity::new("security.password_changed", Severity::Info, format!("{} changed their password", p.username))
+            .actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -191,7 +216,11 @@ async fn totp_setup(State(app): State<App>, Auth(p): Auth) -> Result<Json<Value>
 async fn totp_enable(State(app): State<App>, Auth(p): Auth, Json(b): Json<CodeBody>) -> Result<Json<Value>> {
     let id = p.user_id.ok_or_else(|| AppError::bad_request("sign in with a user account first"))?;
     let codes = app.auth.totp_enable(id, &b.code).await?;
-    app.note(NewActivity::new("security.2fa", Severity::Info, format!("{} turned on two-factor authentication", p.username)).actor(&p.actor())).await;
+    app.note(
+        NewActivity::new("security.2fa", Severity::Info, format!("{} turned on two-factor authentication", p.username))
+            .actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "recovery_codes": codes })))
 }
 
@@ -206,7 +235,15 @@ async fn totp_disable(State(app): State<App>, Auth(p): Auth, Json(b): Json<Passw
         return Err(AppError::bad_request("wrong password"));
     }
     app.auth.totp_disable(id).await?;
-    app.note(NewActivity::new("security.2fa", Severity::Warning, format!("{} turned off two-factor authentication", p.username)).actor(&p.actor())).await;
+    app.note(
+        NewActivity::new(
+            "security.2fa",
+            Severity::Warning,
+            format!("{} turned off two-factor authentication", p.username),
+        )
+        .actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -228,7 +265,11 @@ async fn revoke_other_sessions(State(app): State<App>, Auth(p): Auth) -> Result<
     let ended = app.auth.revoke_other_sessions(id, p.session_hash.clone()).await?;
     if ended > 0 {
         let what = if ended == 1 { "another session".to_string() } else { format!("{ended} other sessions") };
-        app.note(NewActivity::new("security.signed_out", Severity::Info, format!("{} signed out of {what}", p.username)).actor(&p.actor())).await;
+        app.note(
+            NewActivity::new("security.signed_out", Severity::Info, format!("{} signed out of {what}", p.username))
+                .actor(&p.actor()),
+        )
+        .await;
     }
     Ok(Json(json!({ "ended": ended })))
 }
@@ -247,7 +288,15 @@ struct NewUser {
 
 async fn create_user(State(app): State<App>, Auth(p): Auth, Json(b): Json<NewUser>) -> Result<Json<Value>> {
     let id = app.auth.create_user(&b.username, &b.password, b.role).await?;
-    app.note(NewActivity::new("security.user_created", Severity::Info, format!("User '{}' created ({})", b.username, b.role.as_str())).actor(&p.actor())).await;
+    app.note(
+        NewActivity::new(
+            "security.user_created",
+            Severity::Info,
+            format!("User '{}' created ({})", b.username, b.role.as_str()),
+        )
+        .actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "id": id })))
 }
 
@@ -274,9 +323,17 @@ struct NewPassword {
     password: String,
 }
 
-async fn set_password(State(app): State<App>, Auth(p): Auth, Path(id): Path<i64>, Json(b): Json<NewPassword>) -> Result<Json<Value>> {
+async fn set_password(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<i64>,
+    Json(b): Json<NewPassword>,
+) -> Result<Json<Value>> {
     app.auth.set_password(id, &b.password, None).await?;
-    app.note(NewActivity::new("security.password_changed", Severity::Info, "A user's password was reset").actor(&p.actor())).await;
+    app.note(
+        NewActivity::new("security.password_changed", Severity::Info, "A user's password was reset").actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -298,7 +355,11 @@ fn admin() -> Role {
 
 async fn create_api_key(State(app): State<App>, Auth(p): Auth, Json(b): Json<NewKey>) -> Result<Json<Value>> {
     let (key, info) = app.auth.create_api_key(&b.name, b.role).await?;
-    app.note(NewActivity::new("security.api_key", Severity::Info, format!("API key '{}' created", info.name)).actor(&p.actor())).await;
+    app.note(
+        NewActivity::new("security.api_key", Severity::Info, format!("API key '{}' created", info.name))
+            .actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "key": key, "info": info })))
 }
 

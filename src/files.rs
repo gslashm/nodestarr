@@ -81,7 +81,13 @@ pub async fn version_content(db: &Db, id: i64) -> Result<(String, String)> {
 
 /// Writes `content` to `path` atomically, recording the old content first.
 /// Returns false when the content was unchanged.
-pub async fn write_with_history(db: &Db, path: &Path, content: &str, actor: &Actor, note: Option<String>) -> Result<bool> {
+pub async fn write_with_history(
+    db: &Db,
+    path: &Path,
+    content: &str,
+    actor: &Actor,
+    note: Option<String>,
+) -> Result<bool> {
     let previous = match tokio::fs::read(path).await {
         Ok(bytes) => Some(bytes),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
@@ -162,7 +168,8 @@ pub fn roots(entry: &Entry, data_roots: &[String]) -> Vec<BrowseRoot> {
         .filter(|m| m.kind == "bind")
         .map(|m| {
             let is_data_root = data_roots.iter().any(|r| Path::new(&m.source).starts_with(r));
-            let is_app_data = app.is_some_and(|a| a.data_paths.iter().any(|d| Path::new(&m.destination).starts_with(d)));
+            let is_app_data =
+                app.is_some_and(|a| a.data_paths.iter().any(|d| Path::new(&m.destination).starts_with(d)));
             BrowseRoot {
                 destination: m.destination.clone(),
                 source: m.source.clone(),
@@ -215,7 +222,9 @@ pub async fn list_dir(entry: &Entry, root: &str, rel: &str) -> Result<Vec<DirEnt
                 modified: Some(meta.mtime()),
             });
         }
-        out.sort_by(|a, b| (a.kind != "dir").cmp(&(b.kind != "dir")).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+        out.sort_by(|a, b| {
+            (a.kind != "dir").cmp(&(b.kind != "dir")).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         Ok(out)
     })
     .await?

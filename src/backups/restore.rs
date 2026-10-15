@@ -38,12 +38,7 @@ fn yes() -> bool {
 
 impl Default for RestoreOptions {
     fn default() -> Self {
-        Self {
-            replace: false,
-            database: true,
-            files: true,
-            safety_backup: true,
-        }
+        Self { replace: false, database: true, files: true, safety_backup: true }
     }
 }
 
@@ -58,7 +53,13 @@ pub async fn start_restore(app: &App, backup_id: &str, opts: RestoreOptions, act
     Ok(app.tasks.spawn(spec, move |ctx| async move { run_restore(&app2, &ctx, &backup_id, opts, &actor2).await }))
 }
 
-async fn run_restore(app: &App, ctx: &TaskCtx, backup_id: &str, opts: RestoreOptions, actor: &Actor) -> Result<serde_json::Value> {
+async fn run_restore(
+    app: &App,
+    ctx: &TaskCtx,
+    backup_id: &str,
+    opts: RestoreOptions,
+    actor: &Actor,
+) -> Result<serde_json::Value> {
     let root = PathBuf::from(&app.settings.get().backups.root);
     let rec = app.backups.get(&root, backup_id).await?;
     let archive_path = root.join(&rec.path);
@@ -86,12 +87,10 @@ async fn run_restore(app: &App, ctx: &TaskCtx, backup_id: &str, opts: RestoreOpt
     let s = entry.summary.clone();
     let was_running = s.is_running();
     let has_files = opts.files
-        && manifest
-            .items
-            .iter()
-            .any(|i| matches!(i, ManifestItem::Mount { .. } | ManifestItem::Native { .. }));
+        && manifest.items.iter().any(|i| matches!(i, ManifestItem::Mount { .. } | ManifestItem::Native { .. }));
     // Database containers keep running: the dump is replayed into them.
-    let is_db_only = manifest.items.iter().all(|i| matches!(i, ManifestItem::Database { .. } | ManifestItem::ComposeFile { .. }));
+    let is_db_only =
+        manifest.items.iter().all(|i| matches!(i, ManifestItem::Database { .. } | ManifestItem::ComposeFile { .. }));
     if was_running && has_files && !is_db_only {
         ctx.log(format!("Stopping {name}"));
         actions::stop(&app.docker.api, &s.id, crate::updates::apply::stop_timeout(app)).await?;
@@ -107,10 +106,9 @@ async fn run_restore(app: &App, ctx: &TaskCtx, backup_id: &str, opts: RestoreOpt
             for item in &manifest.items {
                 if let ManifestItem::Mount { destination, prefix, .. } = item {
                     match s.mounts.iter().find(|m| &m.destination == destination) {
-                        Some(m) if m.kind == "bind" && Path::new(&m.source).is_dir() => targets.push(RestoreTarget {
-                            prefix: prefix.clone(),
-                            dest: PathBuf::from(&m.source),
-                        }),
+                        Some(m) if m.kind == "bind" && Path::new(&m.source).is_dir() => {
+                            targets.push(RestoreTarget { prefix: prefix.clone(), dest: PathBuf::from(&m.source) })
+                        }
                         Some(_) => docker_targets.push((prefix.clone(), destination.clone())),
                         None => ctx.log(format!("Skipping {destination}: the container no longer mounts it")),
                     }
@@ -191,10 +189,14 @@ async fn run_restore(app: &App, ctx: &TaskCtx, backup_id: &str, opts: RestoreOpt
                         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     }
                     ctx.log(format!("Replaying the {engine} dump"));
-                    let out = crate::docker::exec::from_file(&app.docker.api, &s.id, plan.restore_command.clone(), &dump).await?;
+                    let out =
+                        crate::docker::exec::from_file(&app.docker.api, &s.id, plan.restore_command.clone(), &dump)
+                            .await?;
                     let errors = out.lines().filter(|l| l.contains("ERROR")).count();
                     if errors > 0 {
-                        ctx.log(format!("{errors} statements reported errors (often harmless 'already exists' notices)"));
+                        ctx.log(format!(
+                            "{errors} statements reported errors (often harmless 'already exists' notices)"
+                        ));
                     }
                 }
             }
@@ -213,12 +215,24 @@ async fn run_restore(app: &App, ctx: &TaskCtx, backup_id: &str, opts: RestoreOpt
     match outcome {
         Ok(stats) => {
             app.note(
-                NewActivity::new("restore.completed", Severity::Success, format!("{name} restored from the backup of {}", fmt_time(app, manifest.created_at)))
-                    .target(&manifest.identity, &name)
-                    .actor(actor),
+                NewActivity::new(
+                    "restore.completed",
+                    Severity::Success,
+                    format!("{name} restored from the backup of {}", fmt_time(app, manifest.created_at)),
+                )
+                .target(&manifest.identity, &name)
+                .actor(actor),
             )
             .await;
-            app.notifier.send(Notification::new("restore.completed", Severity::Success, format!("{name} restored"), format!("From the backup taken {}", fmt_time(app, manifest.created_at))).target(&manifest.identity, &name));
+            app.notifier.send(
+                Notification::new(
+                    "restore.completed",
+                    Severity::Success,
+                    format!("{name} restored"),
+                    format!("From the backup taken {}", fmt_time(app, manifest.created_at)),
+                )
+                .target(&manifest.identity, &name),
+            );
             Ok(json!({ "files": stats.files, "bytes": stats.bytes, "removed": stats.removed }))
         }
         Err(err) => {
@@ -228,7 +242,10 @@ async fn run_restore(app: &App, ctx: &TaskCtx, backup_id: &str, opts: RestoreOpt
                     .actor(actor),
             )
             .await;
-            app.notifier.send(Notification::new("restore.failed", Severity::Error, format!("{name} restore failed"), err.to_string()).target(&manifest.identity, &name));
+            app.notifier.send(
+                Notification::new("restore.failed", Severity::Error, format!("{name} restore failed"), err.to_string())
+                    .target(&manifest.identity, &name),
+            );
             Err(err)
         }
     }

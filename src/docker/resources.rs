@@ -10,9 +10,9 @@ use std::time::Duration;
 
 use bollard::models::{Ipam, IpamConfig, NetworkCreateRequest, VolumeCreateRequest};
 use bollard::query_parameters::{
-    ListImagesOptionsBuilder, ListNetworksOptions, ListVolumesOptions, PruneBuildOptionsBuilder, PruneContainersOptions,
-    PruneImagesOptionsBuilder, PruneNetworksOptions, PruneVolumesOptionsBuilder, RemoveImageOptionsBuilder,
-    RemoveVolumeOptionsBuilder,
+    ListImagesOptionsBuilder, ListNetworksOptions, ListVolumesOptions, PruneBuildOptionsBuilder,
+    PruneContainersOptions, PruneImagesOptionsBuilder, PruneNetworksOptions, PruneVolumesOptionsBuilder,
+    RemoveImageOptionsBuilder, RemoveVolumeOptionsBuilder,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -45,11 +45,7 @@ where
 // ---------------------------------------------------------------- images
 
 pub async fn images(app: &App) -> Result<Vec<ImageRow>> {
-    let list = app
-        .docker
-        .api
-        .list_images(Some(ListImagesOptionsBuilder::new().all(false).build()))
-        .await?;
+    let list = app.docker.api.list_images(Some(ListImagesOptionsBuilder::new().all(false).build())).await?;
     let mut users = container_names_by(app, |c| vec![c.image_id.clone()]);
     let mut rows: Vec<ImageRow> = list
         .into_iter()
@@ -73,16 +69,10 @@ pub async fn images(app: &App) -> Result<Vec<ImageRow>> {
 }
 
 pub async fn remove_image(app: &App, id: &str, force: bool) -> Result<Vec<String>> {
-    let resp = app
-        .docker
-        .api
-        .remove_image(id, Some(RemoveImageOptionsBuilder::new().force(force).build()), None)
-        .await?;
+    let resp =
+        app.docker.api.remove_image(id, Some(RemoveImageOptionsBuilder::new().force(force).build()), None).await?;
     app.docker.invalidate_images();
-    Ok(resp
-        .into_iter()
-        .filter_map(|r| r.deleted.or(r.untagged))
-        .collect())
+    Ok(resp.into_iter().filter_map(|r| r.deleted.or(r.untagged)).collect())
 }
 
 // ---------------------------------------------------------------- volumes
@@ -105,17 +95,14 @@ pub struct VolumeRow {
 }
 
 fn looks_anonymous(name: &str, labels: &HashMap<String, String>) -> bool {
-    labels.contains_key("com.docker.volume.anonymous") || (name.len() == 64 && name.chars().all(|c| c.is_ascii_hexdigit()))
+    labels.contains_key("com.docker.volume.anonymous")
+        || (name.len() == 64 && name.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 pub async fn volumes(app: &App, with_sizes: bool) -> Result<Vec<VolumeRow>> {
     let resp = app.docker.api.list_volumes(None::<ListVolumesOptions>).await?;
     let mut users = container_names_by(app, |c| {
-        c.mounts
-            .iter()
-            .filter(|m| m.kind == "volume")
-            .filter_map(|m| m.name.clone())
-            .collect()
+        c.mounts.iter().filter(|m| m.kind == "volume").filter_map(|m| m.name.clone()).collect()
     });
     let sizes = if with_sizes { disk_usage(app).await?.volume_sizes } else { HashMap::new() };
     let mut rows: Vec<VolumeRow> = resp
@@ -139,10 +126,7 @@ pub async fn volumes(app: &App, with_sizes: bool) -> Result<Vec<VolumeRow>> {
 }
 
 pub async fn remove_volume(app: &App, name: &str) -> Result<()> {
-    app.docker
-        .api
-        .remove_volume(name, Some(RemoveVolumeOptionsBuilder::new().force(false).build()))
-        .await?;
+    app.docker.api.remove_volume(name, Some(RemoveVolumeOptionsBuilder::new().force(false).build())).await?;
     Ok(())
 }
 
@@ -252,11 +236,7 @@ pub async fn create_network(app: &App, n: NewNetwork) -> Result<String> {
     let subnet = n.subnet.filter(|s| !s.is_empty());
     let gateway = n.gateway.filter(|s| !s.is_empty());
     let ipam = (subnet.is_some() || gateway.is_some()).then(|| Ipam {
-        config: Some(vec![IpamConfig {
-            subnet,
-            gateway,
-            ..Default::default()
-        }]),
+        config: Some(vec![IpamConfig { subnet, gateway, ..Default::default() }]),
         ..Default::default()
     });
     let resp = app
@@ -468,7 +448,8 @@ pub async fn prune(app: &App, req: &PruneRequest, log: &(dyn Fn(String) + Send +
         let filters = HashMap::from([("dangling", vec!["true"])]);
         match api.prune_images(Some(PruneImagesOptionsBuilder::new().filters(&filters).build())).await {
             Ok(p) => {
-                r.images_removed = p.images_deleted.map(|v| v.iter().filter(|d| d.deleted.is_some()).count()).unwrap_or(0);
+                r.images_removed =
+                    p.images_deleted.map(|v| v.iter().filter(|d| d.deleted.is_some()).count()).unwrap_or(0);
                 r.reclaimed += p.space_reclaimed.unwrap_or(0);
             }
             Err(e) => r.errors.push(format!("images: {e}")),
@@ -476,7 +457,12 @@ pub async fn prune(app: &App, req: &PruneRequest, log: &(dyn Fn(String) + Send +
     }
 
     if req.volumes {
-        log(if req.named_volumes { "Removing unused volumes (including named ones)" } else { "Removing unused anonymous volumes" }.into());
+        log(if req.named_volumes {
+            "Removing unused volumes (including named ones)"
+        } else {
+            "Removing unused anonymous volumes"
+        }
+        .into());
         let mut builder = PruneVolumesOptionsBuilder::new();
         if req.named_volumes {
             builder = builder.filters(&HashMap::from([("all", vec!["true"])]));

@@ -21,11 +21,7 @@ pub async fn check_one(app: &App, entry: &Entry, fresh: bool) -> UpdateInfo {
     let settings = app.settings.get();
     let prefs = app.prefs.get(&s.identity);
     let previous = app.updates.get(&s.identity);
-    let mut info = UpdateInfo {
-        image: s.image.clone(),
-        checked_at: Some(crate::util::now()),
-        ..Default::default()
-    };
+    let mut info = UpdateInfo { image: s.image.clone(), checked_at: Some(crate::util::now()), ..Default::default() };
 
     if prefs.update_policy(&settings) == UpdatePolicy::Ignore {
         info.status = UpdateStatus::Ignored;
@@ -41,9 +37,8 @@ pub async fn check_one(app: &App, entry: &Entry, fresh: bool) -> UpdateInfo {
     }
 
     let meta = app.docker.image_meta(&s.image_id).await;
-    info.current_digest = meta
-        .as_ref()
-        .and_then(|m| m.repo_digests.iter().find_map(|rd| reference.digest_from_repo_digest(rd)));
+    info.current_digest =
+        meta.as_ref().and_then(|m| m.repo_digests.iter().find_map(|rd| reference.digest_from_repo_digest(rd)));
     if meta.as_ref().is_some_and(|m| m.repo_digests.is_empty()) {
         // Built locally (no registry digest at all).
         info.status = UpdateStatus::Local;
@@ -51,11 +46,7 @@ pub async fn check_one(app: &App, entry: &Entry, fresh: bool) -> UpdateInfo {
     }
     let platform = meta
         .as_ref()
-        .map(|m| Platform {
-            os: m.os.clone(),
-            arch: m.arch.clone(),
-            variant: m.variant.clone(),
-        })
+        .map(|m| Platform { os: m.os.clone(), arch: m.arch.clone(), variant: m.variant.clone() })
         .unwrap_or_default();
 
     // A newer image already pulled for this tag but not applied yet?
@@ -117,11 +108,10 @@ pub async fn check_one(app: &App, entry: &Entry, fresh: bool) -> UpdateInfo {
         match app.registry.tags(&reference, fresh).await {
             Ok(tags) => {
                 let names = tags.iter().map(|t| t.name.as_str());
-                if let Some(newer) = newest_within(&current, names, settings.updates.notify_scope, !settings.updates.ignore_prereleases) {
-                    info.newer_tag = Some(NewerTag {
-                        scope: current.change_scope(&newer),
-                        tag: newer.raw,
-                    });
+                if let Some(newer) =
+                    newest_within(&current, names, settings.updates.notify_scope, !settings.updates.ignore_prereleases)
+                {
+                    info.newer_tag = Some(NewerTag { scope: current.change_scope(&newer), tag: newer.raw });
                     if info.status == UpdateStatus::UpToDate {
                         info.status = UpdateStatus::Available;
                     }
@@ -208,10 +198,18 @@ pub async fn check_all(app: &App, fresh: bool, actor: &Actor) -> CheckSummary {
                     .link(app, "/updates"),
             );
         }
-        app.note(NewActivity::new("update.available", Severity::Info, format!("{title}: {}", summary.new.join(", "))).actor(actor))
-            .await;
+        app.note(
+            NewActivity::new("update.available", Severity::Info, format!("{title}: {}", summary.new.join(", ")))
+                .actor(actor),
+        )
+        .await;
     }
-    tracing::info!(checked = summary.checked, available = summary.available, errors = summary.errors, "update check finished");
+    tracing::info!(
+        checked = summary.checked,
+        available = summary.available,
+        errors = summary.errors,
+        "update check finished"
+    );
     summary
 }
 

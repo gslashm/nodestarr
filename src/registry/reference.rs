@@ -37,13 +37,12 @@ impl ImageRef {
             return None;
         }
         let mut parts: Vec<&str> = name.split('/').collect();
-        let registry = if parts.len() > 1
-            && (parts[0].contains('.') || parts[0].contains(':') || parts[0] == "localhost")
-        {
-            parts.remove(0).to_string()
-        } else {
-            "docker.io".to_string()
-        };
+        let registry =
+            if parts.len() > 1 && (parts[0].contains('.') || parts[0].contains(':') || parts[0] == "localhost") {
+                parts.remove(0).to_string()
+            } else {
+                "docker.io".to_string()
+            };
         let registry = match registry.as_str() {
             "index.docker.io" | "registry-1.docker.io" | "registry.hub.docker.com" => "docker.io".to_string(),
             _ => registry,
@@ -55,12 +54,7 @@ impl ImageRef {
         if registry == "docker.io" && !repository.contains('/') {
             repository = format!("library/{repository}");
         }
-        Some(Self {
-            registry,
-            repository: repository.to_ascii_lowercase(),
-            tag,
-            digest,
-        })
+        Some(Self { registry, repository: repository.to_ascii_lowercase(), tag, digest })
     }
 
     /// The tag, defaulting to "latest" like Docker does.
@@ -100,10 +94,7 @@ impl ImageRef {
     /// "ghcr.io/hotio/radarr:release".
     pub fn familiar(&self) -> String {
         let mut s = if self.is_docker_hub() {
-            self.repository
-                .strip_prefix("library/")
-                .unwrap_or(&self.repository)
-                .to_string()
+            self.repository.strip_prefix("library/").unwrap_or(&self.repository).to_string()
         } else {
             format!("{}/{}", self.registry, self.repository)
         };
@@ -180,16 +171,10 @@ mod tests {
     #[test]
     fn repo_digest_matching() {
         let r = ImageRef::parse("lscr.io/linuxserver/sonarr:latest").unwrap();
-        assert_eq!(
-            r.digest_from_repo_digest("lscr.io/linuxserver/sonarr@sha256:111").as_deref(),
-            Some("sha256:111")
-        );
+        assert_eq!(r.digest_from_repo_digest("lscr.io/linuxserver/sonarr@sha256:111").as_deref(), Some("sha256:111"));
         assert_eq!(r.digest_from_repo_digest("ghcr.io/linuxserver/sonarr@sha256:222"), None);
         let hub = ImageRef::parse("nginx:1.27").unwrap();
         assert_eq!(hub.digest_from_repo_digest("nginx@sha256:333").as_deref(), Some("sha256:333"));
-        assert_eq!(
-            hub.digest_from_repo_digest("docker.io/library/nginx@sha256:333").as_deref(),
-            Some("sha256:333")
-        );
+        assert_eq!(hub.digest_from_repo_digest("docker.io/library/nginx@sha256:333").as_deref(), Some("sha256:333"));
     }
 }

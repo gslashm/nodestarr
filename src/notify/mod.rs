@@ -97,7 +97,13 @@ impl Notification {
     }
 
     fn dedup_key(&self) -> String {
-        format!("{}|{}|{}|{}", self.kind, self.target.as_deref().unwrap_or(""), self.title, crate::util::sha256_hex(&self.message))
+        format!(
+            "{}|{}|{}|{}",
+            self.kind,
+            self.target.as_deref().unwrap_or(""),
+            self.title,
+            crate::util::sha256_hex(&self.message)
+        )
     }
 }
 
@@ -124,10 +130,7 @@ pub fn wants(provider: &NotificationProvider, n: &Notification) -> bool {
     if provider.events.is_empty() || n.kind == "digest" {
         return true;
     }
-    provider
-        .events
-        .iter()
-        .any(|e| e == "*" || e == &n.kind || n.kind.split('.').next().is_some_and(|cat| cat == e))
+    provider.events.iter().any(|e| e == "*" || e == &n.kind || n.kind.split('.').next().is_some_and(|cat| cat == e))
 }
 
 /// Minutes since midnight for "HH:MM".
@@ -145,11 +148,7 @@ pub fn in_quiet_hours(q: &QuietHours, minutes_now: u32) -> bool {
     if start == end {
         return false;
     }
-    if start < end {
-        minutes_now >= start && minutes_now < end
-    } else {
-        minutes_now >= start || minutes_now < end
-    }
+    if start < end { minutes_now >= start && minutes_now < end } else { minutes_now >= start || minutes_now < end }
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -242,13 +241,8 @@ impl Notifier {
     }
 
     async fn deliver_all(&self, settings: &Settings, n: &Notification) {
-        let targets: Vec<NotificationProvider> = settings
-            .notifications
-            .providers
-            .iter()
-            .filter(|p| wants(p, n))
-            .cloned()
-            .collect();
+        let targets: Vec<NotificationProvider> =
+            settings.notifications.providers.iter().filter(|p| wants(p, n)).cloned().collect();
         let futures = targets.into_iter().map(|p| {
             let this = self.clone();
             let n = n.clone();

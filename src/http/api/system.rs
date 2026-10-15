@@ -164,7 +164,9 @@ struct LogsQuery {
 
 async fn logs(Query(q): Query<LogsQuery>) -> Result<Json<Value>> {
     let level = match q.level.as_deref().filter(|l| !l.is_empty()) {
-        Some(l) => Some(tracing::Level::from_str(l).map_err(|_| AppError::bad_request(format!("unknown log level '{l}'")))?),
+        Some(l) => {
+            Some(tracing::Level::from_str(l).map_err(|_| AppError::bad_request(format!("unknown log level '{l}'")))?)
+        }
         None => None,
     };
     let entries = crate::logging::recent(q.limit.unwrap_or(500).min(2000), level);
@@ -215,7 +217,12 @@ async fn after_settings_change(app: &App, before: &Settings, after: &Settings) {
     app.bus.publish(Event::Settings);
 }
 
-async fn put_section(State(app): State<App>, Auth(p): Auth, Path(section): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>> {
+async fn put_section(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(section): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>> {
     let label = section_label(&section)?;
     if !body.is_object() {
         return Err(AppError::bad_request("expected a JSON object"));
@@ -242,7 +249,9 @@ struct ExportQuery {
 async fn export(State(app): State<App>, Auth(p): Auth, Query(q): Query<ExportQuery>) -> Result<Response> {
     p.require_admin()?;
     let mut settings = serde_json::to_value(&*app.settings.get())?;
-    let mut prefs = serde_json::to_value(app.prefs.all().iter().map(|(k, v)| (k.clone(), (**v).clone())).collect::<HashMap<String, ContainerPrefs>>())?;
+    let mut prefs = serde_json::to_value(
+        app.prefs.all().iter().map(|(k, v)| (k.clone(), (**v).clone())).collect::<HashMap<String, ContainerPrefs>>(),
+    )?;
     if !q.secrets {
         mask_secrets(&mut settings);
         mask_secrets(&mut prefs);
@@ -256,8 +265,12 @@ async fn export(State(app): State<App>, Auth(p): Auth, Query(q): Query<ExportQue
         "container_prefs": prefs,
     });
     app.note(
-        NewActivity::new("settings.exported", Severity::Info, if q.secrets { "Settings exported (with secrets)" } else { "Settings exported" })
-            .actor(&p.actor()),
+        NewActivity::new(
+            "settings.exported",
+            Severity::Info,
+            if q.secrets { "Settings exported (with secrets)" } else { "Settings exported" },
+        )
+        .actor(&p.actor()),
     )
     .await;
     let mut resp = Json(doc).into_response();
@@ -280,7 +293,12 @@ fn yes() -> bool {
     true
 }
 
-async fn import(State(app): State<App>, Auth(p): Auth, Query(q): Query<ImportQuery>, Json(doc): Json<Value>) -> Result<Json<Value>> {
+async fn import(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Query(q): Query<ImportQuery>,
+    Json(doc): Json<Value>,
+) -> Result<Json<Value>> {
     p.require_admin()?;
     if doc["nodestarr_export"].as_u64() != Some(EXPORT_FORMAT as u64) {
         return Err(AppError::bad_request("this is not a Nodestarr settings export"));
@@ -387,10 +405,8 @@ async fn mqtt_reconnect(State(app): State<App>) -> Json<Value> {
 }
 
 async fn notification_kinds(State(app): State<App>) -> Json<Value> {
-    let kinds: Vec<Value> = crate::notify::EVENT_KINDS
-        .iter()
-        .map(|(kind, label)| json!({ "kind": kind, "label": label }))
-        .collect();
+    let kinds: Vec<Value> =
+        crate::notify::EVENT_KINDS.iter().map(|(kind, label)| json!({ "kind": kind, "label": label })).collect();
     Json(json!({ "kinds": kinds, "status": app.notifier.status() }))
 }
 
@@ -458,10 +474,8 @@ async fn apps() -> Json<Value> {
 
 async fn jobs(State(app): State<App>) -> Json<Value> {
     let settings = app.settings.get();
-    let next: HashMap<Job, Option<i64>> = crate::scheduler::next_runs(&settings)
-        .into_iter()
-        .map(|(j, n)| (j, n.map(|t| t.timestamp())))
-        .collect();
+    let next: HashMap<Job, Option<i64>> =
+        crate::scheduler::next_runs(&settings).into_iter().map(|(j, n)| (j, n.map(|t| t.timestamp()))).collect();
     let last = crate::scheduler::last_runs();
     let list: Vec<Value> = Job::ALL
         .iter()
@@ -483,8 +497,10 @@ async fn run_job(State(app): State<App>, Auth(p): Auth, Path(job): Path<String>)
     if crate::scheduler::last_runs().get(&job).is_some_and(|r| r.finished_at.is_none()) {
         return Err(AppError::conflict(format!("the {} is already running", job.name())));
     }
-    app.note(NewActivity::new("system.job", Severity::Info, format!("Started the {} by hand", job.name())).actor(&p.actor()))
-        .await;
+    app.note(
+        NewActivity::new("system.job", Severity::Info, format!("Started the {} by hand", job.name())).actor(&p.actor()),
+    )
+    .await;
     let app2 = app.clone();
     tokio::spawn(async move {
         crate::scheduler::run(&app2, job).await;
@@ -509,7 +525,8 @@ async fn self_update(State(app): State<App>, Auth(p): Auth, body: Option<Json<Se
         .find(|c| c.is_self)
         .ok_or_else(|| AppError::conflict("Nodestarr isn't running in a Docker container Nodestarr can see, so it can't update itself; update it the way you installed it"))?;
     let req = crate::updates::apply::UpdateRequest { tag: body.tag, skip_backup: true };
-    let task = crate::updates::apply::start_update(&app, &me.id, req, &p.actor(), crate::updates::apply::Trigger::Manual)?;
+    let task =
+        crate::updates::apply::start_update(&app, &me.id, req, &p.actor(), crate::updates::apply::Trigger::Manual)?;
     Ok(Json(json!({ "task_id": task })))
 }
 
@@ -522,7 +539,8 @@ async fn disk_usage(State(app): State<App>) -> Result<Json<Value>> {
 
 async fn prune(State(app): State<App>, Auth(p): Auth, Json(req): Json<PruneRequest>) -> Result<Json<Value>> {
     p.require_admin()?;
-    let nothing = !(req.dangling_images || req.unused_images || req.containers || req.volumes || req.networks || req.build_cache);
+    let nothing =
+        !(req.dangling_images || req.unused_images || req.containers || req.volumes || req.networks || req.build_cache);
     if nothing {
         return Err(AppError::bad_request("choose what to clean up"));
     }
@@ -569,10 +587,18 @@ struct ForceQuery {
     force: bool,
 }
 
-async fn remove_image(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, Query(q): Query<ForceQuery>) -> Result<Json<Value>> {
+async fn remove_image(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    Query(q): Query<ForceQuery>,
+) -> Result<Json<Value>> {
     let removed = resources::remove_image(&app, &id, q.force).await?;
-    app.note(NewActivity::new("docker.image_removed", Severity::Info, format!("Image {} removed", short_ref(&id))).actor(&p.actor()))
-        .await;
+    app.note(
+        NewActivity::new("docker.image_removed", Severity::Info, format!("Image {} removed", short_ref(&id)))
+            .actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "removed": removed })))
 }
 
@@ -599,15 +625,20 @@ async fn volumes(State(app): State<App>, Query(q): Query<VolumesQuery>) -> Resul
 
 async fn create_volume(State(app): State<App>, Auth(p): Auth, Json(v): Json<NewVolume>) -> Result<Json<Value>> {
     let name = resources::create_volume(&app, v).await?;
-    app.note(NewActivity::new("docker.volume_created", Severity::Info, format!("Volume {name} created")).actor(&p.actor()))
-        .await;
+    app.note(
+        NewActivity::new("docker.volume_created", Severity::Info, format!("Volume {name} created")).actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "name": name })))
 }
 
 async fn remove_volume(State(app): State<App>, Auth(p): Auth, Path(name): Path<String>) -> Result<Json<Value>> {
     resources::remove_volume(&app, &name).await?;
-    app.note(NewActivity::new("docker.volume_removed", Severity::Warning, format!("Volume {} removed", short_ref(&name))).actor(&p.actor()))
-        .await;
+    app.note(
+        NewActivity::new("docker.volume_removed", Severity::Warning, format!("Volume {} removed", short_ref(&name)))
+            .actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -618,15 +649,20 @@ async fn networks(State(app): State<App>) -> Result<Json<Value>> {
 async fn create_network(State(app): State<App>, Auth(p): Auth, Json(n): Json<NewNetwork>) -> Result<Json<Value>> {
     let name = n.name.clone();
     let id = resources::create_network(&app, n).await?;
-    app.note(NewActivity::new("docker.network_created", Severity::Info, format!("Network {name} created")).actor(&p.actor()))
-        .await;
+    app.note(
+        NewActivity::new("docker.network_created", Severity::Info, format!("Network {name} created")).actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "id": id })))
 }
 
 async fn remove_network(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>) -> Result<Json<Value>> {
     resources::remove_network(&app, &id).await?;
-    app.note(NewActivity::new("docker.network_removed", Severity::Info, format!("Network {} removed", short_ref(&id))).actor(&p.actor()))
-        .await;
+    app.note(
+        NewActivity::new("docker.network_removed", Severity::Info, format!("Network {} removed", short_ref(&id)))
+            .actor(&p.actor()),
+    )
+    .await;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -636,10 +672,8 @@ async fn remove_network(State(app): State<App>, Auth(p): Auth, Path(id): Path<St
 pub async fn metrics(State(app): State<App>) -> Response {
     let body = crate::metrics::render(&app).await;
     let mut resp = body.into_response();
-    resp.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"),
-    );
+    resp.headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"));
     resp
 }
 

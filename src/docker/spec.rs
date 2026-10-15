@@ -126,14 +126,9 @@ impl ContainerSpec {
             return Err(AppError::bad_request(format!("'{}' is not a valid image reference", self.image)));
         }
         if !self.name.is_empty()
-            && !self
-                .name
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+            && !self.name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
         {
-            return Err(AppError::bad_request(
-                "container names may only contain letters, digits, '_', '.' and '-'",
-            ));
+            return Err(AppError::bad_request("container names may only contain letters, digits, '_', '.' and '-'"));
         }
         for p in &self.ports {
             if p.container_port.trim().is_empty() {
@@ -176,10 +171,12 @@ impl ContainerSpec {
             for (cp, hp) in cports.iter().zip(hports) {
                 let key = format!("{cp}/{proto}");
                 exposed.push(key.clone());
-                bindings.entry(key).or_insert_with(|| Some(Vec::new())).get_or_insert_with(Vec::new).push(PortBinding {
-                    host_ip: if p.host_ip.is_empty() { None } else { Some(p.host_ip.clone()) },
-                    host_port: Some(hp),
-                });
+                bindings.entry(key).or_insert_with(|| Some(Vec::new())).get_or_insert_with(Vec::new).push(
+                    PortBinding {
+                        host_ip: if p.host_ip.is_empty() { None } else { Some(p.host_ip.clone()) },
+                        host_port: Some(hp),
+                    },
+                );
             }
         }
 
@@ -228,7 +225,11 @@ impl ContainerSpec {
             "" => None,
             g => Some(vec![DeviceRequest {
                 driver: Some("nvidia".into()),
-                count: Some(if g == "all" { -1 } else { g.parse().map_err(|_| AppError::bad_request("gpus must be 'all' or a number"))? }),
+                count: Some(if g == "all" {
+                    -1
+                } else {
+                    g.parse().map_err(|_| AppError::bad_request("gpus must be 'all' or a number"))?
+                }),
                 capabilities: Some(vec![vec!["gpu".into()]]),
                 ..Default::default()
             }]),
@@ -263,10 +264,7 @@ impl ContainerSpec {
             log_config: if self.log_driver.is_empty() {
                 None
             } else {
-                Some(HostConfigLogConfig {
-                    typ: Some(self.log_driver.clone()),
-                    config: kv_map(&self.log_opts),
-                })
+                Some(HostConfigLogConfig { typ: Some(self.log_driver.clone()), config: kv_map(&self.log_opts) })
             },
             ..Default::default()
         };
@@ -316,12 +314,8 @@ impl ContainerSpec {
             networking_config,
             ..Default::default()
         };
-        let extra: Vec<String> = self
-            .networks
-            .iter()
-            .filter(|n| !n.is_empty() && **n != network_mode)
-            .cloned()
-            .collect();
+        let extra: Vec<String> =
+            self.networks.iter().filter(|n| !n.is_empty() && **n != network_mode).cloned().collect();
         Ok((body, extra))
     }
 
@@ -441,12 +435,8 @@ impl ContainerSpec {
             let driver = lc.typ.clone().unwrap_or_default();
             if driver != "json-file" || lc.config.as_ref().is_some_and(|c| !c.is_empty()) {
                 spec.log_driver = driver;
-                spec.log_opts = lc
-                    .config
-                    .iter()
-                    .flatten()
-                    .map(|(k, v)| KeyValue { key: k.clone(), value: v.clone() })
-                    .collect();
+                spec.log_opts =
+                    lc.config.iter().flatten().map(|(k, v)| KeyValue { key: k.clone(), value: v.clone() }).collect();
             }
         }
         if let Some(sys) = &host.sysctls {
@@ -454,7 +444,9 @@ impl ContainerSpec {
         }
         if let Some(hc) = &body.healthcheck {
             if let Some(test) = &hc.test {
-                if test.first().map(String::as_str) == Some("CMD-SHELL") || test.first().map(String::as_str) == Some("CMD") {
+                if test.first().map(String::as_str) == Some("CMD-SHELL")
+                    || test.first().map(String::as_str) == Some("CMD")
+                {
                     spec.healthcheck = Some(HealthSpec {
                         command: test[1..].join(" "),
                         interval_secs: ns_to_secs(hc.interval),
@@ -717,10 +709,7 @@ fn parse_restart(s: &str) -> Result<RestartPolicy> {
             None => return Err(AppError::bad_request(format!("invalid restart policy '{other}'"))),
         },
     };
-    Ok(RestartPolicy {
-        name: Some(name),
-        maximum_retry_count: count,
-    })
+    Ok(RestartPolicy { name: Some(name), maximum_retry_count: count })
 }
 
 fn expand_range(s: &str) -> Result<Vec<String>> {
@@ -814,22 +803,83 @@ fn parse_duration_secs(s: &str) -> Option<u32> {
 
 /// Flags that take a value.
 const VALUE_FLAGS: &[&str] = &[
-    "--name", "-p", "--publish", "-v", "--volume", "--mount", "-e", "--env", "--env-file", "-l", "--label",
-    "--restart", "--network", "--net", "--network-alias", "--net-alias", "--device", "--group-add", "--cap-add",
-    "--cap-drop", "-u", "--user", "-h", "--hostname", "-w", "--workdir", "--entrypoint", "-m", "--memory", "--cpus",
-    "--shm-size", "--add-host", "--dns", "--dns-search", "--gpus", "--health-cmd", "--health-interval",
-    "--health-timeout", "--health-retries", "--health-start-period", "--log-driver", "--log-opt", "--security-opt",
-    "--sysctl", "--tmpfs", "--pull", "--platform", "--ip", "--mac-address", "--memory-swap", "--ulimit",
-    "--pid", "--ipc", "--runtime", "--stop-signal", "--stop-timeout", "--expose", "--label-file", "--cidfile",
-    "--cpuset-cpus", "--cpu-shares", "--storage-opt", "--volumes-from", "--link", "--domainname", "--userns",
-    "--uts", "--cgroupns", "--workdir",
+    "--name",
+    "-p",
+    "--publish",
+    "-v",
+    "--volume",
+    "--mount",
+    "-e",
+    "--env",
+    "--env-file",
+    "-l",
+    "--label",
+    "--restart",
+    "--network",
+    "--net",
+    "--network-alias",
+    "--net-alias",
+    "--device",
+    "--group-add",
+    "--cap-add",
+    "--cap-drop",
+    "-u",
+    "--user",
+    "-h",
+    "--hostname",
+    "-w",
+    "--workdir",
+    "--entrypoint",
+    "-m",
+    "--memory",
+    "--cpus",
+    "--shm-size",
+    "--add-host",
+    "--dns",
+    "--dns-search",
+    "--gpus",
+    "--health-cmd",
+    "--health-interval",
+    "--health-timeout",
+    "--health-retries",
+    "--health-start-period",
+    "--log-driver",
+    "--log-opt",
+    "--security-opt",
+    "--sysctl",
+    "--tmpfs",
+    "--pull",
+    "--platform",
+    "--ip",
+    "--mac-address",
+    "--memory-swap",
+    "--ulimit",
+    "--pid",
+    "--ipc",
+    "--runtime",
+    "--stop-signal",
+    "--stop-timeout",
+    "--expose",
+    "--label-file",
+    "--cidfile",
+    "--cpuset-cpus",
+    "--cpu-shares",
+    "--storage-opt",
+    "--volumes-from",
+    "--link",
+    "--domainname",
+    "--userns",
+    "--uts",
+    "--cgroupns",
+    "--workdir",
 ];
 
 /// Parses a `docker run ...` command into a spec.
 pub fn parse_docker_run(command: &str) -> Result<ParsedRun> {
     // Join shell line continuations first.
     let joined = command.replace("\\\r\n", " ").replace("\\\n", " ");
-    let words = shell_words::split(&joined).map_err(|e| AppError::bad_request(format!("could not parse command: {e}")))?;
+    let words =
+        shell_words::split(&joined).map_err(|e| AppError::bad_request(format!("could not parse command: {e}")))?;
     let mut iter = words.into_iter().peekable();
     // Skip a leading `sudo docker run` / `docker container run` / `podman run`.
     while let Some(w) = iter.peek() {
@@ -840,10 +890,7 @@ pub fn parse_docker_run(command: &str) -> Result<ParsedRun> {
         }
     }
 
-    let mut spec = ContainerSpec {
-        restart: "no".into(),
-        ..Default::default()
-    };
+    let mut spec = ContainerSpec { restart: "no".into(), ..Default::default() };
     let mut warnings = Vec::new();
     let mut health = HealthSpec::default();
     let mut has_health = false;
@@ -942,11 +989,13 @@ fn apply_flag(
             });
         }
         "-e" | "--env" => {
-            let (k, v) = value.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).unwrap_or((value, String::new()));
+            let (k, v) =
+                value.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).unwrap_or((value, String::new()));
             spec.env.push(KeyValue { key: k, value: v });
         }
         "-l" | "--label" => {
-            let (k, v) = value.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).unwrap_or((value, String::new()));
+            let (k, v) =
+                value.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).unwrap_or((value, String::new()));
             spec.labels.push(KeyValue { key: k, value: v });
         }
         "--restart" => spec.restart = value,
@@ -988,12 +1037,14 @@ fn apply_flag(
         "--health-start-period" => health.start_period_secs = parse_duration_secs(&value).unwrap_or(0),
         "--log-driver" => spec.log_driver = value,
         "--log-opt" => {
-            let (k, v) = value.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).unwrap_or((value, String::new()));
+            let (k, v) =
+                value.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).unwrap_or((value, String::new()));
             spec.log_opts.push(KeyValue { key: k, value: v });
         }
         "--security-opt" => spec.security_opt.push(value),
         "--sysctl" => {
-            let (k, v) = value.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).unwrap_or((value, String::new()));
+            let (k, v) =
+                value.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).unwrap_or((value, String::new()));
             spec.sysctls.push(KeyValue { key: k, value: v });
         }
         "--tmpfs" => spec.tmpfs.push(value),
@@ -1014,11 +1065,7 @@ fn parse_port(s: &str) -> Option<PortSpec> {
         (ip.to_string(), rest)
     } else {
         let parts: Vec<&str> = main.split(':').collect();
-        if parts.len() == 3 {
-            (parts[0].to_string(), &main[parts[0].len() + 1..])
-        } else {
-            (String::new(), main)
-        }
+        if parts.len() == 3 { (parts[0].to_string(), &main[parts[0].len() + 1..]) } else { (String::new(), main) }
     };
     let (host_port, container_port) = match rest.split_once(':') {
         Some((h, c)) => (h.to_string(), c.to_string()),
@@ -1027,12 +1074,7 @@ fn parse_port(s: &str) -> Option<PortSpec> {
     if container_port.is_empty() {
         return None;
     }
-    Some(PortSpec {
-        host_ip,
-        host_port,
-        container_port,
-        protocol: proto,
-    })
+    Some(PortSpec { host_ip, host_port, container_port, protocol: proto })
 }
 
 fn parse_volume(s: &str) -> Option<VolumeSpec> {
@@ -1079,7 +1121,15 @@ mod tests {
         assert_eq!(s.name, "sonarr");
         assert_eq!(s.image, "lscr.io/linuxserver/sonarr:latest");
         assert_eq!(s.env.len(), 3);
-        assert_eq!(s.ports, vec![PortSpec { host_ip: "".into(), host_port: "8989".into(), container_port: "8989".into(), protocol: "tcp".into() }]);
+        assert_eq!(
+            s.ports,
+            vec![PortSpec {
+                host_ip: "".into(),
+                host_port: "8989".into(),
+                container_port: "8989".into(),
+                protocol: "tcp".into()
+            }]
+        );
         assert_eq!(s.volumes.len(), 2);
         assert!(s.volumes[1].read_only);
         assert_eq!(s.restart, "unless-stopped");
@@ -1088,7 +1138,10 @@ mod tests {
 
     #[test]
     fn parses_combined_flags_and_command() {
-        let p = parse_docker_run("docker run -it --rm -p127.0.0.1:8080:80/udp --device /dev/dri:/dev/dri --gpus all alpine sh -c 'echo hi'").unwrap();
+        let p = parse_docker_run(
+            "docker run -it --rm -p127.0.0.1:8080:80/udp --device /dev/dri:/dev/dri --gpus all alpine sh -c 'echo hi'",
+        )
+        .unwrap();
         assert!(p.spec.tty && p.spec.stdin_open);
         assert_eq!(p.spec.ports[0].host_ip, "127.0.0.1");
         assert_eq!(p.spec.ports[0].protocol, "udp");
@@ -1105,7 +1158,12 @@ mod tests {
             image: "nginx:1.27".into(),
             restart: "unless-stopped".into(),
             ports: vec![PortSpec { host_port: "8080".into(), container_port: "80".into(), ..Default::default() }],
-            volumes: vec![VolumeSpec { kind: "bind".into(), source: "/srv/www".into(), target: "/usr/share/nginx/html".into(), read_only: true }],
+            volumes: vec![VolumeSpec {
+                kind: "bind".into(),
+                source: "/srv/www".into(),
+                target: "/usr/share/nginx/html".into(),
+                read_only: true,
+            }],
             env: vec![KeyValue { key: "A".into(), value: "b".into() }],
             memory: Some(512 * 1024 * 1024),
             ..Default::default()
@@ -1126,8 +1184,15 @@ mod tests {
             image: "lscr.io/linuxserver/plex:latest".into(),
             restart: "unless-stopped".into(),
             network_mode: "host".into(),
-            env: vec![KeyValue { key: "VERSION".into(), value: "docker".into() }, KeyValue { key: "PUID".into(), value: "1000".into() }],
-            devices: vec![DeviceSpec { host: "/dev/dri".into(), container: "/dev/dri".into(), permissions: String::new() }],
+            env: vec![
+                KeyValue { key: "VERSION".into(), value: "docker".into() },
+                KeyValue { key: "PUID".into(), value: "1000".into() },
+            ],
+            devices: vec![DeviceSpec {
+                host: "/dev/dri".into(),
+                container: "/dev/dri".into(),
+                permissions: String::new(),
+            }],
             group_add: vec!["993".into()],
             ..Default::default()
         };

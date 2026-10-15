@@ -78,15 +78,7 @@ pub struct NewActivity {
 
 impl NewActivity {
     pub fn new(kind: &'static str, severity: Severity, message: impl Into<String>) -> Self {
-        Self {
-            kind,
-            severity,
-            target: None,
-            target_name: None,
-            message: message.into(),
-            actor: None,
-            details: None,
-        }
+        Self { kind, severity, target: None, target_name: None, message: message.into(), actor: None, details: None }
     }
 
     pub fn target(mut self, identity: impl Into<String>, name: impl Into<String>) -> Self {
@@ -132,8 +124,7 @@ impl ActivityLog {
         let ts = crate::util::now();
         let details = entry.details.as_ref().map(|d| d.to_string());
         let (kind, severity) = (entry.kind, entry.severity);
-        let (target, target_name, message) =
-            (entry.target.clone(), entry.target_name.clone(), entry.message.clone());
+        let (target, target_name, message) = (entry.target.clone(), entry.target_name.clone(), entry.message.clone());
         let actor = entry.actor.as_ref().map(|a| a.0.clone());
         let actor_db = actor.clone();
         let id = self
@@ -244,40 +235,20 @@ mod tests {
         )
         .await
         .unwrap();
-        log.record(NewActivity::new("backup.failed", Severity::Error, "Backup failed"))
-            .await
-            .unwrap();
+        log.record(NewActivity::new("backup.failed", Severity::Error, "Backup failed")).await.unwrap();
 
         let all = log.list(ActivityQuery::default()).await.unwrap();
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].kind, "backup.failed");
 
-        let updates = log
-            .list(ActivityQuery {
-                kind: Some("update".into()),
-                ..Default::default()
-            })
-            .await
-            .unwrap();
+        let updates = log.list(ActivityQuery { kind: Some("update".into()), ..Default::default() }).await.unwrap();
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].actor.as_deref(), Some("user:jake"));
 
-        let errors = log
-            .list(ActivityQuery {
-                severity: Some(Severity::Error),
-                ..Default::default()
-            })
-            .await
-            .unwrap();
+        let errors = log.list(ActivityQuery { severity: Some(Severity::Error), ..Default::default() }).await.unwrap();
         assert_eq!(errors.len(), 1);
 
-        let searched = log
-            .list(ActivityQuery {
-                search: Some("sonarr".into()),
-                ..Default::default()
-            })
-            .await
-            .unwrap();
+        let searched = log.list(ActivityQuery { search: Some("sonarr".into()), ..Default::default() }).await.unwrap();
         assert_eq!(searched.len(), 1);
     }
 }

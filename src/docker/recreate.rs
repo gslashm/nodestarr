@@ -17,8 +17,8 @@ use std::collections::{HashMap, HashSet};
 
 use bollard::Docker;
 use bollard::models::{
-    ContainerCreateBody, ContainerInspectResponse, EndpointSettings, HostConfig, ImageConfig, Mount,
-    MountType, NetworkConnectRequest, NetworkingConfig,
+    ContainerCreateBody, ContainerInspectResponse, EndpointSettings, HostConfig, ImageConfig, Mount, MountType,
+    NetworkConnectRequest, NetworkingConfig,
 };
 use bollard::query_parameters::{CreateContainerOptions, InspectContainerOptions};
 
@@ -51,46 +51,23 @@ pub fn body_from_inspect(
     let id = inspect.id.clone().unwrap_or_default();
 
     let image_env: HashSet<&String> = img.env.iter().flatten().collect();
-    let env: Vec<String> = cfg
-        .env
-        .iter()
-        .flatten()
-        .filter(|e| !image_env.contains(e))
-        .cloned()
-        .collect();
+    let env: Vec<String> = cfg.env.iter().flatten().filter(|e| !image_env.contains(e)).cloned().collect();
 
     let image_labels = img.labels.clone().unwrap_or_default();
-    let labels: HashMap<String, String> = cfg
-        .labels
-        .clone()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|(k, v)| image_labels.get(k) != Some(v))
-        .collect();
+    let labels: HashMap<String, String> =
+        cfg.labels.clone().unwrap_or_default().into_iter().filter(|(k, v)| image_labels.get(k) != Some(v)).collect();
 
     let image_ports: HashSet<&String> = img.exposed_ports.iter().flatten().collect();
-    let exposed: Vec<String> = cfg
-        .exposed_ports
-        .iter()
-        .flatten()
-        .filter(|p| !image_ports.contains(p))
-        .cloned()
-        .collect();
+    let exposed: Vec<String> =
+        cfg.exposed_ports.iter().flatten().filter(|p| !image_ports.contains(p)).cloned().collect();
 
     let same = |a: &Option<Vec<String>>, b: &Option<Vec<String>>| {
         a.as_deref().unwrap_or_default() == b.as_deref().unwrap_or_default()
     };
     let cmd = if same(&cfg.cmd, &img.cmd) { None } else { cfg.cmd.clone() };
-    let entrypoint = if same(&cfg.entrypoint, &img.entrypoint) {
-        None
-    } else {
-        cfg.entrypoint.clone()
-    };
+    let entrypoint = if same(&cfg.entrypoint, &img.entrypoint) { None } else { cfg.entrypoint.clone() };
     let user = cfg.user.clone().filter(|u| !u.is_empty() && Some(u) != img.user.as_ref());
-    let working_dir = cfg
-        .working_dir
-        .clone()
-        .filter(|w| !w.is_empty() && Some(w) != img.working_dir.as_ref());
+    let working_dir = cfg.working_dir.clone().filter(|w| !w.is_empty() && Some(w) != img.working_dir.as_ref());
     let healthcheck = if cfg.healthcheck == img.healthcheck { None } else { cfg.healthcheck.clone() };
     let stop_signal = cfg.stop_signal.clone().filter(|s| Some(s) != img.stop_signal.as_ref());
     // Docker defaults the hostname to the short container id; don't pin it.
@@ -99,9 +76,8 @@ pub fn body_from_inspect(
     let mut host = inspect.host_config.clone().unwrap_or_default();
     reattach_anonymous_volumes(inspect, &mut host);
 
-    let networking_config = endpoints_for_create(inspect, &host).map(|(name, ep)| NetworkingConfig {
-        endpoints_config: Some(HashMap::from([(name, ep)])),
-    });
+    let networking_config = endpoints_for_create(inspect, &host)
+        .map(|(name, ep)| NetworkingConfig { endpoints_config: Some(HashMap::from([(name, ep)])) });
 
     ContainerCreateBody {
         hostname,
@@ -183,13 +159,8 @@ fn endpoints_for_create(inspect: &ContainerInspectResponse, host: &HostConfig) -
 fn endpoint_config(inspect: &ContainerInspectResponse, ep: &EndpointSettings) -> EndpointSettings {
     let id = inspect.id.clone().unwrap_or_default();
     let name = inspect.name.clone().unwrap_or_default().trim_start_matches('/').to_string();
-    let aliases: Vec<String> = ep
-        .aliases
-        .iter()
-        .flatten()
-        .filter(|a| !id.starts_with(a.as_str()) && **a != name)
-        .cloned()
-        .collect();
+    let aliases: Vec<String> =
+        ep.aliases.iter().flatten().filter(|a| !id.starts_with(a.as_str()) && **a != name).cloned().collect();
     EndpointSettings {
         ipam_config: ep.ipam_config.clone(),
         links: ep.links.clone(),
@@ -225,15 +196,8 @@ pub async fn replace(
     log: &(dyn Fn(String) + Send + Sync),
 ) -> Result<Recreation> {
     let inspect = api.inspect_container(container, None::<InspectContainerOptions>).await?;
-    if inspect
-        .host_config
-        .as_ref()
-        .and_then(|h| h.auto_remove)
-        .unwrap_or(false)
-    {
-        return Err(AppError::conflict(
-            "this container was started with --rm and cannot be recreated",
-        ));
+    if inspect.host_config.as_ref().and_then(|h| h.auto_remove).unwrap_or(false) {
+        return Err(AppError::conflict("this container was started with --rm and cannot be recreated"));
     }
     let old_id = inspect.id.clone().unwrap_or_default();
     let name = inspect.name.clone().unwrap_or_default().trim_start_matches('/').to_string();
@@ -255,13 +219,7 @@ pub async fn replace(
     let created = async {
         log(format!("Creating new container {name}"));
         let resp = api
-            .create_container(
-                Some(CreateContainerOptions {
-                    name: Some(name.clone()),
-                    platform: String::new(),
-                }),
-                body,
-            )
+            .create_container(Some(CreateContainerOptions { name: Some(name.clone()), platform: String::new() }), body)
             .await?;
         for w in &resp.warnings {
             log(format!("Docker warning: {w}"));
@@ -271,10 +229,7 @@ pub async fn replace(
             log(format!("Connecting to network {net}"));
             api.connect_network(
                 net,
-                NetworkConnectRequest {
-                    container: new_id.clone(),
-                    endpoint_config: Some(ep.clone()),
-                },
+                NetworkConnectRequest { container: new_id.clone(), endpoint_config: Some(ep.clone()) },
             )
             .await?;
         }
@@ -287,13 +242,7 @@ pub async fn replace(
     .await;
 
     match created {
-        Ok(new_id) => Ok(Recreation {
-            name,
-            old_id,
-            old_temp_name: temp_name,
-            new_id,
-            was_running,
-        }),
+        Ok(new_id) => Ok(Recreation { name, old_id, old_temp_name: temp_name, new_id, was_running }),
         Err(err) => {
             log(format!("Creating the new container failed: {err}; restoring the original"));
             // Remove a half-created container holding the name, if any.
@@ -393,10 +342,7 @@ mod tests {
                     ..Default::default()
                 },
             ]),
-            network_settings: Some(NetworkSettings {
-                networks: Some(networks),
-                ..Default::default()
-            }),
+            network_settings: Some(NetworkSettings { networks: Some(networks), ..Default::default() }),
             ..Default::default()
         }
     }

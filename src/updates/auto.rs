@@ -41,10 +41,7 @@ pub fn decide(
     // A newer version tag within the allowed scope takes precedence.
     if let Some(newer) = &info.newer_tag {
         if scope != TagScope::Digest && newer.scope <= scope {
-            return Decision::Update(UpdateRequest {
-                tag: Some(newer.tag.clone()),
-                skip_backup: false,
-            });
+            return Decision::Update(UpdateRequest { tag: Some(newer.tag.clone()), skip_backup: false });
         }
     }
     let digest_update = info.digest_changed() || info.status == UpdateStatus::PendingRecreate;
@@ -105,7 +102,9 @@ pub async fn run(app: &App) {
                 continue;
             }
         };
-        if settings.updates.plex_guard && s.app.as_deref().and_then(crate::docker::apps::by_slug).is_some_and(|a| a.streaming_server) {
+        if settings.updates.plex_guard
+            && s.app.as_deref().and_then(crate::docker::apps::by_slug).is_some_and(|a| a.streaming_server)
+        {
             if let Some(n) = crate::integrations::active_streams(app).await.filter(|n| *n > 0) {
                 deferred.push(format!("{name} ({n} active stream{})", if n == 1 { "" } else { "s" }));
                 continue;
@@ -153,7 +152,8 @@ pub async fn run(app: &App) {
             .details(json!({ "updated": updated, "failed": failed, "deferred": deferred })),
     )
     .await;
-    app.notifier.send(Notification::new("update.auto_summary", severity, "Automatic updates", message).link(app, "/updates"));
+    app.notifier
+        .send(Notification::new("update.auto_summary", severity, "Automatic updates", message).link(app, "/updates"));
 }
 
 /// Image references that are safe for automatic tag bumps (never digests).
@@ -180,7 +180,10 @@ mod tests {
     fn decisions() {
         let now = 1_000_000;
         let avail = info(UpdateStatus::Available, "a", "b", now - 10 * 3600);
-        assert_eq!(decide(UpdatePolicy::Notify, TagScope::Digest, false, "", 0, &avail, now), Decision::Skip("policy is not auto".into()));
+        assert_eq!(
+            decide(UpdatePolicy::Notify, TagScope::Digest, false, "", 0, &avail, now),
+            Decision::Skip("policy is not auto".into())
+        );
         assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Digest, false, "", 6, &avail, now), Decision::Update(_)));
         assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Digest, false, "", 24, &avail, now), Decision::Skip(_)));
         assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Digest, false, "b", 0, &avail, now), Decision::Skip(_)));

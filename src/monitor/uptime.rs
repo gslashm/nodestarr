@@ -112,12 +112,7 @@ impl UptimeService {
     }
 
     pub fn by_identity(&self) -> HashMap<String, UptimeStatus> {
-        self.inner
-            .states
-            .read()
-            .values()
-            .filter_map(|(s, _)| s.identity.clone().map(|i| (i, s.clone())))
-            .collect()
+        self.inner.states.read().values().filter_map(|(s, _)| s.identity.clone().map(|i| (i, s.clone()))).collect()
     }
 }
 
@@ -128,7 +123,11 @@ pub fn check_for(app: &App, entry: &Entry) -> Option<Check> {
     if prefs.uptime.enabled == Some(false) {
         return None;
     }
-    let expect_spec = if prefs.uptime.expect_status.is_empty() { settings.uptime.expect_status.clone() } else { prefs.uptime.expect_status.clone() };
+    let expect_spec = if prefs.uptime.expect_status.is_empty() {
+        settings.uptime.expect_status.clone()
+    } else {
+        prefs.uptime.expect_status.clone()
+    };
     let expect = parse_status_ranges(&expect_spec).unwrap_or_default();
     let name = crate::updates::check::display_name(app, entry);
     let url = if !prefs.uptime.url.is_empty() {
@@ -184,12 +183,22 @@ pub async fn probe(app: &App, check: &Check) -> ProbeResult {
                 check.expect.iter().any(|(a, b)| status >= *a && status <= *b)
             };
             if !status_ok {
-                return ProbeResult { ok: false, latency_ms, status: Some(status), error: Some(format!("HTTP {status}")) };
+                return ProbeResult {
+                    ok: false,
+                    latency_ms,
+                    status: Some(status),
+                    error: Some(format!("HTTP {status}")),
+                };
             }
             if !check.keyword.is_empty() {
                 let body = resp.text().await.unwrap_or_default();
                 if !body.contains(&check.keyword) {
-                    return ProbeResult { ok: false, latency_ms, status: Some(status), error: Some(format!("'{}' not found in the page", check.keyword)) };
+                    return ProbeResult {
+                        ok: false,
+                        latency_ms,
+                        status: Some(status),
+                        error: Some(format!("'{}' not found in the page", check.keyword)),
+                    };
                 }
             }
             ProbeResult { ok: true, latency_ms, status: Some(status), error: None }
@@ -229,7 +238,8 @@ fn all_checks(app: &App) -> Vec<(Check, bool)> {
 }
 
 async fn record(db: &Db, check_id: &str, ts: i64, r: &ProbeResult) -> Result<()> {
-    let (id, ok, lat, st, err) = (check_id.to_string(), r.ok, r.latency_ms as i64, r.status.map(|s| s as i64), r.error.clone());
+    let (id, ok, lat, st, err) =
+        (check_id.to_string(), r.ok, r.latency_ms as i64, r.status.map(|s| s as i64), r.error.clone());
     db.call(move |c| {
         let hour = ts - ts % 3600;
         c.execute(
@@ -267,9 +277,15 @@ pub async fn beats(app: &App, check_id: &str, since: i64) -> Result<Vec<Beat>> {
     let id = check_id.to_string();
     app.db
         .call(move |c| {
-            let mut stmt = c.prepare("SELECT ts, ok, latency_ms FROM uptime_results WHERE check_id = ?1 AND ts >= ?2 ORDER BY ts")?;
+            let mut stmt = c.prepare(
+                "SELECT ts, ok, latency_ms FROM uptime_results WHERE check_id = ?1 AND ts >= ?2 ORDER BY ts",
+            )?;
             let rows = stmt.query_map(params![id, since], |r| {
-                Ok(Beat { ts: r.get(0)?, ok: r.get::<_, i64>(1)? != 0, latency_ms: r.get::<_, Option<i64>>(2)?.unwrap_or(0) as u64 })
+                Ok(Beat {
+                    ts: r.get(0)?,
+                    ok: r.get::<_, i64>(1)? != 0,
+                    latency_ms: r.get::<_, Option<i64>>(2)?.unwrap_or(0) as u64,
+                })
             })?;
             Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
         })
@@ -398,20 +414,38 @@ async fn run_once(app: &App) {
             let identity = check.identity.clone().unwrap_or_default();
             match (old_state.as_str(), status.state.as_str()) {
                 (_, "down") => app.notifier.send(
-                    Notification::new("uptime.down", Severity::Error, format!("{} is not answering", check.name), status.error.clone().unwrap_or_default())
-                        .target(&identity, &check.name)
-                        .field("URL", crate::util::redact_url(&check.url)),
+                    Notification::new(
+                        "uptime.down",
+                        Severity::Error,
+                        format!("{} is not answering", check.name),
+                        status.error.clone().unwrap_or_default(),
+                    )
+                    .target(&identity, &check.name)
+                    .field("URL", crate::util::redact_url(&check.url)),
                 ),
                 ("down", "up") => app.notifier.send(
-                    Notification::new("uptime.up", Severity::Success, format!("{} is answering again", check.name), format!("Responded in {} ms", status.latency_ms.unwrap_or(0)))
-                        .target(&identity, &check.name),
+                    Notification::new(
+                        "uptime.up",
+                        Severity::Success,
+                        format!("{} is answering again", check.name),
+                        format!("Responded in {} ms", status.latency_ms.unwrap_or(0)),
+                    )
+                    .target(&identity, &check.name),
                 ),
                 _ => {}
             }
             if status.state == "down" || old_state == "down" {
                 let kind: &'static str = if status.state == "down" { "uptime.down" } else { "uptime.up" };
                 let sev = if status.state == "down" { Severity::Error } else { Severity::Success };
-                let mut entry = crate::activity::NewActivity::new(kind, sev, format!("{}: web UI {}", check.name, if status.state == "down" { "not answering" } else { "answering again" }));
+                let mut entry = crate::activity::NewActivity::new(
+                    kind,
+                    sev,
+                    format!(
+                        "{}: web UI {}",
+                        check.name,
+                        if status.state == "down" { "not answering" } else { "answering again" }
+                    ),
+                );
                 if let Some(id) = &check.identity {
                     entry = entry.target(id, &check.name);
                 }

@@ -79,11 +79,7 @@ impl Principal {
     }
 
     pub fn require_admin(&self) -> Result<()> {
-        if self.is_admin() {
-            Ok(())
-        } else {
-            Err(AppError::forbidden("this needs an admin account"))
-        }
+        if self.is_admin() { Ok(()) } else { Err(AppError::forbidden("this needs an admin account")) }
     }
 }
 
@@ -190,7 +186,9 @@ impl AuthService {
             AuthVia::ApiKey => {
                 let Some(id) = p.key_id else { return false };
                 self.db
-                    .call(move |c| Ok(c.query_row("SELECT 1 FROM api_keys WHERE id = ?1", [id], |_| Ok(())).optional()?))
+                    .call(move |c| {
+                        Ok(c.query_row("SELECT 1 FROM api_keys WHERE id = ?1", [id], |_| Ok(())).optional()?)
+                    })
                     .await
                     .is_ok_and(|r| r.is_some())
             }
@@ -224,9 +222,7 @@ impl AuthService {
     }
 
     pub async fn user_count(&self) -> Result<i64> {
-        self.db
-            .call(|c| Ok(c.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))?))
-            .await
+        self.db.call(|c| Ok(c.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))?)).await
     }
 
     pub fn setup_code(&self) -> Option<String> {
@@ -302,11 +298,8 @@ impl AuthService {
     pub async fn delete_user(&self, id: i64) -> Result<()> {
         self.db
             .call(move |c| {
-                let admins: i64 = c.query_row(
-                    "SELECT COUNT(*) FROM users WHERE role = 'admin' AND id != ?1",
-                    [id],
-                    |r| r.get(0),
-                )?;
+                let admins: i64 =
+                    c.query_row("SELECT COUNT(*) FROM users WHERE role = 'admin' AND id != ?1", [id], |r| r.get(0))?;
                 if admins == 0 {
                     return Err(AppError::conflict("can't delete the last admin"));
                 }
@@ -322,11 +315,10 @@ impl AuthService {
         self.db
             .call(move |c| {
                 if role == Role::Viewer {
-                    let others: i64 = c.query_row(
-                        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND id != ?1",
-                        [id],
-                        |r| r.get(0),
-                    )?;
+                    let others: i64 =
+                        c.query_row("SELECT COUNT(*) FROM users WHERE role = 'admin' AND id != ?1", [id], |r| {
+                            r.get(0)
+                        })?;
                     if others == 0 {
                         return Err(AppError::conflict("at least one admin is required"));
                     }
@@ -373,7 +365,14 @@ impl AuthService {
     }
 
     /// Verifies a username and password, creating a session.
-    pub async fn login(&self, username: &str, pw: &str, remember: bool, ip: IpAddr, user_agent: Option<String>) -> Result<LoginResult> {
+    pub async fn login(
+        &self,
+        username: &str,
+        pw: &str,
+        remember: bool,
+        ip: IpAddr,
+        user_agent: Option<String>,
+    ) -> Result<LoginResult> {
         if self.too_many(ip, false) {
             return Err(AppError::RateLimited);
         }
@@ -648,7 +647,10 @@ impl AuthService {
         let json = serde_json::to_string(&hashes)?;
         self.db
             .call(move |c| {
-                c.execute("UPDATE users SET totp_enabled = 1, recovery_codes = ?1 WHERE id = ?2", params![json, user_id])?;
+                c.execute(
+                    "UPDATE users SET totp_enabled = 1, recovery_codes = ?1 WHERE id = ?2",
+                    params![json, user_id],
+                )?;
                 Ok(())
             })
             .await?;
@@ -689,23 +691,15 @@ impl AuthService {
                 Ok(c.last_insert_rowid())
             })
             .await?;
-        Ok((
-            key,
-            ApiKeyInfo {
-                id,
-                name,
-                prefix,
-                role,
-                created_at: now,
-                last_used_at: None,
-            },
-        ))
+        Ok((key, ApiKeyInfo { id, name, prefix, role, created_at: now, last_used_at: None }))
     }
 
     pub async fn api_keys(&self) -> Result<Vec<ApiKeyInfo>> {
         self.db
             .call(|c| {
-                let mut stmt = c.prepare("SELECT id, name, prefix, role, created_at, last_used_at FROM api_keys ORDER BY created_at")?;
+                let mut stmt = c.prepare(
+                    "SELECT id, name, prefix, role, created_at, last_used_at FROM api_keys ORDER BY created_at",
+                )?;
                 let rows = stmt.query_map([], |r| {
                     Ok(ApiKeyInfo {
                         id: r.get(0)?,
@@ -741,11 +735,9 @@ impl AuthService {
         self.db
             .call(move |c| {
                 let row: Option<(i64, String, String, Option<i64>)> = c
-                    .query_row(
-                        "SELECT id, name, role, last_used_at FROM api_keys WHERE key_hash = ?1",
-                        [&hash],
-                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-                    )
+                    .query_row("SELECT id, name, role, last_used_at FROM api_keys WHERE key_hash = ?1", [&hash], |r| {
+                        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                    })
                     .optional()?;
                 let Some((id, name, role, last)) = row else { return Ok(None) };
                 if last.is_none_or(|l| now - l > 300) {
@@ -772,8 +764,15 @@ pub async fn bootstrap_admin(app: &App) -> Result<()> {
     if let (Some(user), Some(pass)) = (&app.boot.admin_user, &app.boot.admin_password) {
         app.auth.create_user(user, pass, Role::Admin).await?;
         tracing::info!(user = %user, "created admin user from NODESTARR_ADMIN_USER");
-        app.note(NewActivity::new("security.user_created", Severity::Info, format!("Admin '{user}' created from environment")).actor(&Actor::system()))
-            .await;
+        app.note(
+            NewActivity::new(
+                "security.user_created",
+                Severity::Info,
+                format!("Admin '{user}' created from environment"),
+            )
+            .actor(&Actor::system()),
+        )
+        .await;
         return Ok(());
     }
     let raw = crate::util::random_token(6).to_ascii_uppercase().replace(['-', '_'], "X");
@@ -791,15 +790,19 @@ pub async fn complete_setup(app: &App, username: &str, password: &str, code: &st
     if app.auth.user_count().await? > 0 {
         return Err(AppError::conflict("setup was already completed"));
     }
-    let expected = app.auth.setup_code().ok_or_else(|| AppError::conflict("no setup in progress; restart Nodestarr"))?;
+    let expected =
+        app.auth.setup_code().ok_or_else(|| AppError::conflict("no setup in progress; restart Nodestarr"))?;
     let normalize = |s: &str| s.trim().to_ascii_uppercase().replace(' ', "");
     if !crate::util::ct_eq(normalize(code).as_bytes(), normalize(&expected).as_bytes()) {
         return Err(AppError::bad_request("the setup code is wrong (find it in Nodestarr's logs)"));
     }
     app.auth.create_user(username, password, Role::Admin).await?;
     *app.auth.inner.setup_code.lock() = None;
-    app.note(NewActivity::new("security.user_created", Severity::Info, format!("Admin '{username}' created during setup")).actor(&Actor::system()))
-        .await;
+    app.note(
+        NewActivity::new("security.user_created", Severity::Info, format!("Admin '{username}' created during setup"))
+            .actor(&Actor::system()),
+    )
+    .await;
     Ok(())
 }
 
@@ -819,7 +822,8 @@ mod tests {
         auth.create_user("jake", "correct horse", Role::Admin).await.unwrap();
         assert!(auth.create_user("JAKE", "another one", Role::Admin).await.is_err(), "usernames are case-insensitive");
         let ip: IpAddr = "192.168.1.50".parse().unwrap();
-        let LoginResult::Session { token, mfa_required, .. } = auth.login("jake", "correct horse", false, ip, None).await.unwrap();
+        let LoginResult::Session { token, mfa_required, .. } =
+            auth.login("jake", "correct horse", false, ip, None).await.unwrap();
         assert!(!mfa_required);
         let (p, pending) = auth.session_principal(&token).await.unwrap().unwrap();
         assert_eq!(p.username, "jake");
@@ -845,7 +849,8 @@ mod tests {
         assert_eq!(recovery.len(), 10);
 
         let ip: IpAddr = "192.168.1.50".parse().unwrap();
-        let LoginResult::Session { token, mfa_required, .. } = auth.login("jake", "correct horse", true, ip, None).await.unwrap();
+        let LoginResult::Session { token, mfa_required, .. } =
+            auth.login("jake", "correct horse", true, ip, None).await.unwrap();
         assert!(mfa_required);
         let (_, pending) = auth.session_principal(&token).await.unwrap().unwrap();
         assert!(pending);

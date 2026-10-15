@@ -133,19 +133,10 @@ impl DockerService {
 
     /// All containers, sorted by stack then name.
     pub fn list(&self) -> Vec<Arc<ContainerSummary>> {
-        let mut v: Vec<Arc<ContainerSummary>> = self
-            .inner
-            .containers
-            .read()
-            .values()
-            .map(|e| e.summary.clone())
-            .collect();
+        let mut v: Vec<Arc<ContainerSummary>> =
+            self.inner.containers.read().values().map(|e| e.summary.clone()).collect();
         v.sort_by(|a, b| {
-            a.stack
-                .as_deref()
-                .unwrap_or("~")
-                .cmp(b.stack.as_deref().unwrap_or("~"))
-                .then_with(|| a.name.cmp(&b.name))
+            a.stack.as_deref().unwrap_or("~").cmp(b.stack.as_deref().unwrap_or("~")).then_with(|| a.name.cmp(&b.name))
         });
         v
     }
@@ -175,23 +166,12 @@ impl DockerService {
 
     /// Finds the container currently holding an identity.
     pub fn by_identity(&self, identity: &str) -> Option<Arc<Entry>> {
-        self.inner
-            .containers
-            .read()
-            .values()
-            .find(|e| e.summary.identity == identity)
-            .cloned()
+        self.inner.containers.read().values().find(|e| e.summary.identity == identity).cloned()
     }
 
     /// Containers in a compose project.
     pub fn in_stack(&self, project: &str) -> Vec<Arc<Entry>> {
-        self.inner
-            .containers
-            .read()
-            .values()
-            .filter(|e| e.summary.stack.as_deref() == Some(project))
-            .cloned()
-            .collect()
+        self.inner.containers.read().values().filter(|e| e.summary.stack.as_deref() == Some(project)).cloned().collect()
     }
 
     /// The host shown in quick links.
@@ -253,10 +233,7 @@ impl DockerService {
         })?;
         let id = summary.id.clone();
         let changed;
-        let entry = Arc::new(Entry {
-            summary: Arc::new(summary),
-            inspect: Arc::new(inspect),
-        });
+        let entry = Arc::new(Entry { summary: Arc::new(summary), inspect: Arc::new(inspect) });
         {
             let mut map = self.inner.containers.write();
             changed = map.get(&id).is_none_or(|old| old.summary != entry.summary);
@@ -280,22 +257,15 @@ impl DockerService {
             }
         };
         if let Some(e) = removed {
-            self.inner.bus.publish(Event::ContainerRemoved {
-                id: e.summary.id.clone(),
-                identity: e.summary.identity.clone(),
-            });
+            self.inner
+                .bus
+                .publish(Event::ContainerRemoved { id: e.summary.id.clone(), identity: e.summary.identity.clone() });
         }
     }
 
     /// Lists and inspects every container, replacing the inventory.
     pub async fn full_sync(&self) -> anyhow::Result<()> {
-        let list = self
-            .api
-            .list_containers(Some(ListContainersOptions {
-                all: true,
-                ..Default::default()
-            }))
-            .await?;
+        let list = self.api.list_containers(Some(ListContainersOptions { all: true, ..Default::default() })).await?;
         let ids: Vec<String> = list.into_iter().filter_map(|c| c.id).collect();
         let seen: HashSet<String> = ids.iter().cloned().collect();
         let this = self.clone();
@@ -307,14 +277,7 @@ impl DockerService {
             .buffer_unordered(8)
             .collect::<Vec<_>>()
             .await;
-        let stale: Vec<String> = self
-            .inner
-            .containers
-            .read()
-            .keys()
-            .filter(|k| !seen.contains(*k))
-            .cloned()
-            .collect();
+        let stale: Vec<String> = self.inner.containers.read().keys().filter(|k| !seen.contains(*k)).cloned().collect();
         for id in stale {
             self.remove(&id);
         }
@@ -378,11 +341,8 @@ impl DockerService {
         let mut filters = HashMap::new();
         filters.insert("type".to_string(), vec!["container".to_string(), "image".to_string()]);
         let since = (crate::util::now() - 2).to_string();
-        let mut events = self.api.events(Some(EventsOptions {
-            since: Some(since),
-            until: None,
-            filters: Some(filters),
-        }));
+        let mut events =
+            self.api.events(Some(EventsOptions { since: Some(since), until: None, filters: Some(filters) }));
         let resync_every = Duration::from_secs(self.inner.settings.get().docker.resync_secs.max(60) as u64);
         let mut resync = tokio::time::interval(resync_every);
         resync.tick().await;
@@ -420,7 +380,12 @@ impl DockerService {
         match ev.typ {
             Some(EventMessageTypeEnum::CONTAINER) => {
                 // Health checks run as execs; ignore their noise.
-                if action.starts_with("exec_") || action == "top" || action.starts_with("archive-path") || action == "attach" || action == "resize" {
+                if action.starts_with("exec_")
+                    || action == "top"
+                    || action.starts_with("archive-path")
+                    || action == "attach"
+                    || action == "resize"
+                {
                     return;
                 }
                 let name = attrs.get("name").cloned().unwrap_or_default();

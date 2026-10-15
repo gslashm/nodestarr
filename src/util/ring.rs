@@ -10,10 +10,7 @@ pub struct Ring<T> {
 
 impl<T> Ring<T> {
     pub fn new(cap: usize) -> Self {
-        Self {
-            items: VecDeque::with_capacity(cap.min(1024)),
-            cap: cap.max(1),
-        }
+        Self { items: VecDeque::with_capacity(cap.min(1024)), cap: cap.max(1) }
     }
 
     pub fn push(&mut self, item: T) {

@@ -69,12 +69,7 @@ where
         .map_err(|e| AppError::Docker(e.to_string()))?;
     let resp = sender.send_request(req).await.map_err(|e| AppError::Docker(e.to_string()))?;
     let status = resp.status();
-    let body = resp
-        .into_body()
-        .collect()
-        .await
-        .map_err(|e| AppError::Docker(e.to_string()))?
-        .to_bytes();
+    let body = resp.into_body().collect().await.map_err(|e| AppError::Docker(e.to_string()))?.to_bytes();
     Ok((status, body))
 }
 

@@ -447,9 +447,8 @@ mod tests {
         let globs = build_globs(&["MediaCover/**".into(), "logs/**".into()]);
         let mut w = ArchiveWriter::create(&archive_path, Compression::Zstd, 3).unwrap();
         let mut warnings = Vec::new();
-        let stats = w
-            .add_dir(src.path(), "files/0/", &globs, &CancellationToken::new(), &mut |m| warnings.push(m))
-            .unwrap();
+        let stats =
+            w.add_dir(src.path(), "files/0/", &globs, &CancellationToken::new(), &mut |m| warnings.push(m)).unwrap();
         w.add_bytes(MANIFEST_NAME, br#"{"version":1}"#).unwrap();
         w.finish().unwrap();
         assert_eq!(stats.files, 2);

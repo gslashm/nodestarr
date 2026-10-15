@@ -381,19 +381,8 @@ impl Default for Backups {
             zstd_level: 3,
             default_strategy: BackupStrategy::Auto,
             include_compose: true,
-            data_roots: vec![
-                "/data".into(),
-                "/mnt".into(),
-                "/media".into(),
-                "/srv".into(),
-                "/downloads".into(),
-            ],
-            exclude: vec![
-                "**/*.log".into(),
-                "**/*.log.[0-9]*".into(),
-                "**/logs/*.txt".into(),
-                "**/.cache/**".into(),
-            ],
+            data_roots: vec!["/data".into(), "/mnt".into(), "/media".into(), "/srv".into(), "/downloads".into()],
+            exclude: vec!["**/*.log".into(), "**/*.log.[0-9]*".into(), "**/logs/*.txt".into(), "**/.cache/**".into()],
             hook: BackupHook::default(),
         }
     }
@@ -549,12 +538,7 @@ pub struct QuietHours {
 
 impl Default for QuietHours {
     fn default() -> Self {
-        Self {
-            enabled: false,
-            start: "23:00".into(),
-            end: "07:30".into(),
-            allow_errors: true,
-        }
+        Self { enabled: false, start: "23:00".into(), end: "07:30".into(), allow_errors: true }
     }
 }
 
@@ -569,11 +553,7 @@ pub struct Notifications {
 
 impl Default for Notifications {
     fn default() -> Self {
-        Self {
-            providers: Vec::new(),
-            quiet_hours: QuietHours::default(),
-            dedup_minutes: 30,
-        }
+        Self { providers: Vec::new(), quiet_hours: QuietHours::default(), dedup_minutes: 30 }
     }
 }
 
@@ -989,19 +969,13 @@ impl Settings {
     /// The configured time zone, falling back to $TZ and then UTC.
     pub fn tz(&self) -> chrono_tz::Tz {
         let from_setting = self.general.timezone.parse::<chrono_tz::Tz>().ok();
-        from_setting
-            .or_else(|| std::env::var("TZ").ok().and_then(|t| t.parse().ok()))
-            .unwrap_or(chrono_tz::UTC)
+        from_setting.or_else(|| std::env::var("TZ").ok().and_then(|t| t.parse().ok())).unwrap_or(chrono_tz::UTC)
     }
 }
 
 fn validate_provider(p: &NotificationProvider) -> Result<(), String> {
     let need = |v: &str, what: &str| {
-        if v.trim().is_empty() {
-            Err(format!("{}: {what} is required", p.name))
-        } else {
-            Ok(())
-        }
+        if v.trim().is_empty() { Err(format!("{}: {what} is required", p.name)) } else { Ok(()) }
     };
     let need_url = |v: &str, what: &str| -> Result<(), String> {
         need(v, what)?;
@@ -1070,8 +1044,7 @@ mod tests {
         let s: Settings = serde_json::from_str("{}").unwrap();
         assert_eq!(s.general.instance_name, "Nodestarr");
         assert_eq!(s.docker.stacks_dirs, vec!["/opt/stacks".to_string()]);
-        let partial: Settings =
-            serde_json::from_str(r#"{"updates": {"min_age_hours": 0}}"#).unwrap();
+        let partial: Settings = serde_json::from_str(r#"{"updates": {"min_age_hours": 0}}"#).unwrap();
         assert_eq!(partial.updates.min_age_hours, 0);
         assert_eq!(partial.updates.keep_rollback_images, 2);
     }

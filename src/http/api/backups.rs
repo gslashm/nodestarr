@@ -140,7 +140,12 @@ async fn contents(State(app): State<App>, Path(id): Path<String>) -> Result<Json
     })))
 }
 
-async fn restore(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>, body: Option<Json<crate::backups::restore::RestoreOptions>>) -> Result<Json<Value>> {
+async fn restore(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(id): Path<String>,
+    body: Option<Json<crate::backups::restore::RestoreOptions>>,
+) -> Result<Json<Value>> {
     p.require_admin()?;
     let opts = body.map(|Json(b)| b).unwrap_or_default();
     let task = crate::backups::restore::start_restore(&app, &id, opts, &p.actor()).await?;

@@ -122,12 +122,10 @@ impl ContainerSummary {
 /// Computes the stable identity for a container.
 pub fn identity_for(labels: &std::collections::HashMap<String, String>, name: &str) -> String {
     match (labels.get(LABEL_PROJECT), labels.get(LABEL_SERVICE)) {
-        (Some(project), Some(service)) => {
-            match labels.get(LABEL_CONTAINER_NUMBER).map(String::as_str) {
-                Some(n) if n != "1" && !n.is_empty() => format!("compose:{project}/{service}#{n}"),
-                _ => format!("compose:{project}/{service}"),
-            }
-        }
+        (Some(project), Some(service)) => match labels.get(LABEL_CONTAINER_NUMBER).map(String::as_str) {
+            Some(n) if n != "1" && !n.is_empty() => format!("compose:{project}/{service}#{n}"),
+            _ => format!("compose:{project}/{service}"),
+        },
         _ => format!("container:{name}"),
     }
 }
@@ -143,12 +141,7 @@ pub struct SummaryInput<'a> {
 pub fn summarize(input: SummaryInput<'_>) -> Option<ContainerSummary> {
     let inspect = input.inspect;
     let id = inspect.id.clone()?;
-    let name = inspect
-        .name
-        .as_deref()
-        .unwrap_or_default()
-        .trim_start_matches('/')
-        .to_string();
+    let name = inspect.name.as_deref().unwrap_or_default().trim_start_matches('/').to_string();
     let config = inspect.config.as_ref();
     let labels = config.and_then(|c| c.labels.clone()).unwrap_or_default();
     let identity = identity_for(&labels, &name);
@@ -158,11 +151,7 @@ pub fn summarize(input: SummaryInput<'_>) -> Option<ContainerSummary> {
     let image_id = inspect.image.clone().unwrap_or_default();
 
     let state = inspect.state.as_ref();
-    let state_str = state
-        .and_then(|s| s.status)
-        .map(state_name)
-        .unwrap_or("unknown")
-        .to_string();
+    let state_str = state.and_then(|s| s.status).map(state_name).unwrap_or("unknown").to_string();
     let health = state
         .and_then(|s| s.health.as_ref())
         .and_then(|h| h.status)
@@ -174,22 +163,12 @@ pub fn summarize(input: SummaryInput<'_>) -> Option<ContainerSummary> {
         })
         .map(str::to_string);
     let exit_code = state.and_then(|s| s.exit_code);
-    let started_at = state
-        .and_then(|s| s.started_at.as_deref())
-        .and_then(crate::util::parse_rfc3339);
-    let finished_at = state
-        .and_then(|s| s.finished_at.as_deref())
-        .and_then(crate::util::parse_rfc3339);
-    let created = inspect
-        .created
-        .as_ref()
-        .and_then(|d| crate::util::parse_rfc3339(&d.to_string()))
-        .unwrap_or(0);
+    let started_at = state.and_then(|s| s.started_at.as_deref()).and_then(crate::util::parse_rfc3339);
+    let finished_at = state.and_then(|s| s.finished_at.as_deref()).and_then(crate::util::parse_rfc3339);
+    let created = inspect.created.as_ref().and_then(|d| crate::util::parse_rfc3339(&d.to_string())).unwrap_or(0);
 
     let host_config = inspect.host_config.as_ref();
-    let network_mode = host_config
-        .and_then(|h| h.network_mode.clone())
-        .unwrap_or_default();
+    let network_mode = host_config.and_then(|h| h.network_mode.clone()).unwrap_or_default();
     let restart_policy = host_config
         .and_then(|h| h.restart_policy.as_ref())
         .and_then(|p| p.name)
@@ -224,13 +203,7 @@ pub fn summarize(input: SummaryInput<'_>) -> Option<ContainerSummary> {
     let compose_dir = labels.get(LABEL_WORKING_DIR).cloned();
     let compose_files = labels
         .get(LABEL_CONFIG_FILES)
-        .map(|s| {
-            s.split(',')
-                .map(str::trim)
-                .filter(|f| !f.is_empty())
-                .map(str::to_string)
-                .collect()
-        })
+        .map(|s| s.split(',').map(str::trim).filter(|f| !f.is_empty()).map(str::to_string).collect())
         .unwrap_or_default();
 
     let links = web_links(&labels, &ports, &network_mode, app, input.public_host);
@@ -286,10 +259,7 @@ pub fn state_name(s: ContainerStateStatusEnum) -> &'static str {
 
 fn collect_ports(inspect: &ContainerInspectResponse) -> Vec<PortInfo> {
     let mut out = Vec::new();
-    let bindings = inspect
-        .network_settings
-        .as_ref()
-        .and_then(|n| n.ports.as_ref());
+    let bindings = inspect.network_settings.as_ref().and_then(|n| n.ports.as_ref());
     if let Some(map) = bindings {
         for (key, binds) in map {
             let (port, proto) = key.split_once('/').unwrap_or((key.as_str(), "tcp"));
@@ -316,12 +286,7 @@ fn collect_ports(inspect: &ContainerInspectResponse) -> Vec<PortInfo> {
                         }
                     }
                 }
-                _ => out.push(PortInfo {
-                    private_port,
-                    public_port: None,
-                    protocol: proto.to_string(),
-                    host_ip: None,
-                }),
+                _ => out.push(PortInfo { private_port, public_port: None, protocol: proto.to_string(), host_ip: None }),
             }
         }
     }
@@ -343,13 +308,7 @@ fn collect_mounts(inspect: &ContainerInspectResponse) -> Vec<MountInfo> {
                         "volume" => m.name.clone().or_else(|| m.source.clone()).unwrap_or_default(),
                         _ => m.source.clone().unwrap_or_default(),
                     };
-                    Some(MountInfo {
-                        kind,
-                        source,
-                        destination,
-                        rw: m.rw.unwrap_or(true),
-                        name: m.name.clone(),
-                    })
+                    Some(MountInfo { kind, source, destination, rw: m.rw.unwrap_or(true), name: m.name.clone() })
                 })
                 .collect()
         })
@@ -425,10 +384,7 @@ fn web_links(
 ) -> Vec<WebLink> {
     let mut links = Vec::new();
     if let Some(url) = labels.get(LABEL_NODESTARR_URL).filter(|u| !u.is_empty()) {
-        links.push(WebLink {
-            label: "Open".into(),
-            url: url.clone(),
-        });
+        links.push(WebLink { label: "Open".into(), url: url.clone() });
         return links;
     }
     // Traefik routers: Host(`app.example.com`)
@@ -444,19 +400,12 @@ fn web_links(
         }
     }
     for host in traefik_hosts.keys() {
-        links.push(WebLink {
-            label: host.clone(),
-            url: format!("https://{host}"),
-        });
+        links.push(WebLink { label: host.clone(), url: format!("https://{host}") });
     }
 
     let path = app.map(|a| a.web_path).unwrap_or("/");
     let scheme_for = |port: u16| {
-        if app.is_some_and(|a| a.web_https) || matches!(port, 443 | 8443 | 9443) {
-            "https"
-        } else {
-            "http"
-        }
+        if app.is_some_and(|a| a.web_https) || matches!(port, 443 | 8443 | 9443) { "https" } else { "http" }
     };
     if network_mode == "host" {
         if let Some(app) = app {
@@ -469,18 +418,14 @@ fn web_links(
         }
         return links;
     }
-    let tcp: Vec<&PortInfo> = ports
-        .iter()
-        .filter(|p| p.protocol == "tcp" && p.public_port.is_some())
-        .collect();
+    let tcp: Vec<&PortInfo> = ports.iter().filter(|p| p.protocol == "tcp" && p.public_port.is_some()).collect();
     // Prefer the app's known web port, then common web ports, then the lowest port.
     let preferred = app
         .and_then(|a| a.web_port)
         .and_then(|wp| tcp.iter().find(|p| p.private_port == wp))
         .or_else(|| {
-            tcp.iter().find(|p| {
-                matches!(p.private_port, 80 | 443 | 3000 | 5000 | 8000 | 8080 | 8081 | 8443 | 9000 | 9443)
-            })
+            tcp.iter()
+                .find(|p| matches!(p.private_port, 80 | 443 | 3000 | 5000 | 8000 | 8080 | 8081 | 8443 | 9000 | 9443))
         })
         .or_else(|| tcp.first())
         .copied();
@@ -490,11 +435,7 @@ fn web_links(
             Some(ip) if ip != "0.0.0.0" && ip != "::" => ip,
             _ => public_host,
         };
-        let host = if host.contains(':') && !host.starts_with('[') {
-            format!("[{host}]")
-        } else {
-            host.to_string()
-        };
+        let host = if host.contains(':') && !host.starts_with('[') { format!("[{host}]") } else { host.to_string() };
         links.push(WebLink {
             label: format!("{host}:{port}"),
             url: format!("{}://{host}:{port}{path}", scheme_for(p.private_port)),

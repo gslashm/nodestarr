@@ -45,11 +45,7 @@ const MAX_CAPTURE: usize = 1024 * 1024;
 /// Runs a command and captures its output (each stream capped at 1 MiB).
 pub async fn capture(api: &Docker, container: &str, cmd: Vec<String>, user: Option<&str>) -> Result<ExecOutput> {
     let id = create(api, container, cmd, user, false).await?;
-    let mut out = ExecOutput {
-        exit_code: None,
-        stdout: String::new(),
-        stderr: String::new(),
-    };
+    let mut out = ExecOutput { exit_code: None, stdout: String::new(), stderr: String::new() };
     if let StartExecResults::Attached { mut output, .. } = api.start_exec(&id, None).await? {
         while let Some(chunk) = output.next().await {
             match chunk? {

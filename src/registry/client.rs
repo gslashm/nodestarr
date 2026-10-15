@@ -185,10 +185,7 @@ fn parse_challenge(header: &str) -> Option<Challenge> {
         params.insert(key, value.to_string());
         rest = remaining.trim_start_matches(',').trim();
     }
-    Some(Challenge {
-        scheme: scheme.to_ascii_lowercase(),
-        params,
-    })
+    Some(Challenge { scheme: scheme.to_ascii_lowercase(), params })
 }
 
 impl RegistryClient {
@@ -233,11 +230,7 @@ impl RegistryClient {
 
     fn base_url(r: &ImageRef) -> String {
         let host = r.api_host();
-        let scheme = if host.starts_with("localhost") || host.starts_with("127.0.0.1") {
-            "http"
-        } else {
-            "https"
-        };
+        let scheme = if host.starts_with("localhost") || host.starts_with("127.0.0.1") { "http" } else { "https" };
         format!("{scheme}://{host}/v2/{}", r.repository)
     }
 
@@ -280,7 +273,13 @@ impl RegistryClient {
     }
 
     /// Sends a request, handling the bearer/basic auth dance once.
-    async fn send(&self, r: &ImageRef, method: reqwest::Method, url: &str, accept: Option<&str>) -> RResult<reqwest::Response> {
+    async fn send(
+        &self,
+        r: &ImageRef,
+        method: reqwest::Method,
+        url: &str,
+        accept: Option<&str>,
+    ) -> RResult<reqwest::Response> {
         let build = |auth: Option<String>| {
             let mut req = self.http.request(method.clone(), url);
             if let Some(a) = accept {
@@ -370,7 +369,8 @@ impl RegistryClient {
         let header_digest = digest_header(resp.headers());
         let body = resp.bytes().await.map_err(net_err)?;
         let digest = header_digest.unwrap_or_else(|| format!("sha256:{}", hex::encode(Sha256::digest(&body))));
-        let doc: ManifestDoc = serde_json::from_slice(&body).map_err(|e| RegistryError::Protocol(format!("manifest: {e}")))?;
+        let doc: ManifestDoc =
+            serde_json::from_slice(&body).map_err(|e| RegistryError::Protocol(format!("manifest: {e}")))?;
         Ok((digest, doc))
     }
 
@@ -384,8 +384,9 @@ impl RegistryClient {
         let (top_digest, top) = self.get_manifest(r, &tag_digest).await?;
         let (manifest_digest, manifest) = if top.manifests.is_some() {
             let entries = top.manifests.unwrap_or_default();
-            let chosen = pick_platform(&entries, platform)
-                .ok_or_else(|| RegistryError::Protocol(format!("no {}/{} image in this tag", platform.os, platform.arch)))?;
+            let chosen = pick_platform(&entries, platform).ok_or_else(|| {
+                RegistryError::Protocol(format!("no {}/{} image in this tag", platform.os, platform.arch))
+            })?;
             let digest = chosen.digest.clone();
             let (_, m) = self.get_manifest(r, &digest).await?;
             (Some(digest), m)
@@ -393,19 +394,13 @@ impl RegistryClient {
             (None, top)
         };
         let _ = manifest.media_type;
-        let mut remote = RemoteImage {
-            digest: top_digest,
-            manifest_digest,
-            ..Default::default()
-        };
+        let mut remote = RemoteImage { digest: top_digest, manifest_digest, ..Default::default() };
         if let Some(cfg) = manifest.config {
             let url = format!("{}/blobs/{}", Self::base_url(r), cfg.digest);
             let resp = self.send(r, reqwest::Method::GET, &url, None).await?;
             Self::check_status(&resp)?;
-            let blob: ConfigBlob = resp
-                .json()
-                .await
-                .map_err(|e| RegistryError::Protocol(format!("image config: {e}")))?;
+            let blob: ConfigBlob =
+                resp.json().await.map_err(|e| RegistryError::Protocol(format!("image config: {e}")))?;
             remote.created = blob.created.as_deref().and_then(crate::util::parse_rfc3339);
             remote.labels = blob.config.and_then(|c| c.labels).unwrap_or_default();
             remote.version = version_from_labels(&remote.labels);
@@ -451,11 +446,7 @@ impl RegistryClient {
         for _ in 0..20 {
             let resp = self.send(r, reqwest::Method::GET, &url, None).await?;
             Self::check_status(&resp)?;
-            let next = resp
-                .headers()
-                .get("link")
-                .and_then(|h| h.to_str().ok())
-                .and_then(parse_next_link);
+            let next = resp.headers().get("link").and_then(|h| h.to_str().ok()).and_then(parse_next_link);
             #[derive(Deserialize)]
             struct TagList {
                 tags: Option<Vec<String>>,
@@ -481,14 +472,7 @@ impl RegistryClient {
         // Without dates, put version tags newest first.
         let mut names: Vec<String> = out.iter().map(|t| t.name.clone()).collect();
         crate::registry::version::sort_tags_desc(&mut names);
-        Ok(names
-            .into_iter()
-            .map(|name| TagInfo {
-                name,
-                updated: None,
-                digest: None,
-            })
-            .collect())
+        Ok(names.into_iter().map(|name| TagInfo { name, updated: None, digest: None }).collect())
     }
 
     /// Docker Hub's own API includes last-updated dates and digests.
@@ -576,11 +560,8 @@ fn parse_next_link(link: &str) -> Option<String> {
 }
 
 fn pick_platform<'a>(entries: &'a [IndexEntry], p: &Platform) -> Option<&'a IndexEntry> {
-    let is_attestation = |e: &IndexEntry| {
-        e.annotations
-            .as_ref()
-            .is_some_and(|a| a.contains_key("vnd.docker.reference.type"))
-    };
+    let is_attestation =
+        |e: &IndexEntry| e.annotations.as_ref().is_some_and(|a| a.contains_key("vnd.docker.reference.type"));
     let matches = |e: &IndexEntry, check_variant: bool| {
         e.platform.as_ref().is_some_and(|pl| {
             pl.os.as_deref() == Some(p.os.as_str())
@@ -653,17 +634,29 @@ mod tests {
         let entries = vec![
             IndexEntry {
                 digest: "sha256:att".into(),
-                platform: Some(PlatformDoc { os: Some("unknown".into()), architecture: Some("unknown".into()), variant: None }),
+                platform: Some(PlatformDoc {
+                    os: Some("unknown".into()),
+                    architecture: Some("unknown".into()),
+                    variant: None,
+                }),
                 annotations: Some(HashMap::from([("vnd.docker.reference.type".into(), "attestation-manifest".into())])),
             },
             IndexEntry {
                 digest: "sha256:arm".into(),
-                platform: Some(PlatformDoc { os: Some("linux".into()), architecture: Some("arm64".into()), variant: Some("v8".into()) }),
+                platform: Some(PlatformDoc {
+                    os: Some("linux".into()),
+                    architecture: Some("arm64".into()),
+                    variant: Some("v8".into()),
+                }),
                 annotations: None,
             },
             IndexEntry {
                 digest: "sha256:amd".into(),
-                platform: Some(PlatformDoc { os: Some("linux".into()), architecture: Some("amd64".into()), variant: None }),
+                platform: Some(PlatformDoc {
+                    os: Some("linux".into()),
+                    architecture: Some("amd64".into()),
+                    variant: None,
+                }),
                 annotations: None,
             },
         ];

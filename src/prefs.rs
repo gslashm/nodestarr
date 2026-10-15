@@ -134,19 +134,12 @@ impl PrefsStore {
                 Err(err) => tracing::warn!(%identity, %err, "ignoring unreadable container preferences"),
             }
         }
-        Ok(Self {
-            db,
-            cache: Arc::new(RwLock::new(map)),
-        })
+        Ok(Self { db, cache: Arc::new(RwLock::new(map)) })
     }
 
     /// Preferences for an identity (defaults when none were saved).
     pub fn get(&self, identity: &str) -> Arc<ContainerPrefs> {
-        self.cache
-            .read()
-            .get(identity)
-            .cloned()
-            .unwrap_or_else(|| Arc::new(ContainerPrefs::default()))
+        self.cache.read().get(identity).cloned().unwrap_or_else(|| Arc::new(ContainerPrefs::default()))
     }
 
     pub fn all(&self) -> HashMap<String, Arc<ContainerPrefs>> {

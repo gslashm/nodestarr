@@ -25,12 +25,8 @@ use crate::tasks::TaskCtx;
 
 /// File names compose looks for, in order of preference.
 pub const COMPOSE_FILE_NAMES: &[&str] = &["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
-const OVERRIDE_FILE_NAMES: &[&str] = &[
-    "compose.override.yaml",
-    "compose.override.yml",
-    "docker-compose.override.yaml",
-    "docker-compose.override.yml",
-];
+const OVERRIDE_FILE_NAMES: &[&str] =
+    &["compose.override.yaml", "compose.override.yml", "docker-compose.override.yaml", "docker-compose.override.yml"];
 
 /// Everything needed to run compose commands for a stack.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -45,10 +41,7 @@ pub struct StackRef {
 impl StackRef {
     /// The env file compose reads for interpolation.
     pub fn env_path(&self) -> PathBuf {
-        self.env_file
-            .as_ref()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| Path::new(&self.dir).join(".env"))
+        self.env_file.as_ref().map(PathBuf::from).unwrap_or_else(|| Path::new(&self.dir).join(".env"))
     }
 }
 
@@ -159,11 +152,8 @@ struct Inner {
 
 /// Compose project names: lowercase letters, digits, '-' and '_'.
 pub fn normalize_project_name(raw: &str) -> String {
-    let s: String = raw
-        .to_ascii_lowercase()
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
+    let s: String =
+        raw.to_ascii_lowercase().chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
     s.trim_start_matches(['-', '_']).to_string()
 }
 
@@ -344,10 +334,7 @@ impl ComposeService {
     }
 
     pub fn summary(&self, name: &str) -> Result<StackSummary> {
-        self.list()
-            .into_iter()
-            .find(|s| s.name == name)
-            .ok_or_else(|| AppError::not_found(format!("stack '{name}'")))
+        self.list().into_iter().find(|s| s.name == name).ok_or_else(|| AppError::not_found(format!("stack '{name}'")))
     }
 
     /// Resolves a stack name into what compose needs.
@@ -356,7 +343,9 @@ impl ComposeService {
         let dir = summary
             .dir
             .clone()
-            .or_else(|| summary.files.first().and_then(|f| Path::new(f).parent().map(|p| p.to_string_lossy().into_owned())))
+            .or_else(|| {
+                summary.files.first().and_then(|f| Path::new(f).parent().map(|p| p.to_string_lossy().into_owned()))
+            })
             .ok_or_else(|| AppError::conflict(format!("Nodestarr doesn't know where stack '{name}' lives")))?;
         let mut files = summary.files.clone();
         if files.is_empty() {
@@ -378,15 +367,12 @@ impl ComposeService {
             .docker
             .in_stack(name)
             .first()
-            .and_then(|e| e.inspect.config.as_ref()?.labels.as_ref()?.get(crate::docker::model::LABEL_ENV_FILE).cloned())
+            .and_then(|e| {
+                e.inspect.config.as_ref()?.labels.as_ref()?.get(crate::docker::model::LABEL_ENV_FILE).cloned()
+            })
             .and_then(|f| f.split(',').next().map(str::to_string))
             .filter(|f| !f.is_empty() && Path::new(f) != Path::new(&dir).join(".env") && Path::new(f).is_file());
-        Ok(StackRef {
-            name: summary.name,
-            dir,
-            files,
-            env_file,
-        })
+        Ok(StackRef { name: summary.name, dir, files, env_file })
     }
 
     fn base_args(&self, stack: &StackRef) -> Vec<String> {
@@ -519,7 +505,8 @@ impl ComposeService {
             let mut files = stack.files.clone();
             let mut env_file = stack.env_file.clone();
             for (i, edit) in edits.iter().enumerate() {
-                let fname = Path::new(&edit.path).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+                let fname =
+                    Path::new(&edit.path).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
                 let tmp_path = tmp.join(format!("{i}-{fname}"));
                 tokio::fs::write(&tmp_path, &edit.content).await?;
                 let tmp_str = tmp_path.to_string_lossy().into_owned();
@@ -529,12 +516,7 @@ impl ComposeService {
                     env_file = Some(tmp_str);
                 }
             }
-            let temp_stack = StackRef {
-                name: stack.name.clone(),
-                dir: stack.dir.clone(),
-                files,
-                env_file,
-            };
+            let temp_stack = StackRef { name: stack.name.clone(), dir: stack.dir.clone(), files, env_file };
             let mut args = self.base_args(&temp_stack);
             args.extend(["config".to_string(), "--quiet".to_string()]);
             Ok::<_, AppError>(match self.exec_raw(&args, None, Duration::from_secs(60)).await {
@@ -566,13 +548,7 @@ impl ComposeService {
             Ok(c) => (c, true),
             Err(_) => (String::new(), false),
         };
-        out.push(StackFile {
-            name: display_name(&stack.dir, &env_str),
-            path: env_str,
-            kind: "env",
-            content,
-            exists,
-        });
+        out.push(StackFile { name: display_name(&stack.dir, &env_str), path: env_str, kind: "env", content, exists });
         Ok(out)
     }
 
@@ -609,7 +585,9 @@ impl ComposeService {
                 yaml_edit::TagEdit::EnvImage { name } => {
                     let default = yaml_edit::variables(&pos.value).first().and_then(|v| v.default.clone());
                     let current = envfile::get(&env_before, &name).or(default).ok_or_else(|| {
-                        AppError::bad_request(format!("{name} is not set in {env_str}; set it before changing the version"))
+                        AppError::bad_request(format!(
+                            "{name} is not set in {env_str}; set it before changing the version"
+                        ))
                     })?;
                     let new_value = match yaml_edit::plan_tag_edit(&current, new_tag).map_err(AppError::BadRequest)? {
                         yaml_edit::TagEdit::Literal(v) => v,
@@ -675,16 +653,11 @@ impl ComposeService {
     pub async fn trash_stack_folder(&self, stack: &StackRef) -> Result<String> {
         let dir = PathBuf::from(&stack.dir);
         let parent = dir.parent().ok_or_else(|| AppError::bad_request("invalid stack folder"))?;
-        let in_stacks_dir = self
-            .inner
-            .settings
-            .get()
-            .docker
-            .stacks_dirs
-            .iter()
-            .any(|d| Path::new(d) == parent);
+        let in_stacks_dir = self.inner.settings.get().docker.stacks_dirs.iter().any(|d| Path::new(d) == parent);
         if !in_stacks_dir {
-            return Err(AppError::forbidden("only stacks inside a configured stacks folder can be deleted from Nodestarr"));
+            return Err(AppError::forbidden(
+                "only stacks inside a configured stacks folder can be deleted from Nodestarr",
+            ));
         }
         let trash = parent.join(".trash");
         tokio::fs::create_dir_all(&trash).await?;
@@ -699,10 +672,7 @@ impl ComposeService {
 }
 
 fn display_name(dir: &str, path: &str) -> String {
-    Path::new(path)
-        .strip_prefix(dir)
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| path.to_string())
+    Path::new(path).strip_prefix(dir).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| path.to_string())
 }
 
 fn redact_args(args: &[String]) -> String {

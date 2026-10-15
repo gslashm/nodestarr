@@ -80,8 +80,9 @@ async fn guest_action(
     Path((vmid, action)): Path<(u32, String)>,
     body: Option<Json<ConfirmBody>>,
 ) -> Result<Json<Value>> {
-    let action: GuestAction = serde_json::from_value(Value::String(action.clone()))
-        .map_err(|_| AppError::bad_request(format!("unknown action '{action}' (start, shutdown, stop, reboot, suspend, resume)")))?;
+    let action: GuestAction = serde_json::from_value(Value::String(action.clone())).map_err(|_| {
+        AppError::bad_request(format!("unknown action '{action}' (start, shutdown, stop, reboot, suspend, resume)"))
+    })?;
     let confirm = body.map(|Json(b)| b.confirm_self).unwrap_or(false);
     let task = crate::proxmox::guest_action(&app, vmid, action, confirm, &p.actor()).await?;
     Ok(Json(json!({ "task_id": task })))
@@ -101,12 +102,22 @@ struct SnapshotBody {
     include_ram: bool,
 }
 
-async fn create_snapshot(State(app): State<App>, Auth(p): Auth, Path(vmid): Path<u32>, Json(b): Json<SnapshotBody>) -> Result<Json<Value>> {
-    let task = crate::proxmox::create_snapshot(&app, vmid, b.name.trim(), &b.description, b.include_ram, &p.actor()).await?;
+async fn create_snapshot(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(vmid): Path<u32>,
+    Json(b): Json<SnapshotBody>,
+) -> Result<Json<Value>> {
+    let task =
+        crate::proxmox::create_snapshot(&app, vmid, b.name.trim(), &b.description, b.include_ram, &p.actor()).await?;
     Ok(Json(json!({ "task_id": task })))
 }
 
-async fn delete_snapshot(State(app): State<App>, Auth(p): Auth, Path((vmid, name)): Path<(u32, String)>) -> Result<Json<Value>> {
+async fn delete_snapshot(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path((vmid, name)): Path<(u32, String)>,
+) -> Result<Json<Value>> {
     let task = crate::proxmox::delete_snapshot(&app, vmid, &name, &p.actor()).await?;
     Ok(Json(json!({ "task_id": task })))
 }
@@ -122,7 +133,12 @@ async fn rollback_snapshot(
     Ok(Json(json!({ "task_id": task })))
 }
 
-async fn backup(State(app): State<App>, Auth(p): Auth, Path(vmid): Path<u32>, Json(req): Json<BackupRequest>) -> Result<Json<Value>> {
+async fn backup(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(vmid): Path<u32>,
+    Json(req): Json<BackupRequest>,
+) -> Result<Json<Value>> {
     let task = crate::proxmox::backup_now(&app, vmid, req, &p.actor()).await?;
     Ok(Json(json!({ "task_id": task })))
 }
