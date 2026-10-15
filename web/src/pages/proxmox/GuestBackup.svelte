@@ -22,7 +22,8 @@
   $effect(() => {
     if (!storage) {
       const preferred = session.settings?.proxmox.backup_storage;
-      storage = targets.find((s) => s.storage === preferred)?.storage ?? targets[0]?.storage ?? '';
+      // The configured storage, else one dedicated to backups, else the first.
+      storage = (targets.find((s) => s.storage === preferred) ?? targets.find((s) => s.content.length === 1) ?? targets[0])?.storage ?? '';
     }
   });
 

@@ -18,10 +18,16 @@
   let error = $state('');
   let guest = $state('');
 
+  // Start on the configured backup storage, else one dedicated to backups
+  // (like a "backups" directory) rather than "local".
   $effect(() => {
     if (!storage && storages.length) {
       const preferred = session.settings?.proxmox.backup_storage;
-      storage = storages.find((s) => s.storage === preferred)?.storage ?? storages[0].storage;
+      storage = (
+        storages.find((s) => s.storage === preferred) ??
+        storages.find((s) => s.content.length === 1) ??
+        storages[0]
+      ).storage;
     }
   });
 
