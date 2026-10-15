@@ -1,0 +1,13 @@
+# Keep the build context small: sources only.
+.git
+.github
+target
+docs
+web/node_modules
+web/dist
+web/.vite
+*.log
+
+# Data folders when running from this checkout with compose.yaml
+config
+backups

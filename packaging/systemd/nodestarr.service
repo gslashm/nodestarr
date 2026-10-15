@@ -1,0 +1,46 @@
+# Nodestarr as a systemd service, for running the binary directly on a
+# Docker host instead of in a container.
+#
+#   sudo install -m 0755 nodestarr /usr/local/bin/nodestarr
+#   sudo install -m 0644 nodestarr.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now nodestarr
+#
+# The Docker CLI with the Compose plugin must be installed on the host.
+
+[Unit]
+Description=Nodestarr container manager
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/nodestarr
+Restart=on-failure
+RestartSec=5
+
+# State lives in /var/lib/nodestarr (created by systemd).
+StateDirectory=nodestarr
+Environment=NODESTARR_DATA_DIR=/var/lib/nodestarr
+Environment=NODESTARR_LISTEN=0.0.0.0:7979
+
+# Nodestarr needs the Docker socket and read/write access to your stacks and
+# backup folders, which is root-equivalent anyway; it runs as root so it can
+# read app config folders owned by other users for backups.
+User=root
+
+# Hardening that doesn't get in the way of managing Docker.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictRealtime=true
+
+# Keep it small: Nodestarr idles at a few tens of MB.
+MemoryHigh=256M
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

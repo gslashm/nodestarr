@@ -1,0 +1,31 @@
+# Nodestarr on a Docker host, built from this folder:
+#
+#   docker compose up -d --build
+#
+# Then open http://<host>:7979. See docs/installation.md for details.
+
+services:
+  nodestarr:
+    build: .
+    image: nodestarr:local
+    container_name: nodestarr
+    restart: unless-stopped
+    # Host networking lets Nodestarr reach every container's web UI on the
+    # addresses you use (uptime checks, app integrations) and keeps the
+    # client IPs real for sign-in rate limiting. Without it, publish the
+    # port instead:  ports: ["7979:7979"]
+    network_mode: host
+    environment:
+      - TZ=Etc/UTC # you can change this to your timezone, e.g. Europe/Berlin
+    volumes:
+      # Docker access: Nodestarr manages containers through the socket.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Compose stacks, at the same path as on the host. Compose resolves
+      # relative paths (./config) from it, and backups and the file editor
+      # read app folders through it.
+      - /opt/stacks:/opt/stacks
+      # Nodestarr's own database and settings.
+      - ./config:/config
+      # Where backups go. Point the left side at a disk with room to spare,
+      # for example /mnt/backup/nodestarr.
+      - ./backups:/backups

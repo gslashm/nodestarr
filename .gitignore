@@ -4,3 +4,10 @@
 /web/.vite
 *.log
 .DS_Store
+
+# Data folders when running from this checkout with compose.yaml
+/config
+/backups
+
+# Python bytecode from the dev tools
+__pycache__/
