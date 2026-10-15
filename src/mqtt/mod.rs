@@ -142,19 +142,22 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
                 "availability": avail,
             }),
         ),
-        (
-            format!("{prefix}/update/nodestarr_{id}/image/config"),
-            json!({
+        (format!("{prefix}/update/nodestarr_{id}/image/config"), {
+            let mut update = json!({
                 "name": "Image",
                 "unique_id": format!("nodestarr_{id}_update"),
                 "state_topic": update_topic(s, &id),
-                "command_topic": command_topic(s, &id),
-                "payload_install": "update",
                 "device_class": "firmware",
                 "device": device,
                 "availability": avail,
-            }),
-        ),
+            });
+            // Installable from Home Assistant only when controls are on.
+            if s.expose_controls && !sm.is_self {
+                update["command_topic"] = json!(command_topic(s, &id));
+                update["payload_install"] = json!("update");
+            }
+            update
+        }),
     ];
     if s.expose_controls && !sm.is_self {
         out.push((
@@ -366,6 +369,11 @@ async fn handle_command(app: &App, s: &MqttSettings, topic: &str, payload: &str)
         }
         return;
     }
+    // Container commands only when controls are exposed (Settings > Home
+    // Assistant); otherwise Home Assistant can watch but not act.
+    if !s.expose_controls {
+        return;
+    }
     let Some(rest) = topic.strip_prefix(&format!("{}/", s.base_topic)) else { return };
     let Some(id) = rest.strip_suffix("/set") else { return };
     let Some(entry) = app.docker.entries().into_iter().find(|e| object_id(&e.summary.identity) == id) else { return };
@@ -412,13 +420,88 @@ pub fn start(app: App) {
     });
 }
 
+/// What the publisher task should send next. Later variants include the
+/// earlier ones, so pending requests combine with `max`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Publish {
+    /// Container states and the summary.
+    States,
+    /// Discovery configs too (containers or settings changed).
+    Everything,
+    /// Just connected: subscriptions, availability, then everything.
+    Connected,
+}
+
+/// Coalescing hand-off from the session loop to the publisher task.
+#[derive(Default)]
+struct Pending {
+    wanted: Mutex<Option<Publish>>,
+    notify: Notify,
+}
+
+impl Pending {
+    fn request(&self, what: Publish) {
+        {
+            let mut wanted = self.wanted.lock();
+            *wanted = Some(wanted.map_or(what, |cur| cur.max(what)));
+        }
+        self.notify.notify_one();
+    }
+
+    async fn next(&self) -> Publish {
+        loop {
+            if let Some(what) = self.wanted.lock().take() {
+                return what;
+            }
+            self.notify.notified().await;
+        }
+    }
+}
+
+/// Aborts the publisher task when the session ends.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// One connection to the broker, until it fails or the settings change.
+///
+/// rumqttc only sends what is queued while its event loop is polled, and a
+/// publish waits when the queue is full. So this loop never waits on the
+/// client: publishing runs in a separate task, commands from Home
+/// Assistant run in their own tasks, and shutdown uses non-blocking calls.
 async fn run_session(
     app: &App,
     s: &MqttSettings,
     settings_rx: &mut tokio::sync::watch::Receiver<Arc<crate::settings::Settings>>,
 ) {
-    let (client, mut eventloop) = AsyncClient::new(options(s), 64);
+    let (client, mut eventloop) = AsyncClient::new(options(s), 256);
     *app.mqtt.inner.client.lock() = Some(client.clone());
+    let pending = Arc::new(Pending::default());
+    let _publisher = AbortOnDrop(tokio::spawn({
+        let (app, client, s, pending) = (app.clone(), client.clone(), s.clone(), pending.clone());
+        async move {
+            loop {
+                let what = pending.next().await;
+                if what == Publish::Connected {
+                    if s.expose_controls {
+                        let _ = client.subscribe(format!("{}/+/set", s.base_topic), QoS::AtLeastOnce).await;
+                    }
+                    let _ = client.subscribe(format!("{}/command", s.base_topic), QoS::AtLeastOnce).await;
+                    let _ = client.subscribe(format!("{}/status", s.discovery_prefix), QoS::AtLeastOnce).await;
+                    let _ = client.publish(format!("{}/status", s.base_topic), QoS::AtLeastOnce, true, "online").await;
+                }
+                if what >= Publish::Everything {
+                    publish_discovery(&app, &client, &s).await;
+                }
+                publish_states(&app, &client, &s).await;
+            }
+        }
+    }));
+
     let mut bus = app.bus.subscribe();
     let mut refresh = tokio::time::interval(Duration::from_secs(300));
     let mut stats_tick =
@@ -433,23 +516,18 @@ async fn run_session(
                     tracing::info!(host = %s.host, "connected to MQTT broker");
                     app.mqtt.inner.connected.store(true, std::sync::atomic::Ordering::Relaxed);
                     *app.mqtt.inner.last_error.lock() = None;
-                    let _ = client.subscribe(format!("{}/+/set", s.base_topic), QoS::AtLeastOnce).await;
-                    let _ = client.subscribe(format!("{}/command", s.base_topic), QoS::AtLeastOnce).await;
-                    let _ = client.subscribe(format!("{}/status", s.discovery_prefix), QoS::AtLeastOnce).await;
-                    let _ = client.publish(format!("{}/status", s.base_topic), QoS::AtLeastOnce, true, "online").await;
-                    publish_discovery(app, &client, s).await;
-                    publish_states(app, &client, s).await;
+                    pending.request(Publish::Connected);
                 }
                 Ok(MqttEvent::Incoming(Packet::Publish(p))) => {
-                    let payload = String::from_utf8_lossy(&p.payload).to_string();
+                    let payload = String::from_utf8_lossy(&p.payload).trim().to_string();
                     if p.topic == format!("{}/status", s.discovery_prefix) {
                         if payload == "online" {
                             // Home Assistant restarted: resend everything.
-                            publish_discovery(app, &client, s).await;
-                            publish_states(app, &client, s).await;
+                            pending.request(Publish::Everything);
                         }
                     } else {
-                        handle_command(app, s, &p.topic, payload.trim()).await;
+                        let (app, s, topic) = (app.clone(), s.clone(), p.topic.clone());
+                        tokio::spawn(async move { handle_command(&app, &s, &topic, &payload).await });
                     }
                 }
                 Ok(_) => {}
@@ -471,34 +549,49 @@ async fn run_session(
             _ = debounce.tick() => {
                 if dirty && app.mqtt.is_connected() {
                     dirty = false;
-                    publish_discovery(app, &client, s).await;
-                    publish_states(app, &client, s).await;
+                    pending.request(Publish::Everything);
                 }
             }
             _ = stats_tick.tick() => {
                 if s.expose_stats && app.mqtt.is_connected() {
-                    publish_states(app, &client, s).await;
+                    pending.request(Publish::States);
                 }
             }
             _ = refresh.tick() => {
                 if app.mqtt.is_connected() {
-                    publish_states(app, &client, s).await;
+                    pending.request(Publish::States);
                 }
             }
             _ = settings_rx.changed() => {
                 let next = settings_rx.borrow().mqtt.clone();
                 if serde_json::to_value(&next).ok() != serde_json::to_value(&original).ok() {
-                    let _ = client.publish(format!("{}/status", s.base_topic), QoS::AtLeastOnce, true, "offline").await;
-                    let _ = client.disconnect().await;
+                    close(&client, &mut eventloop, s).await;
                     return;
                 }
             }
             _ = app.mqtt.inner.restart.notified() => {
-                let _ = client.disconnect().await;
+                close(&client, &mut eventloop, s).await;
                 return;
             }
         }
     }
+}
+
+/// Says goodbye: marks Nodestarr offline and disconnects, giving the event
+/// loop a moment to send both. (If that fails, the broker publishes the
+/// last will, which says the same.)
+async fn close(client: &AsyncClient, eventloop: &mut rumqttc::EventLoop, s: &MqttSettings) {
+    let _ = client.try_publish(format!("{}/status", s.base_topic), QoS::AtLeastOnce, true, "offline");
+    let _ = client.try_disconnect();
+    let _ = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            match eventloop.poll().await {
+                Ok(MqttEvent::Outgoing(rumqttc::Outgoing::Disconnect)) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+    })
+    .await;
 }
 
 /// Connects with the given (unsaved) settings and reports whether the broker
