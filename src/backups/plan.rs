@@ -13,7 +13,7 @@ use crate::settings::BackupStrategy;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Access {
-    /// The host path is visible to Berth (same path mounted in).
+    /// The host path is visible to Nodestarr (same path mounted in).
     Direct,
     /// Streamed through Docker's archive API (named volumes, unmounted paths).
     DockerCopy,
@@ -265,7 +265,7 @@ pub fn plan(app: &App, entry: &Entry) -> BackupPlan {
         method
     };
     if mounts.iter().any(|m| m.include && m.access == Access::DockerCopy && m.kind == "bind") {
-        warnings.push("some folders are not mounted into Berth; they are copied through Docker (slower, no exclude filtering until after transfer)".into());
+        warnings.push("some folders are not mounted into Nodestarr; they are copied through Docker (slower, no exclude filtering until after transfer)".into());
     }
 
     let compose_files = if settings.backups.include_compose && s.stack.is_some() {

@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
-// During development the UI runs on Vite's server and talks to a Berth
-// instance (default http://127.0.0.1:7979, override with BERTH_DEV_API).
-const api = process.env.BERTH_DEV_API ?? 'http://127.0.0.1:7979';
+// During development the UI runs on Vite's server and talks to a Nodestarr
+// instance (default http://127.0.0.1:7979, override with NODESTARR_DEV_API).
+const api = process.env.NODESTARR_DEV_API ?? 'http://127.0.0.1:7979';
 
 export default defineConfig({
   plugins: [svelte()],

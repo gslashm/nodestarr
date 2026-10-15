@@ -1,5 +1,5 @@
 //! High-level container and stack operations shared by the REST API, Home
-//! Assistant and schedulers: they log activity, protect Berth's own
+//! Assistant and schedulers: they log activity, protect Nodestarr's own
 //! container, and route compose-managed containers through `docker compose`.
 
 use serde::Deserialize;
@@ -32,7 +32,7 @@ pub async fn container_action(app: &App, key: &str, action: Action, opts: Action
     let name = display_name(app, &entry);
     if s.is_self && matches!(action, Action::Stop | Action::Kill | Action::Pause | Action::Remove) {
         return Err(AppError::forbidden(format!(
-            "Berth can't {} its own container from the UI (it would lock you out); use the host instead",
+            "Nodestarr can't {} its own container from the UI (it would lock you out); use the host instead",
             action.verb()
         )));
     }
@@ -93,7 +93,7 @@ pub async fn container_action(app: &App, key: &str, action: Action, opts: Action
 pub fn start_recreate(app: &App, key: &str, actor: &Actor) -> Result<String> {
     let entry = app.docker.get(key).ok_or_else(|| AppError::not_found("container"))?;
     if entry.summary.is_self {
-        return Err(AppError::forbidden("use Settings > System > Update to recreate Berth itself"));
+        return Err(AppError::forbidden("use Settings > System > Update to recreate Nodestarr itself"));
     }
     let name = display_name(app, &entry);
     let identity = entry.summary.identity.clone();
@@ -162,7 +162,7 @@ pub fn stack_action(app: &App, name: &str, action: StackAction, opts: StackActio
     let stack = app.compose.stack_ref(name)?;
     let self_in_stack = app.docker.in_stack(name).iter().any(|e| e.summary.is_self);
     if self_in_stack && matches!(action, StackAction::Down | StackAction::Stop) && opts.services.is_empty() {
-        return Err(AppError::forbidden("this stack contains Berth itself; stop individual services instead"));
+        return Err(AppError::forbidden("this stack contains Nodestarr itself; stop individual services instead"));
     }
     for svc in &opts.services {
         if svc.starts_with('-') || svc.contains(char::is_whitespace) {
@@ -184,15 +184,15 @@ pub fn stack_action(app: &App, name: &str, action: StackAction, opts: StackActio
     let (app2, actor2, name2) = (app.clone(), actor.clone(), name.to_string());
     Ok(app.tasks.spawn(spec, move |ctx| async move {
         let mut opts = opts;
-        // Never let compose recreate or restart Berth's own container from
-        // inside Berth: the compose process would die halfway through.
+        // Never let compose recreate or restart Nodestarr's own container from
+        // inside Nodestarr: the compose process would die halfway through.
         if let Some(own) = &self_service {
             if opts.services.is_empty() && !matches!(action, StackAction::Pull) {
                 let project = app2.compose.resolved(&stack).await?;
                 opts.services = project.services.keys().filter(|s| *s != own).cloned().collect();
-                ctx.log(format!("Skipping '{own}' (Berth itself); update Berth from Settings > System"));
+                ctx.log(format!("Skipping '{own}' (Nodestarr itself); update Nodestarr from Settings > System"));
             } else if opts.services.iter().any(|s| s == own) && !matches!(action, StackAction::Pull) {
-                return Err(AppError::forbidden("Berth can't restart or recreate its own service through compose; use Settings > System"));
+                return Err(AppError::forbidden("Nodestarr can't restart or recreate its own service through compose; use Settings > System"));
             }
         }
         let svcs: Vec<&str> = opts.services.iter().map(String::as_str).collect();

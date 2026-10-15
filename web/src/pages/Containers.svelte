@@ -1,5 +1,5 @@
 <!--
-  Every container in one table (or as the yard): filter, sort, search,
+  Every container in one table (or as a grid of tiles): filter, sort, search,
   group by stack, and act on one or many at once.
 -->
 <script lang="ts">
@@ -27,7 +27,7 @@
   import Sparkline from '../components/Sparkline.svelte';
   import StatePill from '../components/StatePill.svelte';
   import TimeAgo from '../components/TimeAgo.svelte';
-  import Yard from '../components/Yard.svelte';
+  import ContainerGrid from '../components/ContainerGrid.svelte';
   import { backupNow, confirmUpdate, containerMenu, runAction, stackAction, startUpdate, webUrl } from '../lib/actions';
   import { api } from '../lib/api';
   import { clock } from '../lib/clock.svelte';
@@ -43,8 +43,8 @@
   type Filter = 'all' | 'running' | 'stopped' | 'updates' | 'attention';
   type SortKey = 'name' | 'state' | 'cpu' | 'mem' | 'uptime' | 'backup';
 
-  const VIEW_KEY = 'berth.containers.view';
-  let view = $state<'table' | 'yard'>(readView());
+  const VIEW_KEY = 'nodestarr.containers.view';
+  let view = $state<'table' | 'grid'>(readView());
   let query = $state(router.query.get('q') ?? '');
   let filter = $state<Filter>((router.query.get('state') as Filter) || 'all');
   let sort = $state<SortKey>('name');
@@ -52,15 +52,15 @@
   let selected = $state<Set<string>>(new Set());
   const grouped = $derived(session.settings?.general.ui.group_by_stack ?? true);
 
-  function readView(): 'table' | 'yard' {
+  function readView(): 'table' | 'grid' {
     try {
-      return localStorage.getItem(VIEW_KEY) === 'yard' ? 'yard' : 'table';
+      return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'table';
     } catch {
       return 'table';
     }
   }
 
-  function setView(v: 'table' | 'yard') {
+  function setView(v: 'table' | 'grid') {
     view = v;
     try {
       localStorage.setItem(VIEW_KEY, v);
@@ -252,7 +252,7 @@
     </label>
     <div class="views" role="radiogroup" aria-label="View">
       <button type="button" role="radio" aria-checked={view === 'table'} class:active={view === 'table'} title="Table" onclick={() => setView('table')}><List size={17} /></button>
-      <button type="button" role="radio" aria-checked={view === 'yard'} class:active={view === 'yard'} title="Yard" onclick={() => setView('yard')}><LayoutGrid size={17} /></button>
+      <button type="button" role="radio" aria-checked={view === 'grid'} class:active={view === 'grid'} title="Grid" onclick={() => setView('grid')}><LayoutGrid size={17} /></button>
     </div>
   </div>
 </div>
@@ -283,8 +283,8 @@
         {/if}
       {/snippet}
     </EmptyState>
-  {:else if view === 'yard'}
-    <div class="panel yard"><Yard containers={sorted} /></div>
+  {:else if view === 'grid'}
+    <div class="panel tiles"><ContainerGrid containers={sorted} /></div>
   {:else}
     <div class="panel table-wrap">
       <table class="table">
@@ -536,7 +536,7 @@
   .pad {
     padding: 20px 0;
   }
-  .yard {
+  .tiles {
     padding: 14px 18px;
   }
   .sort {

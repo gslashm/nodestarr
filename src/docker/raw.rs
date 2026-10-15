@@ -2,7 +2,7 @@
 //!
 //! bollard's typed models follow the newest API version. A few endpoints
 //! changed their response shape between Docker releases (`/system/df` did in
-//! API 1.52), so Berth reads those as plain JSON and understands both shapes.
+//! API 1.52), so Nodestarr reads those as plain JSON and understands both shapes.
 
 use std::time::Duration;
 

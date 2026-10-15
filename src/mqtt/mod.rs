@@ -6,7 +6,7 @@
 //! * a native `update` entity, so container updates show up in Home
 //!   Assistant's Updates panel and can be installed from there.
 //!
-//! Berth itself is a device with "updates available" and "containers
+//! Nodestarr itself is a device with "updates available" and "containers
 //! running" sensors and a "check for updates" button.
 
 use std::collections::{HashMap, HashSet};
@@ -106,22 +106,22 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
     let id = object_id(&sm.identity);
     let name = crate::updates::check::display_name(app, entry);
     let device = json!({
-        "identifiers": [format!("berth_{id}")],
+        "identifiers": [format!("nodestarr_{id}")],
         "name": name,
-        "manufacturer": "Berth",
+        "manufacturer": "Nodestarr",
         "model": sm.image,
         "sw_version": sm.version,
-        "via_device": "berth",
+        "via_device": "nodestarr",
     });
     let state = state_topic(s, &id);
     let avail = availability(s);
     let prefix = &s.discovery_prefix;
     let mut out = vec![
         (
-            format!("{prefix}/sensor/berth_{id}/status/config"),
+            format!("{prefix}/sensor/nodestarr_{id}/status/config"),
             json!({
                 "name": "Status",
-                "unique_id": format!("berth_{id}_status"),
+                "unique_id": format!("nodestarr_{id}_status"),
                 "state_topic": state,
                 "value_template": "{{ value_json.state }}",
                 "icon": "mdi:docker",
@@ -130,10 +130,10 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
             }),
         ),
         (
-            format!("{prefix}/sensor/berth_{id}/version/config"),
+            format!("{prefix}/sensor/nodestarr_{id}/version/config"),
             json!({
                 "name": "Version",
-                "unique_id": format!("berth_{id}_version"),
+                "unique_id": format!("nodestarr_{id}_version"),
                 "state_topic": state,
                 "value_template": "{{ value_json.version or 'unknown' }}",
                 "icon": "mdi:tag-outline",
@@ -143,10 +143,10 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
             }),
         ),
         (
-            format!("{prefix}/update/berth_{id}/image/config"),
+            format!("{prefix}/update/nodestarr_{id}/image/config"),
             json!({
                 "name": "Image",
-                "unique_id": format!("berth_{id}_update"),
+                "unique_id": format!("nodestarr_{id}_update"),
                 "state_topic": update_topic(s, &id),
                 "command_topic": command_topic(s, &id),
                 "payload_install": "update",
@@ -158,10 +158,10 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
     ];
     if s.expose_controls && !sm.is_self {
         out.push((
-            format!("{prefix}/switch/berth_{id}/running/config"),
+            format!("{prefix}/switch/nodestarr_{id}/running/config"),
             json!({
                 "name": "Running",
-                "unique_id": format!("berth_{id}_running"),
+                "unique_id": format!("nodestarr_{id}_running"),
                 "state_topic": state,
                 "value_template": "{{ 'ON' if value_json.running else 'OFF' }}",
                 "command_topic": command_topic(s, &id),
@@ -173,10 +173,10 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
             }),
         ));
         out.push((
-            format!("{prefix}/button/berth_{id}/restart/config"),
+            format!("{prefix}/button/nodestarr_{id}/restart/config"),
             json!({
                 "name": "Restart",
-                "unique_id": format!("berth_{id}_restart"),
+                "unique_id": format!("nodestarr_{id}_restart"),
                 "command_topic": command_topic(s, &id),
                 "payload_press": "restart",
                 "device_class": "restart",
@@ -187,10 +187,10 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
     }
     if s.expose_stats {
         out.push((
-            format!("{prefix}/sensor/berth_{id}/cpu/config"),
+            format!("{prefix}/sensor/nodestarr_{id}/cpu/config"),
             json!({
                 "name": "CPU",
-                "unique_id": format!("berth_{id}_cpu"),
+                "unique_id": format!("nodestarr_{id}_cpu"),
                 "state_topic": state,
                 "value_template": "{{ value_json.cpu }}",
                 "unit_of_measurement": "%",
@@ -201,10 +201,10 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
             }),
         ));
         out.push((
-            format!("{prefix}/sensor/berth_{id}/memory/config"),
+            format!("{prefix}/sensor/nodestarr_{id}/memory/config"),
             json!({
                 "name": "Memory",
-                "unique_id": format!("berth_{id}_memory"),
+                "unique_id": format!("nodestarr_{id}_memory"),
                 "state_topic": state,
                 "value_template": "{{ value_json.memory_mb }}",
                 "unit_of_measurement": "MB",
@@ -218,11 +218,11 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
     out
 }
 
-fn berth_discovery(s: &MqttSettings, instance: &str) -> Vec<(String, Value)> {
+fn nodestarr_discovery(s: &MqttSettings, instance: &str) -> Vec<(String, Value)> {
     let device = json!({
-        "identifiers": ["berth"],
+        "identifiers": ["nodestarr"],
         "name": instance,
-        "manufacturer": "Berth",
+        "manufacturer": "Nodestarr",
         "model": "Container manager",
         "sw_version": crate::VERSION,
     });
@@ -231,10 +231,10 @@ fn berth_discovery(s: &MqttSettings, instance: &str) -> Vec<(String, Value)> {
     let avail = availability(s);
     vec![
         (
-            format!("{prefix}/sensor/berth/updates/config"),
+            format!("{prefix}/sensor/nodestarr/updates/config"),
             json!({
                 "name": "Updates available",
-                "unique_id": "berth_updates_available",
+                "unique_id": "nodestarr_updates_available",
                 "state_topic": summary,
                 "value_template": "{{ value_json.updates }}",
                 "icon": "mdi:package-up",
@@ -243,10 +243,10 @@ fn berth_discovery(s: &MqttSettings, instance: &str) -> Vec<(String, Value)> {
             }),
         ),
         (
-            format!("{prefix}/sensor/berth/running/config"),
+            format!("{prefix}/sensor/nodestarr/running/config"),
             json!({
                 "name": "Containers running",
-                "unique_id": "berth_containers_running",
+                "unique_id": "nodestarr_containers_running",
                 "state_topic": summary,
                 "value_template": "{{ value_json.running }}",
                 "icon": "mdi:docker",
@@ -255,10 +255,10 @@ fn berth_discovery(s: &MqttSettings, instance: &str) -> Vec<(String, Value)> {
             }),
         ),
         (
-            format!("{prefix}/button/berth/check/config"),
+            format!("{prefix}/button/nodestarr/check/config"),
             json!({
                 "name": "Check for updates",
-                "unique_id": "berth_check_updates",
+                "unique_id": "nodestarr_check_updates",
                 "command_topic": format!("{}/command", s.base_topic),
                 "payload_press": "check_updates",
                 "icon": "mdi:refresh",
@@ -324,7 +324,7 @@ async fn publish_states(app: &App, client: &AsyncClient, s: &MqttSettings) {
 
 async fn publish_discovery(app: &App, client: &AsyncClient, s: &MqttSettings) {
     let mut current = HashSet::new();
-    for (topic, payload) in berth_discovery(s, &app.settings.get().general.instance_name) {
+    for (topic, payload) in nodestarr_discovery(s, &app.settings.get().general.instance_name) {
         current.insert(topic.clone());
         publish_json(client, topic, &payload, true).await;
     }
@@ -532,7 +532,7 @@ pub fn topics(s: &MqttSettings) -> HashMap<&'static str, String> {
         ("state", format!("{}/<container>/state", s.base_topic)),
         ("update", format!("{}/<container>/update", s.base_topic)),
         ("commands", format!("{}/<container>/set (start, stop, restart, update)", s.base_topic)),
-        ("berth", format!("{}/command (check_updates)", s.base_topic)),
+        ("nodestarr", format!("{}/command (check_updates)", s.base_topic)),
     ])
 }
 
@@ -544,9 +544,9 @@ mod tests {
     fn ids_and_topics() {
         let s = MqttSettings::default();
         assert_eq!(object_id("compose:media/sonarr"), "compose-media-sonarr");
-        assert_eq!(state_topic(&s, "x"), "berth/x/state");
-        assert_eq!(command_topic(&s, "x"), "berth/x/set");
-        let d = berth_discovery(&s, "Berth");
+        assert_eq!(state_topic(&s, "x"), "nodestarr/x/state");
+        assert_eq!(command_topic(&s, "x"), "nodestarr/x/set");
+        let d = nodestarr_discovery(&s, "Nodestarr");
         assert!(d.iter().all(|(t, _)| t.starts_with("homeassistant/")));
     }
 }

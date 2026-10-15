@@ -244,7 +244,7 @@ pub async fn replace(
         .and_then(|n| n.endpoints_config.as_ref())
         .and_then(|m| m.keys().next().cloned());
     let secondary = secondary_networks(&inspect, primary.as_deref());
-    let temp_name = format!("{name}-berth-old-{}", &old_id[..8.min(old_id.len())]);
+    let temp_name = format!("{name}-nodestarr-old-{}", &old_id[..8.min(old_id.len())]);
 
     if was_running {
         log(format!("Stopping {name}"));

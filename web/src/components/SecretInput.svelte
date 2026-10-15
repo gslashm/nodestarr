@@ -15,7 +15,7 @@
     label = 'Secret',
   }: { value: string; id?: string; placeholder?: string; label?: string } = $props();
 
-  const marker = $derived(session.secretPlaceholder || '__berth_secret__');
+  const marker = $derived(session.secretPlaceholder || '__nodestarr_secret__');
   const saved = $derived(value === marker);
   let wasSaved = $state(false);
   let visible = $state(false);

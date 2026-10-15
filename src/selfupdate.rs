@@ -1,8 +1,8 @@
-//! Updating Berth's own container.
+//! Updating Nodestarr's own container.
 //!
-//! A process can't replace the container it runs in, so Berth pulls the new
+//! A process can't replace the container it runs in, so Nodestarr pulls the new
 //! image and starts a short-lived helper container from it. The helper
-//! recreates the Berth container with the new image, checks that it comes
+//! recreates the Nodestarr container with the new image, checks that it comes
 //! up, and removes itself (rolling back if the new version doesn't start).
 
 use std::time::Duration;
@@ -21,10 +21,10 @@ use crate::registry::ImageRef;
 use crate::settings::Severity;
 use crate::tasks::TaskCtx;
 
-/// GitHub repository ("owner/name") that publishes Berth releases, used for
-/// "new Berth version" checks and release notes. Set at build time with
-/// BERTH_REPO; builds without it skip those checks.
-pub const REPO: Option<&str> = match option_env!("BERTH_REPO") {
+/// GitHub repository ("owner/name") that publishes Nodestarr releases, used for
+/// "new Nodestarr version" checks and release notes. Set at build time with
+/// NODESTARR_REPO; builds without it skip those checks.
+pub const REPO: Option<&str> = match option_env!("NODESTARR_REPO") {
     Some(r) if !r.is_empty() => Some(r),
     _ => None,
 };
@@ -47,22 +47,22 @@ pub async fn start(app: &App, ctx: &TaskCtx, entry: &Entry, tag: Option<&str>) -
         .await
         .ok_or_else(|| AppError::conflict("image missing after pull"))?;
     if pulled.id == s.image_id && tag.is_none() {
-        ctx.log("Berth is already up to date");
+        ctx.log("Nodestarr is already up to date");
         return Ok(json!({ "changed": false }));
     }
 
-    // The helper needs the same Docker socket mount as Berth.
+    // The helper needs the same Docker socket mount as Nodestarr.
     let socket_bind = s
         .mounts
         .iter()
         .find(|m| m.destination.ends_with("docker.sock"))
         .map(|m| format!("{}:{}", m.source, m.destination))
-        .ok_or_else(|| AppError::conflict("can't find Berth's Docker socket mount for the update helper"))?;
+        .ok_or_else(|| AppError::conflict("can't find Nodestarr's Docker socket mount for the update helper"))?;
     let docker_host = std::env::var("DOCKER_HOST").unwrap_or_else(|_| "unix:///var/run/docker.sock".into());
-    let name = format!("berth-updater-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
+    let name = format!("nodestarr-updater-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
     let body = ContainerCreateBody {
         image: Some(new_ref.clone()),
-        entrypoint: Some(vec!["/usr/local/bin/berth".into()]),
+        entrypoint: Some(vec!["/usr/local/bin/nodestarr".into()]),
         cmd: Some(vec![
             "self-update-helper".into(),
             "--container".into(),
@@ -71,7 +71,7 @@ pub async fn start(app: &App, ctx: &TaskCtx, entry: &Entry, tag: Option<&str>) -
             new_ref.clone(),
         ]),
         env: Some(vec![format!("DOCKER_HOST={docker_host}")]),
-        labels: Some(std::collections::HashMap::from([("berth.helper".to_string(), "true".to_string())])),
+        labels: Some(std::collections::HashMap::from([("nodestarr.helper".to_string(), "true".to_string())])),
         host_config: Some(HostConfig {
             binds: Some(vec![socket_bind]),
             auto_remove: Some(true),
@@ -86,20 +86,20 @@ pub async fn start(app: &App, ctx: &TaskCtx, entry: &Entry, tag: Option<&str>) -
         .create_container(Some(CreateContainerOptions { name: Some(name.clone()), platform: String::new() }), body)
         .await?;
     app.note(
-        NewActivity::new("system.update", Severity::Info, format!("Updating Berth to {}", target.familiar()))
+        NewActivity::new("system.update", Severity::Info, format!("Updating Nodestarr to {}", target.familiar()))
             .actor(&Actor::system()),
     )
     .await;
-    ctx.log("Starting the update helper; Berth will restart in a few seconds");
+    ctx.log("Starting the update helper; Nodestarr will restart in a few seconds");
     ctx.flush();
     actions::start(&app.docker.api, &created.id).await?;
     Ok(json!({ "changed": true, "helper": name }))
 }
 
-/// `berth self-update-helper`: runs inside the helper container.
+/// `nodestarr self-update-helper`: runs inside the helper container.
 pub async fn run_helper(boot: &BootConfig, container: &str, image: &str) -> anyhow::Result<()> {
     crate::app::init_tls();
-    println!("berth update helper: waiting for Berth to finish its request");
+    println!("nodestarr update helper: waiting for Nodestarr to finish its request");
     tokio::time::sleep(Duration::from_secs(3)).await;
     let api = crate::docker::connect(&boot.docker_host).await?;
     let inspect = api.inspect_container(container, None::<InspectContainerOptions>).await?;
@@ -111,19 +111,19 @@ pub async fn run_helper(boot: &BootConfig, container: &str, image: &str) -> anyh
     let cancel = tokio_util::sync::CancellationToken::new();
     match actions::wait_until_stable(&api, &rec.new_id, Duration::from_secs(10), Duration::from_secs(120), &cancel).await {
         Ok(actions::Stability::Stable) => {
-            println!("new Berth container is up; removing the old one");
+            println!("new Nodestarr container is up; removing the old one");
             recreate::finalize(&api, &rec).await?;
             Ok(())
         }
         other => {
-            println!("new Berth container did not come up ({other:?}); restoring the previous version");
+            println!("new Nodestarr container did not come up ({other:?}); restoring the previous version");
             recreate::revert(&api, &rec, &log).await?;
             anyhow::bail!("update failed, previous version restored")
         }
     }
 }
 
-/// Notifies once per release when a newer Berth version is published.
+/// Notifies once per release when a newer Nodestarr version is published.
 pub async fn check_for_release(app: &App) {
     let Some(repo) = REPO else { return };
     let Ok(resp) = app
@@ -145,12 +145,12 @@ pub async fn check_for_release(app: &App) {
     };
     let newer = latest.core > current.core;
     let key = format!("notified:{tag}");
-    let already: Option<String> = app.db.get_json("settings", "berth_release".into()).await.ok().flatten();
+    let already: Option<String> = app.db.get_json("settings", "nodestarr_release".into()).await.ok().flatten();
     if newer && already.as_deref() != Some(key.as_str()) {
         app.notifier.send(
-            Notification::new("system.update", Severity::Info, format!("Berth {tag} is available"), format!("You run {}. Update from Settings > System.", crate::VERSION))
+            Notification::new("system.update", Severity::Info, format!("Nodestarr {tag} is available"), format!("You run {}. Update from Settings > System.", crate::VERSION))
                 .link(app, "/system"),
         );
-        let _ = app.db.put_json("settings", "berth_release".into(), &key).await;
+        let _ = app.db.put_json("settings", "nodestarr_release".into(), &key).await;
     }
 }

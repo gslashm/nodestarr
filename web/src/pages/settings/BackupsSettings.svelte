@@ -15,7 +15,7 @@
 <SettingsSection section="backups" title="Backups" intro="Each container can override what's included and how it's copied in its own settings.">
   {#snippet children(b)}
     <Group title="Where and when">
-      <Field label="Backup folder" id="b-root" hint="Inside Berth's container. Mount your backup disk here, for example /mnt/backup/berth:/backups.">
+      <Field label="Backup folder" id="b-root" hint="Inside Nodestarr's container. Mount your backup disk here, for example /mnt/backup/nodestarr:/backups.">
         <input id="b-root" class="input mono" bind:value={b.root} placeholder="/backups" spellcheck="false" />
       </Field>
       <Field label="Schedule">
@@ -79,8 +79,8 @@
     </Group>
 
     <Group title="After each backup run" hint="For off-site copies, like rclone to cloud storage.">
-      <Field label="Command" id="b-hook" hint="Run in Berth's container. BERTH_BACKUP_ROOT and BERTH_BACKUP_STATUS (ok or failed) are set.">
-        <input id="b-hook" class="input mono" bind:value={b.hook.command} placeholder="rclone sync /backups remote:berth" spellcheck="false" />
+      <Field label="Command" id="b-hook" hint="Run in Nodestarr's container. NODESTARR_BACKUP_ROOT and NODESTARR_BACKUP_STATUS (ok or failed) are set.">
+        <input id="b-hook" class="input mono" bind:value={b.hook.command} placeholder="rclone sync /backups remote:nodestarr" spellcheck="false" />
       </Field>
       <Field label="Or run it in a container" id="b-hook-ct" hint="The name of a container that has the tool, like an rclone container.">
         <input id="b-hook-ct" class="input mono" bind:value={b.hook.exec_container} list="b-running" placeholder="rclone" spellcheck="false" />
@@ -88,7 +88,7 @@
       </Field>
       {#if b.hook.exec_container}
         <Field label="Command in the container" id="b-hook-cmd">
-          <input id="b-hook-cmd" class="input mono" bind:value={b.hook.exec_command} placeholder="rclone sync /backups crypt:berth" spellcheck="false" />
+          <input id="b-hook-cmd" class="input mono" bind:value={b.hook.exec_command} placeholder="rclone sync /backups crypt:nodestarr" spellcheck="false" />
         </Field>
       {/if}
       <Field label="Run it">

@@ -148,7 +148,7 @@ async fn run_restore(app: &App, ctx: &TaskCtx, backup_id: &str, opts: RestoreOpt
             if stats.removed > 0 { format!(", removed {} stale files", stats.removed) } else { String::new() }
         ));
 
-        // Mounts Berth can't see directly go back through Docker.
+        // Mounts Nodestarr can't see directly go back through Docker.
         for (prefix, destination) in &docker_targets {
             let src = work.join("docker").join(prefix.trim_end_matches('/').replace('/', "_"));
             ctx.log(format!("Uploading {destination} through Docker"));
@@ -170,7 +170,7 @@ async fn run_restore(app: &App, ctx: &TaskCtx, backup_id: &str, opts: RestoreOpt
                         let zp = zip_path.clone();
                         tokio::task::spawn_blocking(move || unzip_into(&zp, &dir)).await??;
                     }
-                    None => ctx.log("The app backup could not be unpacked: /config is not visible to Berth"),
+                    None => ctx.log("The app backup could not be unpacked: /config is not visible to Nodestarr"),
                 }
             }
         }
@@ -281,7 +281,7 @@ fn unzip_into(zip_path: &Path, dest: &Path) -> Result<()> {
             std::fs::create_dir_all(parent)?;
         }
         restored.insert(out.clone());
-        let tmp = out.with_extension("berth-restore-tmp");
+        let tmp = out.with_extension("nodestarr-restore-tmp");
         {
             let mut w = std::fs::File::create(&tmp)?;
             std::io::copy(&mut f, &mut w)?;

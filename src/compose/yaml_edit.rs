@@ -324,7 +324,7 @@ pub fn plan_tag_edit(raw: &str, new_tag: &str) -> Result<TagEdit, String> {
         }
     }
     Err(format!(
-        "the image '{raw}' uses variables in a way Berth can't safely rewrite; edit the compose file directly"
+        "the image '{raw}' uses variables in a way Nodestarr can't safely rewrite; edit the compose file directly"
     ))
 }
 

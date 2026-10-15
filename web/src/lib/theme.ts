@@ -1,7 +1,7 @@
 // Theme, accent color and density. The server stores the defaults (Settings
 // > General); this browser can override the theme (kept in localStorage).
 
-const THEME_KEY = 'berth.theme';
+const THEME_KEY = 'nodestarr.theme';
 
 export type ThemeChoice = 'dark' | 'light' | 'system';
 
@@ -42,19 +42,25 @@ export function applyTheme(choice: ThemeChoice): void {
     });
   }
   const meta = document.querySelector('meta[name="theme-color"]');
-  meta?.setAttribute('content', resolve(choice) === 'light' ? '#ffffff' : '#121b23');
+  meta?.setAttribute('content', resolve(choice) === 'light' ? '#ffffff' : '#121a2b');
 }
 
 export function activeTheme(): 'dark' | 'light' {
   return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
 }
 
-/** Sets the accent and a readable text color for it. */
+export const DEFAULT_ACCENT = '#e46cff';
+
+/**
+ * Sets the accent and the color for text and marks drawn on it: a very dark
+ * shade of the accent, or white on dark accents, whichever contrasts more
+ * (dark wins above a relative luminance of about 0.18).
+ */
 export function applyAccent(hex: string): void {
-  const valid = /^#[0-9a-f]{6}$/i.test(hex) ? hex : '#f2c230';
+  const valid = /^#[0-9a-f]{6}$/i.test(hex) ? hex : DEFAULT_ACCENT;
   const root = document.documentElement.style;
   root.setProperty('--accent', valid);
-  root.setProperty('--accent-ink', luminance(valid) > 0.45 ? '#1d1600' : '#ffffff');
+  root.setProperty('--accent-ink', luminance(valid) > 0.18 ? `color-mix(in srgb, ${valid} 14%, #07040c)` : '#ffffff');
 }
 
 export function applyDensity(density: string): void {

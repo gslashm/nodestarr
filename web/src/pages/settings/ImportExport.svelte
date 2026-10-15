@@ -1,4 +1,4 @@
-<!-- Export all settings and per-container preferences to a file, or import them on another Berth. -->
+<!-- Export all settings and per-container preferences to a file, or import them on another Nodestarr. -->
 <script lang="ts">
   import Download from '@lucide/svelte/icons/download';
   import Upload from '@lucide/svelte/icons/upload';
@@ -11,7 +11,7 @@
   import { ui } from '../../lib/ui.svelte';
 
   interface ExportDoc {
-    berth_export: number;
+    nodestarr_export: number;
     version?: string;
     exported_at?: number;
     includes_secrets?: boolean;
@@ -35,7 +35,7 @@
     fileName = file.name;
     try {
       const parsed = JSON.parse(await file.text()) as ExportDoc;
-      if (parsed.berth_export !== 1) throw new Error("This isn't a Berth settings export.");
+      if (parsed.nodestarr_export !== 1) throw new Error("This isn't a Nodestarr settings export.");
       doc = parsed;
     } catch (err) {
       readError = err instanceof SyntaxError ? "The file isn't valid JSON." : errorMessage(err);
@@ -46,7 +46,7 @@
     if (!doc) return;
     const ok = await ui.confirm({
       title: 'Import these settings?',
-      message: 'The chosen parts replace what Berth has now. Passwords the file leaves out keep their current values.',
+      message: 'The chosen parts replace what Nodestarr has now. Passwords the file leaves out keep their current values.',
       confirmLabel: 'Import',
       danger: true,
     });
@@ -69,7 +69,7 @@
 <div class="io">
   <header>
     <h2>Import and export</h2>
-    <p class="muted">Move Berth's setup to a new machine or keep a copy. Container data is in backups, not here.</p>
+    <p class="muted">Move Nodestarr's setup to a new machine or keep a copy. Container data is in backups, not here.</p>
   </header>
 
   {#if !session.isAdmin}
@@ -92,7 +92,7 @@
         {#if readError}<p class="text-bad">{readError}</p>{/if}
         {#if doc}
           <p class="muted small">
-            From Berth {doc.version ?? '?'}{doc.exported_at ? `, exported ${dateTime(doc.exported_at)}` : ''}; {doc.includes_secrets ? 'includes passwords' : 'without passwords'}.
+            From Nodestarr {doc.version ?? '?'}{doc.exported_at ? `, exported ${dateTime(doc.exported_at)}` : ''}; {doc.includes_secrets ? 'includes passwords' : 'without passwords'}.
           </p>
           <Toggle bind:checked={importSettings} label="Settings ({plural(Object.keys(doc.settings ?? {}).length, 'section')})" />
           <Toggle bind:checked={importPrefs} label="Container preferences ({plural(Object.keys(doc.container_prefs ?? {}).length, 'container')})" />

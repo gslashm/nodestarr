@@ -24,7 +24,7 @@ pub enum AppError {
     Conflict(String),
     #[error("too many attempts, try again later")]
     RateLimited,
-    /// A call to something outside Berth failed (registry, Proxmox, an app API).
+    /// A call to something outside Nodestarr failed (registry, Proxmox, an app API).
     #[error("{0}")]
     Upstream(String),
     #[error("Docker: {0}")]

@@ -1,17 +1,17 @@
-// Monogram avatars for apps, colored like shipping-line containers. Berth
-// doesn't bundle third-party logos; an icon URL template can be set in
-// Settings > General to use an icon set you host.
+// Monogram avatars for apps, in muted colors that never match a state color
+// or the accent. Nodestarr doesn't bundle third-party logos; an icon URL
+// template can be set in Settings > General to use an icon set you host.
 
 const COLORS = [
-  '#3f9fcf', // sea blue
+  '#3f8fc4', // blue
   '#2f8f5b', // evergreen
-  '#d9702c', // signal orange
-  '#b98b25', // mustard
-  '#33508f', // navy
-  '#a3473a', // rust
-  '#2a9d8f', // teal
-  '#b02d78', // magenta
-  '#6a7b89', // steel
+  '#c26a2e', // copper
+  '#a88426', // mustard
+  '#3a4f94', // indigo
+  '#9c4a3c', // brick
+  '#2a8f86', // teal
+  '#6e7d2c', // olive
+  '#64708a', // slate
 ];
 
 function hash(s: string): number {

@@ -46,11 +46,11 @@
     state: 'Container state',
     update: 'Update status',
     commands: 'Commands',
-    berth: 'Berth commands',
+    nodestarr: 'Nodestarr commands',
   };
 </script>
 
-<SettingsSection section="mqtt" title="Home Assistant" intro="Berth publishes to your MQTT broker; Home Assistant's MQTT integration picks the devices up on its own.">
+<SettingsSection section="mqtt" title="Home Assistant" intro="Nodestarr publishes to your MQTT broker; Home Assistant's MQTT integration picks the devices up on its own.">
   {#snippet actions(m)}
     <Button icon={PlugZap} busy={testing} onclick={() => test(m)} disabled={!m.host}>Test connection</Button>
     {#if session.settings?.mqtt.enabled}<Button variant="ghost" onclick={reconnect}>Reconnect</Button>{/if}

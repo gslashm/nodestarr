@@ -1,4 +1,4 @@
-//! View models combining a container's summary with Berth's own state
+//! View models combining a container's summary with Nodestarr's own state
 //! (updates, preferences, stats, uptime, app status, last backup).
 
 use std::collections::HashMap;
@@ -104,7 +104,7 @@ pub fn container_view(app: &App, ctx: &ViewContext, summary: Arc<ContainerSummar
     }
 }
 
-/// Glob match for hidden-container patterns ("*-old", "berth-updater-*").
+/// Glob match for hidden-container patterns ("*-old", "nodestarr-updater-*").
 pub fn name_matches(patterns: &[String], name: &str) -> bool {
     patterns.iter().any(|p| {
         globset::Glob::new(p)

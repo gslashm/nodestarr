@@ -1,6 +1,6 @@
 <!--
   Sign-in, the two-factor step, and first-run setup (creating the first
-  admin with the setup code printed in Berth's log).
+  admin with the setup code printed in Nodestarr's log).
 -->
 <script lang="ts">
   import { api, errorMessage } from '../lib/api';
@@ -59,14 +59,14 @@
   <form class="card" onsubmit={submit}>
     <div class="brand">
       <Logo size={40} />
-      <span class="word">berth</span>
+      <span class="word">node<span class="starr">starr</span></span>
     </div>
 
     {#if setup}
       <h1>Create the admin account</h1>
       <p class="muted">
-        This is a new Berth. Choose a username and password, and enter the setup code from Berth's log
-        (<code>docker logs berth</code>).
+        This is a new Nodestarr. Choose a username and password, and enter the setup code from Nodestarr's log
+        (<code>docker logs nodestarr</code>).
       </p>
       <label>
         <span>Setup code</span>
@@ -94,7 +94,7 @@
         <input class="input mono code" bind:value={code} inputmode="numeric" autocomplete="one-time-code" autofocus required />
       </label>
     {:else}
-      <h1>Sign in{session.status?.instance_name && session.status.instance_name !== 'Berth' ? ` to ${session.status.instance_name}` : ''}</h1>
+      <h1>Sign in{session.status?.instance_name && session.status.instance_name !== 'Nodestarr' ? ` to ${session.status.instance_name}` : ''}</h1>
       <label>
         <span>Username</span>
         <!-- svelte-ignore a11y_autofocus -->
@@ -120,7 +120,7 @@
       <button type="button" class="btn ghost" onclick={cancelMfa}>Use a different account</button>
     {/if}
   </form>
-  <p class="foot faint">Berth {session.status?.version}</p>
+  <p class="foot faint">Nodestarr {session.status?.version}</p>
 </div>
 
 <style>
@@ -132,8 +132,10 @@
     gap: 16px;
     min-height: 100vh;
     padding: 24px 16px;
+    /* A night sky: scattered stars and a faint glow of the accent. */
     background:
-      repeating-linear-gradient(90deg, var(--corrugation) 0 2px, transparent 2px 12px),
+      var(--starfield-wide) center / 640px 640px,
+      radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%),
       var(--bg);
   }
   .card {
@@ -156,6 +158,9 @@
   .word {
     font: 700 32px / 1 var(--font-data);
     letter-spacing: -0.01em;
+  }
+  .starr {
+    color: var(--accent-text);
   }
   h1 {
     font-size: var(--fs-lg);

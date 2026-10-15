@@ -74,7 +74,7 @@ pub enum ManifestItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupManifest {
     pub format: u32,
-    pub berth_version: String,
+    pub nodestarr_version: String,
     pub identity: String,
     pub name: String,
     pub container: String,
@@ -124,7 +124,7 @@ impl BackupService {
         if !root.is_dir() {
             return false;
         }
-        let probe = root.join(format!(".berth-write-test-{}", crate::util::short_id()));
+        let probe = root.join(format!(".nodestarr-write-test-{}", crate::util::short_id()));
         let ok = std::fs::write(&probe, b"ok").is_ok();
         let _ = std::fs::remove_file(&probe);
         ok
@@ -223,7 +223,7 @@ impl BackupService {
     }
 
     /// Rebuilds the index from sidecar files on disk (after moving the
-    /// backup folder or restoring Berth's own database).
+    /// backup folder or restoring Nodestarr's own database).
     pub async fn reindex(&self, root: &Path) -> Result<usize> {
         let root = root.to_path_buf();
         let found = tokio::task::spawn_blocking(move || {
@@ -237,7 +237,7 @@ impl BackupService {
                     let p = e.path();
                     if p.is_dir() {
                         walk(&p, out, depth + 1);
-                    } else if p.to_string_lossy().ends_with(".berth.json") {
+                    } else if p.to_string_lossy().ends_with(".nodestarr.json") {
                         if let Ok(text) = std::fs::read_to_string(&p) {
                             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
                                 out.push((p, v));
@@ -253,7 +253,7 @@ impl BackupService {
         let (root, found) = found;
         let mut n = 0;
         for (sidecar, v) in found {
-            let archive_path = PathBuf::from(sidecar.to_string_lossy().trim_end_matches(".berth.json"));
+            let archive_path = PathBuf::from(sidecar.to_string_lossy().trim_end_matches(".nodestarr.json"));
             let Ok(meta) = std::fs::metadata(&archive_path) else { continue };
             let Some(id) = v.get("id").and_then(|x| x.as_str()).map(str::to_string) else { continue };
             let manifest = v.get("manifest").cloned().unwrap_or_default();
@@ -278,7 +278,7 @@ impl BackupService {
 }
 
 pub fn sidecar_path(archive: &Path) -> PathBuf {
-    PathBuf::from(format!("{}.berth.json", archive.display()))
+    PathBuf::from(format!("{}.nodestarr.json", archive.display()))
 }
 
 /// Starts a backup task for one container.
@@ -422,7 +422,7 @@ pub async fn run_container_backup(app: &App, ctx: &TaskCtx, entry: &Entry, kind:
     let root = PathBuf::from(&settings.backups.root);
     if !app.backups.root_available(app) {
         return Err(AppError::conflict(format!(
-            "backup folder {} is missing or not writable (mount it into the Berth container)",
+            "backup folder {} is missing or not writable (mount it into the Nodestarr container)",
             root.display()
         )));
     }
@@ -497,7 +497,7 @@ pub async fn run_container_backup(app: &App, ctx: &TaskCtx, entry: &Entry, kind:
         }
         ctx.progress(0.3);
 
-        // Folders not mounted into Berth: fetch through Docker before pausing.
+        // Folders not mounted into Nodestarr: fetch through Docker before pausing.
         let mut docker_copies: Vec<(usize, PathBuf)> = Vec::new();
         let include_files = !(plan.native && items.iter().any(|i| matches!(i, ManifestItem::Native { .. })));
         let mounts: Vec<&plan::PlannedMount> = plan.mounts.iter().filter(|m| m.include && include_files).collect();
@@ -568,7 +568,7 @@ pub async fn run_container_backup(app: &App, ctx: &TaskCtx, entry: &Entry, kind:
 
         let manifest = BackupManifest {
             format: 1,
-            berth_version: crate::VERSION.to_string(),
+            nodestarr_version: crate::VERSION.to_string(),
             identity: s.identity.clone(),
             name: name.clone(),
             container: s.name.clone(),
@@ -712,8 +712,8 @@ pub async fn run_hook(app: &App, ctx: &TaskCtx, success: bool) {
         let mut cmd = tokio::process::Command::new("sh");
         cmd.arg("-c")
             .arg(&hook.command)
-            .env("BERTH_BACKUP_ROOT", &settings.backups.root)
-            .env("BERTH_BACKUP_STATUS", if success { "ok" } else { "failed" })
+            .env("NODESTARR_BACKUP_ROOT", &settings.backups.root)
+            .env("NODESTARR_BACKUP_STATUS", if success { "ok" } else { "failed" })
             .kill_on_drop(true);
         match tokio::time::timeout(timeout, cmd.output()).await {
             Ok(Ok(out)) => {

@@ -1,12 +1,12 @@
 {
-  "name": "Berth",
-  "short_name": "Berth",
+  "name": "Nodestarr",
+  "short_name": "Nodestarr",
   "description": "Monitor, update and back up the containers on your server.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0e151c",
-  "theme_color": "#121b23",
+  "background_color": "#0d1220",
+  "theme_color": "#121a2b",
   "icons": [
     {
       "src": "./icons/icon.svg",

@@ -109,7 +109,7 @@ pub struct ContainerSpec {
 #[derive(Debug, Clone, Serialize)]
 pub struct ParsedRun {
     pub spec: ContainerSpec,
-    /// Flags Berth could not translate (shown to the user).
+    /// Flags Nodestarr could not translate (shown to the user).
     pub warnings: Vec<String>,
 }
 

@@ -19,7 +19,7 @@ use crate::db::Db;
 use crate::error::{AppError, Result};
 use crate::settings::{SettingsStore, Severity};
 
-pub const SESSION_COOKIE: &str = "berth_session";
+pub const SESSION_COOKIE: &str = "nodestarr_session";
 const LOGIN_WINDOW_SECS: i64 = 900;
 const LOGIN_MAX_ATTEMPTS: usize = 10;
 
@@ -674,7 +674,7 @@ impl AuthService {
         if name.is_empty() || name.len() > 64 {
             return Err(AppError::bad_request("give the key a name (max 64 characters)"));
         }
-        let key = format!("brt_{}", crate::util::random_token(30));
+        let key = format!("nsr_{}", crate::util::random_token(30));
         let hash = crate::util::sha256_hex(&key);
         let prefix = key[..10].to_string();
         let now = crate::util::now();
@@ -733,7 +733,7 @@ impl AuthService {
     }
 
     pub async fn api_key_principal(&self, key: &str) -> Result<Option<Principal>> {
-        if !key.starts_with("brt_") {
+        if !key.starts_with("nsr_") {
             return Ok(None);
         }
         let hash = crate::util::sha256_hex(key);
@@ -771,7 +771,7 @@ pub async fn bootstrap_admin(app: &App) -> Result<()> {
     }
     if let (Some(user), Some(pass)) = (&app.boot.admin_user, &app.boot.admin_password) {
         app.auth.create_user(user, pass, Role::Admin).await?;
-        tracing::info!(user = %user, "created admin user from BERTH_ADMIN_USER");
+        tracing::info!(user = %user, "created admin user from NODESTARR_ADMIN_USER");
         app.note(NewActivity::new("security.user_created", Severity::Info, format!("Admin '{user}' created from environment")).actor(&Actor::system()))
             .await;
         return Ok(());
@@ -780,7 +780,7 @@ pub async fn bootstrap_admin(app: &App) -> Result<()> {
     let code = format!("{}-{}", &raw[..4], &raw[4..8]);
     *app.auth.inner.setup_code.lock() = Some(code.clone());
     tracing::warn!("==============================================================");
-    tracing::warn!("  No users yet. Open Berth in your browser to create one.");
+    tracing::warn!("  No users yet. Open Nodestarr in your browser to create one.");
     tracing::warn!("  Setup code: {code}");
     tracing::warn!("==============================================================");
     Ok(())
@@ -791,10 +791,10 @@ pub async fn complete_setup(app: &App, username: &str, password: &str, code: &st
     if app.auth.user_count().await? > 0 {
         return Err(AppError::conflict("setup was already completed"));
     }
-    let expected = app.auth.setup_code().ok_or_else(|| AppError::conflict("no setup in progress; restart Berth"))?;
+    let expected = app.auth.setup_code().ok_or_else(|| AppError::conflict("no setup in progress; restart Nodestarr"))?;
     let normalize = |s: &str| s.trim().to_ascii_uppercase().replace(' ', "");
     if !crate::util::ct_eq(normalize(code).as_bytes(), normalize(&expected).as_bytes()) {
-        return Err(AppError::bad_request("the setup code is wrong (find it in Berth's logs)"));
+        return Err(AppError::bad_request("the setup code is wrong (find it in Nodestarr's logs)"));
     }
     app.auth.create_user(username, password, Role::Admin).await?;
     *app.auth.inner.setup_code.lock() = None;
@@ -862,12 +862,12 @@ mod tests {
     async fn api_keys() {
         let auth = svc().await;
         let (key, info) = auth.create_api_key("homeassistant", Role::Viewer).await.unwrap();
-        assert!(key.starts_with("brt_"));
+        assert!(key.starts_with("nsr_"));
         assert_eq!(info.prefix.len(), 10);
         let p = auth.api_key_principal(&key).await.unwrap().unwrap();
         assert_eq!(p.role, Role::Viewer);
         assert_eq!(p.via, AuthVia::ApiKey);
-        assert!(auth.api_key_principal("brt_wrong").await.unwrap().is_none());
+        assert!(auth.api_key_principal("nsr_wrong").await.unwrap().is_none());
         auth.delete_api_key(info.id).await.unwrap();
         assert!(auth.api_key_principal(&key).await.unwrap().is_none());
     }

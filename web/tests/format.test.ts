@@ -54,5 +54,5 @@ test('actors', () => {
   assert.equal(actorLabel('user:jake'), 'jake');
   assert.equal(actorLabel('api:ha'), 'API key "ha"');
   assert.equal(actorLabel('auto-update'), 'Automatic update');
-  assert.equal(actorLabel(null), 'Berth');
+  assert.equal(actorLabel(null), 'Nodestarr');
 });

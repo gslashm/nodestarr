@@ -2,7 +2,7 @@
 
 import { api } from './api';
 import { setTimeFormat } from './format';
-import { applyAccent, applyDensity, applyTheme, storedTheme, type ThemeChoice } from './theme';
+import { DEFAULT_ACCENT, applyAccent, applyDensity, applyTheme, storedTheme, type ThemeChoice } from './theme';
 import type { AuthStatus, Me, Settings } from './types';
 
 interface SettingsResponse {
@@ -19,7 +19,7 @@ class Session {
   defaults = $state<SettingsResponse['defaults'] | null>(null);
   mqttTopics = $state<Record<string, string>>({});
   /** Value the server sends in place of stored secrets. */
-  secretPlaceholder = '__berth_secret__';
+  secretPlaceholder = '__nodestarr_secret__';
 
   isAdmin = $derived(this.me?.role === 'admin');
   signedIn = $derived(!!this.status?.authenticated && !!this.me);
@@ -49,10 +49,10 @@ class Session {
     const ui = this.settings?.general.ui;
     const theme = (storedTheme() ?? (ui?.theme as ThemeChoice | undefined) ?? 'dark') as ThemeChoice;
     applyTheme(theme);
-    applyAccent(ui?.accent ?? '#f2c230');
+    applyAccent(ui?.accent ?? DEFAULT_ACCENT);
     applyDensity(ui?.density ?? 'comfortable');
     setTimeFormat(ui?.time_format ?? '24h');
-    const name = this.settings?.general.instance_name || this.status?.instance_name || 'Berth';
+    const name = this.settings?.general.instance_name || this.status?.instance_name || 'Nodestarr';
     document.title = name;
   }
 

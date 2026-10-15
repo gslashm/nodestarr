@@ -2,7 +2,7 @@
 //!
 //! Sequence for one container:
 //! 1. optional pre-update backup,
-//! 2. pin the running image under a local `berth-rollback/...` tag,
+//! 2. pin the running image under a local `nodestarr-rollback/...` tag,
 //! 3. pull the new image (and edit the compose file for tag switches),
 //! 4. recreate the container (compose `up -d`, or an in-place replacement
 //!    for standalone containers),
@@ -32,7 +32,7 @@ use crate::tasks::{TaskCtx, TaskSpec};
 use crate::updates::check::display_name;
 
 /// Local repository for images pinned so an update can be undone.
-pub const ROLLBACK_REPO_PREFIX: &str = "berth-rollback/";
+pub const ROLLBACK_REPO_PREFIX: &str = "nodestarr-rollback/";
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
 pub struct UpdateRequest {
@@ -278,7 +278,7 @@ pub async fn run_update(
                         .actor(actor),
                 )
                 .await;
-                notify_failure(app, &name, identity, &format!("{reason}. Berth {outcome}; this version will be skipped by auto-update."), true);
+                notify_failure(app, &name, identity, &format!("{reason}. Nodestarr {outcome}; this version will be skipped by auto-update."), true);
                 Err(AppError::conflict(format!("update failed ({reason}); {outcome}")))
             } else {
                 record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), attempted_version.as_deref(), rollback_tag.as_deref(), None, "failed", trigger, ctx.id(), &reason).await;
@@ -666,7 +666,7 @@ fn notify_failure(app: &App, name: &str, identity: &str, detail: &str, rolled_ba
 pub fn start_rollback(app: &App, key: &str, history_id: Option<i64>, actor: &Actor) -> Result<String> {
     let entry = app.docker.get(key).ok_or_else(|| AppError::not_found("container"))?;
     if entry.summary.is_self {
-        return Err(AppError::conflict("Berth can't roll itself back; use Settings > System instead"));
+        return Err(AppError::conflict("Nodestarr can't roll itself back; use Settings > System instead"));
     }
     let identity = entry.summary.identity.clone();
     let name = display_name(app, &entry);
@@ -802,7 +802,7 @@ mod tests {
     #[test]
     fn rollback_repo_names_are_valid_references() {
         let r = rollback_repo("compose:media/sonarr");
-        assert_eq!(r, "berth-rollback/compose-media-sonarr");
+        assert_eq!(r, "nodestarr-rollback/compose-media-sonarr");
         assert!(ImageRef::parse(&format!("{r}:20241014120000")).is_some());
     }
 }

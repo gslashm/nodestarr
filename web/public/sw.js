@@ -1,8 +1,8 @@
-// Berth service worker: lets the app be installed and shows a clear page
+// Nodestarr service worker: lets the app be installed and shows a clear page
 // when the server can't be reached. API calls and live data always go to
 // the network; only the app shell and its hashed assets are cached.
-const SHELL = 'berth-shell-v2';
-const ASSETS = 'berth-assets-v2';
+const SHELL = 'nodestarr-shell-v2';
+const ASSETS = 'nodestarr-assets-v2';
 // Hashed assets from older versions are dropped beyond this many entries
 // (a build has roughly 200, most of them loaded only when a page needs them).
 const MAX_ASSETS = 400;
@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
           }
           return resp;
         })
-        .catch(() => caches.match('./', { cacheName: SHELL }).then((r) => r || new Response('Berth is not reachable right now.', { status: 503, headers: { 'Content-Type': 'text/plain' } }))),
+        .catch(() => caches.match('./', { cacheName: SHELL }).then((r) => r || new Response('Nodestarr is not reachable right now.', { status: 503, headers: { 'Content-Type': 'text/plain' } }))),
     );
     return;
   }

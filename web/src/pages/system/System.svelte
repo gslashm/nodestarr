@@ -1,4 +1,4 @@
-<!-- System: Berth itself, Docker's images, volumes and networks, scheduled jobs, and Berth's log. -->
+<!-- System: Nodestarr itself, Docker's images, volumes and networks, scheduled jobs, and Nodestarr's log. -->
 <script lang="ts">
   import type { Component } from 'svelte';
   import PageHeader from '../../components/PageHeader.svelte';
@@ -10,7 +10,7 @@
     about: () => import('./About.svelte'),
     docker: () => import('./DockerResources.svelte'),
     jobs: () => import('./Jobs.svelte'),
-    logs: () => import('./BerthLogs.svelte'),
+    logs: () => import('./NodestarrLogs.svelte'),
   };
 
   const tab = $derived(params.tab && loaders[params.tab] ? params.tab : 'about');
@@ -24,10 +24,10 @@
   });
 
   const tabList = [
-    { key: 'about', label: 'Berth', path: '/system' },
+    { key: 'about', label: 'Nodestarr', path: '/system' },
     { key: 'docker', label: 'Images, volumes, networks', path: '/system/docker' },
     { key: 'jobs', label: 'Scheduled jobs', path: '/system/jobs' },
-    { key: 'logs', label: "Berth's log", path: '/system/logs' },
+    { key: 'logs', label: "Nodestarr's log", path: '/system/logs' },
   ];
 </script>
 

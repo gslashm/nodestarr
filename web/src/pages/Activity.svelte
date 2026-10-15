@@ -37,7 +37,7 @@
     { value: 'proxmox', label: 'Proxmox' },
     { value: 'security', label: 'Sign-ins and accounts' },
     { value: 'settings', label: 'Settings' },
-    { value: 'system', label: 'Berth' },
+    { value: 'system', label: 'Nodestarr' },
   ];
 
   let category = $state(router.query.get('kind') ?? '');

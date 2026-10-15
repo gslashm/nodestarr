@@ -31,7 +31,7 @@
   }
 </script>
 
-<SettingsSection section="uptime" title="Uptime" intro="Berth checks addresses from inside your network and tells you when they stop answering.">
+<SettingsSection section="uptime" title="Uptime" intro="Nodestarr checks addresses from inside your network and tells you when they stop answering.">
   {#snippet children(u)}
     <Group>
       <Field label="Uptime checks">

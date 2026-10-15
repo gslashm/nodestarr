@@ -1,4 +1,4 @@
-//! Berth: a lightweight, self-hosted manager for Docker containers and
+//! Nodestarr: a lightweight, self-hosted manager for Docker containers and
 //! Compose stacks, with Proxmox awareness.
 //!
 //! The crate is organized by domain. [`app`] wires everything together;
@@ -34,8 +34,8 @@ pub mod tasks;
 pub mod updates;
 pub mod util;
 
-/// Berth's version, from Cargo.toml.
+/// Nodestarr's version, from Cargo.toml.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// User agent for outbound requests.
-pub const USER_AGENT: &str = concat!("Berth/", env!("CARGO_PKG_VERSION"));
+pub const USER_AGENT: &str = concat!("Nodestarr/", env!("CARGO_PKG_VERSION"));

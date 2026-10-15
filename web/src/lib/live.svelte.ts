@@ -51,7 +51,7 @@ function sortKey(c: ContainerView): string {
 }
 
 function isInternal(name: string): boolean {
-  return name.startsWith('berth-updater-') || name.includes('-berth-old-');
+  return name.startsWith('nodestarr-updater-') || name.includes('-nodestarr-old-');
 }
 
 class Live {
@@ -241,7 +241,7 @@ class Live {
     switch (ev.type) {
       case 'hello':
         if (this.serverVersion && this.serverVersion !== ev.data.version) {
-          ui.toast(`Berth was updated to ${ev.data.version}.`, 'info', { label: 'Reload', run: () => location.reload() });
+          ui.toast(`Nodestarr was updated to ${ev.data.version}.`, 'info', { label: 'Reload', run: () => location.reload() });
         }
         this.serverVersion = ev.data.version;
         break;

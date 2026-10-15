@@ -16,11 +16,11 @@ pub const LABEL_CONTAINER_NUMBER: &str = "com.docker.compose.container-number";
 pub const LABEL_ONEOFF: &str = "com.docker.compose.oneoff";
 pub const LABEL_ENV_FILE: &str = "com.docker.compose.project.environment_file";
 /// Optional label to set a container's web UI link explicitly.
-pub const LABEL_BERTH_URL: &str = "berth.url";
+pub const LABEL_NODESTARR_URL: &str = "nodestarr.url";
 /// Optional label to give a container a display name.
-pub const LABEL_BERTH_NAME: &str = "berth.name";
-/// Optional label marking a container as Berth itself.
-pub const LABEL_BERTH_SELF: &str = "berth.self";
+pub const LABEL_NODESTARR_NAME: &str = "nodestarr.name";
+/// Optional label marking a container as Nodestarr itself.
+pub const LABEL_NODESTARR_SELF: &str = "nodestarr.self";
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct PortInfo {
@@ -83,9 +83,9 @@ pub struct ContainerSummary {
     pub links: Vec<WebLink>,
     pub compose_dir: Option<String>,
     pub compose_files: Vec<String>,
-    /// True for the container running Berth.
+    /// True for the container running Nodestarr.
     pub is_self: bool,
-    /// Name from the `berth.name` label, if any.
+    /// Name from the `nodestarr.name` label, if any.
     pub label_name: Option<String>,
 }
 
@@ -102,7 +102,7 @@ impl ContainerSummary {
         &self.id[..self.id.len().min(12)]
     }
 
-    /// Name to show when the user hasn't set one: the `berth.name` label,
+    /// Name to show when the user hasn't set one: the `nodestarr.name` label,
     /// else the compose service (or container) name, using the app's proper
     /// name when the service is simply named after it ("sonarr" → "Sonarr").
     pub fn default_name(&self) -> String {
@@ -235,7 +235,7 @@ pub fn summarize(input: SummaryInput<'_>) -> Option<ContainerSummary> {
 
     let links = web_links(&labels, &ports, &network_mode, app, input.public_host);
     let is_self = input.self_id.is_some_and(|sid| id.starts_with(sid) || sid.starts_with(&id))
-        || labels.get(LABEL_BERTH_SELF).is_some_and(|v| v == "true");
+        || labels.get(LABEL_NODESTARR_SELF).is_some_and(|v| v == "true");
 
     Some(ContainerSummary {
         id,
@@ -266,7 +266,7 @@ pub fn summarize(input: SummaryInput<'_>) -> Option<ContainerSummary> {
         compose_dir,
         compose_files,
         is_self,
-        label_name: labels.get(LABEL_BERTH_NAME).cloned(),
+        label_name: labels.get(LABEL_NODESTARR_NAME).cloned(),
     })
 }
 
@@ -424,7 +424,7 @@ fn web_links(
     public_host: &str,
 ) -> Vec<WebLink> {
     let mut links = Vec::new();
-    if let Some(url) = labels.get(LABEL_BERTH_URL).filter(|u| !u.is_empty()) {
+    if let Some(url) = labels.get(LABEL_NODESTARR_URL).filter(|u| !u.is_empty()) {
         links.push(WebLink {
             label: "Open".into(),
             url: url.clone(),

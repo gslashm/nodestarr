@@ -1,5 +1,5 @@
 <!--
-  Uptime checks: every container web UI Berth watches plus custom checks,
+  Uptime checks: every container web UI Nodestarr watches plus custom checks,
   with recent results, response times, and a tester for any address.
 -->
 <script lang="ts">
@@ -133,7 +133,7 @@
 
   {#if checks.length === 0}
     <EmptyState icon={Activity} title="Nothing to check yet">
-      Berth checks the web UI of containers it can reach on their own. Add your own addresses in Settings > Uptime.
+      Nodestarr checks the web UI of containers it can reach on their own. Add your own addresses in Settings > Uptime.
     </EmptyState>
   {:else}
     <section class="panel list">

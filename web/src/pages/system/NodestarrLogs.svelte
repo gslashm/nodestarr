@@ -1,4 +1,4 @@
-<!-- Berth's own recent log (kept in memory), for troubleshooting Berth itself. -->
+<!-- Nodestarr's own recent log (kept in memory), for troubleshooting Nodestarr itself. -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import CopyButton from '../../components/CopyButton.svelte';
@@ -75,7 +75,7 @@
         <div class="line lvl-{e.level.toLowerCase()}">
           <span class="ts">{stamp(e.ts)}</span>
           <span class="lvl">{e.level}</span>
-          <span class="tgt">{e.target.replace(/^berth::/, '')}</span>
+          <span class="tgt">{e.target.replace(/^nodestarr::/, '')}</span>
           <span class="msg">{e.message}</span>
         </div>
       {:else}

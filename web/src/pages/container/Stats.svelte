@@ -19,7 +19,7 @@
 
   type Range = '15m' | '1h' | '6h' | '24h' | '7d' | '30d';
   const RANGE_SECS: Record<Range, number> = { '15m': 900, '1h': 3600, '6h': 21600, '24h': 86400, '7d': 604800, '30d': 2592000 };
-  const RANGE_KEY = 'berth.stats.range';
+  const RANGE_KEY = 'nodestarr.stats.range';
 
   function storedRange(): Range {
     try {

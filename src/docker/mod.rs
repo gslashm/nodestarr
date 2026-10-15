@@ -57,7 +57,7 @@ pub async fn negotiate(docker: &Docker) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Finds the id of the container Berth runs in, if any, from mountinfo
+/// Finds the id of the container Nodestarr runs in, if any, from mountinfo
 /// (works with cgroup v1 and v2) or the hostname.
 pub fn detect_self_container_id() -> Option<String> {
     if let Ok(mountinfo) = std::fs::read_to_string("/proc/self/mountinfo") {

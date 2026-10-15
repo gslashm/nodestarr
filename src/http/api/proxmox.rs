@@ -69,7 +69,7 @@ async fn rrd(State(app): State<App>, Query(q): Query<RrdQuery>) -> Result<Json<V
 
 #[derive(Deserialize, Default)]
 struct ConfirmBody {
-    /// Confirms a disruptive action on the guest that runs Berth.
+    /// Confirms a disruptive action on the guest that runs Nodestarr.
     #[serde(default)]
     confirm_self: bool,
 }

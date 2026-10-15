@@ -229,7 +229,7 @@ struct RemoveQuery {
 async fn remove(State(app): State<App>, Auth(p): Auth, Path(name): Path<String>, Query(q): Query<RemoveQuery>) -> Result<Json<Value>> {
     let stack = app.compose.stack_ref(&name)?;
     if app.docker.in_stack(&name).iter().any(|e| e.summary.is_self) {
-        return Err(AppError::forbidden("this stack contains Berth itself"));
+        return Err(AppError::forbidden("this stack contains Nodestarr itself"));
     }
     let actor = p.actor();
     let spec = TaskSpec::new("compose", format!("Remove stack {name}"), &actor).lock(format!("stack:{name}"));

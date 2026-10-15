@@ -3,7 +3,7 @@
 //! Docker's stats endpoint is asked for a single "one-shot" sample, which
 //! returns immediately instead of waiting a second for a second reading.
 //! Rates (CPU %, network and disk throughput) are computed against the
-//! previous sample Berth took of the same container.
+//! previous sample Nodestarr took of the same container.
 
 use std::collections::HashMap;
 

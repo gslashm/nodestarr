@@ -91,7 +91,7 @@
 <Dialog open={!!p} title={p ? `${PROVIDER_LABEL[p.config.kind]}: ${p.name || 'new channel'}` : ''} width="680px" {onclose}>
   {#if p}
     {@const c = p.config}
-    <Field label="Name" id="np-name" hint="Shown in Berth; also used as the sender name where the service supports it.">
+    <Field label="Name" id="np-name" hint="Shown in Nodestarr; also used as the sender name where the service supports it.">
       <input id="np-name" class="input" bind:value={p.name} />
     </Field>
     <Field label="On">
@@ -103,7 +103,7 @@
         <SecretInput id="np-url" bind:value={c.webhook_url} placeholder="https://discord.com/api/webhooks/…" label="Webhook URL" />
       </Field>
       <Field label="Bot name" id="np-user" hint="Optional; overrides the webhook's name.">
-        <input id="np-user" class="input" bind:value={c.username} placeholder="Berth" />
+        <input id="np-user" class="input" bind:value={c.username} placeholder="Nodestarr" />
       </Field>
       <Field label="Mention" id="np-mention" hint={'Optional, added to problems: @here, @everyone, <@user id> or <@&role id>.'}>
         <input id="np-mention" class="input mono" bind:value={c.mention} placeholder="@here" />
@@ -133,7 +133,7 @@
         <SecretInput id="np-smtp-pass" bind:value={c.password} label="SMTP password" />
       </Field>
       <Field label="From" id="np-from">
-        <input id="np-from" class="input" bind:value={c.from} placeholder="Berth <berth@example.com>" />
+        <input id="np-from" class="input" bind:value={c.from} placeholder="Nodestarr <nodestarr@example.com>" />
       </Field>
       <Field label="To">
         <ListEditor bind:items={c.to} placeholder="you@example.com" addLabel="Add recipient" />

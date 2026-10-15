@@ -1,7 +1,7 @@
 //! Images, volumes and networks: listings with usage, removal, creation and
 //! cleanup ("prune").
 //!
-//! Cleanup is deliberately conservative: rollback images that Berth keeps for
+//! Cleanup is deliberately conservative: rollback images that Nodestarr keeps for
 //! undoing updates survive an "unused images" cleanup unless asked otherwise,
 //! and only anonymous volumes are pruned unless named ones are requested too.
 
@@ -164,7 +164,7 @@ pub async fn create_volume(app: &App, v: NewVolume) -> Result<String> {
             name: Some(v.name.clone()),
             driver: v.driver.filter(|d| !d.is_empty()),
             driver_opts: (!v.driver_opts.is_empty()).then_some(v.driver_opts),
-            labels: Some(HashMap::from([("berth.created".to_string(), "true".to_string())])),
+            labels: Some(HashMap::from([("nodestarr.created".to_string(), "true".to_string())])),
             ..Default::default()
         })
         .await?;
@@ -184,7 +184,7 @@ pub struct NetworkRow {
     pub subnets: Vec<String>,
     pub gateways: Vec<String>,
     pub stack: Option<String>,
-    /// Containers attached (from Berth's inventory, by network name).
+    /// Containers attached (from Nodestarr's inventory, by network name).
     pub containers: Vec<String>,
     pub builtin: bool,
     pub created: Option<i64>,
@@ -269,7 +269,7 @@ pub async fn create_network(app: &App, n: NewNetwork) -> Result<String> {
             attachable: Some(true),
             ipam,
             options: (!n.options.is_empty()).then_some(n.options),
-            labels: Some(HashMap::from([("berth.created".to_string(), "true".to_string())])),
+            labels: Some(HashMap::from([("nodestarr.created".to_string(), "true".to_string())])),
             ..Default::default()
         })
         .await?;
@@ -432,7 +432,7 @@ pub async fn prune(app: &App, req: &PruneRequest, log: &(dyn Fn(String) + Send +
 
     if req.containers {
         log("Removing stopped containers".into());
-        // Berth's own short-lived helpers and leftovers are fine to remove;
+        // Nodestarr's own short-lived helpers and leftovers are fine to remove;
         // everything else stopped goes too, which is what was asked for.
         match api.prune_containers(None::<PruneContainersOptions>).await {
             Ok(p) => {
@@ -456,7 +456,7 @@ pub async fn prune(app: &App, req: &PruneRequest, log: &(dyn Fn(String) + Send +
                     log(format!("  removed {}", img.tags.first().cloned().unwrap_or_else(|| short(&img.id))));
                 }
                 // Images shared by tag with a used image, or in use by a
-                // container Docker knows and Berth hides, are skipped.
+                // container Docker knows and Nodestarr hides, are skipped.
                 Err(e) => tracing::debug!(image = %img.id, %e, "image kept"),
             }
         }

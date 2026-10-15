@@ -23,7 +23,7 @@
   function defaultName(): string {
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, '0');
-    return `berth_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+    return `nodestarr_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
   }
 
   const nameOk = $derived(/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(name));
@@ -73,7 +73,7 @@
   async function rollback(s: PveSnapshot) {
     const r = await ui.ask({
       title: `Roll ${guest.name} back to ${s.name}?`,
-      message: `Everything on ${guest.name} since ${dateTime(s.snaptime)} is lost.${guest.is_self ? ' This guest runs Berth, so Berth restarts and is unavailable for a moment.' : ''}`,
+      message: `Everything on ${guest.name} since ${dateTime(s.snaptime)} is lost.${guest.is_self ? ' This guest runs Nodestarr, so Nodestarr restarts and is unavailable for a moment.' : ''}`,
       confirmLabel: 'Roll back',
       danger: true,
       typeToConfirm: guest.is_self ? guest.name : undefined,

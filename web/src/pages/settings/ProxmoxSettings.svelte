@@ -34,13 +34,13 @@
     }
   }
 
-  const SETUP = `pveum user add berth@pve --comment "Berth"
-pveum role add BerthOps --privs "VM.Audit VM.PowerMgmt VM.Snapshot VM.Snapshot.Rollback VM.Backup Datastore.Audit Datastore.AllocateSpace Sys.Audit Sys.Modify"
-pveum acl modify / --users berth@pve --roles BerthOps
-pveum user token add berth@pve berth --privsep 0`;
+  const SETUP = `pveum user add nodestarr@pve --comment "Nodestarr"
+pveum role add NodestarrOps --privs "VM.Audit VM.PowerMgmt VM.Snapshot VM.Snapshot.Rollback VM.Backup Datastore.Audit Datastore.AllocateSpace Sys.Audit Sys.Modify"
+pveum acl modify / --users nodestarr@pve --roles NodestarrOps
+pveum user token add nodestarr@pve nodestarr --privsep 0`;
 </script>
 
-<SettingsSection section="proxmox" title="Proxmox" intro="Connect to the Proxmox VE node that runs Berth's LXC or VM to see and manage its guests.">
+<SettingsSection section="proxmox" title="Proxmox" intro="Connect to the Proxmox VE node that runs Nodestarr's LXC or VM to see and manage its guests.">
   {#snippet actions(p)}
     <Button icon={PlugZap} busy={testing} onclick={() => test(p)} disabled={!p.url || !p.token_id}>Test connection</Button>
   {/snippet}
@@ -53,7 +53,7 @@ pveum user token add berth@pve berth --privsep 0`;
         <input id="px-url" class="input mono" bind:value={p.url} placeholder="https://192.168.1.10:8006" spellcheck="false" />
       </Field>
       <Field label="API token ID" id="px-tid" hint="user@realm!tokenname">
-        <input id="px-tid" class="input mono" bind:value={p.token_id} placeholder="berth@pve!berth" spellcheck="false" autocomplete="off" />
+        <input id="px-tid" class="input mono" bind:value={p.token_id} placeholder="nodestarr@pve!nodestarr" spellcheck="false" autocomplete="off" />
       </Field>
       <Field label="Token secret" id="px-secret">
         <SecretInput id="px-secret" bind:value={p.token_secret} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" label="Token secret" />
@@ -80,11 +80,11 @@ pveum user token add berth@pve berth --privsep 0`;
     </Group>
 
     <Group title="Defaults">
-      <Field label="Node" id="px-node" hint="Empty uses the only node, or the one Berth runs on.">
+      <Field label="Node" id="px-node" hint="Empty uses the only node, or the one Nodestarr runs on.">
         <input id="px-node" class="input mono" bind:value={p.node} list="px-nodes" placeholder="pve" spellcheck="false" />
         <datalist id="px-nodes">{#each result?.nodes ?? [] as n (n)}<option value={n}></option>{/each}</datalist>
       </Field>
-      <Field label="Berth's guest ID" id="px-self" hint="The VMID of the LXC or VM Berth runs in, so Berth asks twice before stopping it. Empty: the guest named like this Docker host.">
+      <Field label="Nodestarr's guest ID" id="px-self" hint="The VMID of the LXC or VM Nodestarr runs in, so Nodestarr asks twice before stopping it. Empty: the guest named like this Docker host.">
         <input
           id="px-self"
           class="input num short"
@@ -95,7 +95,7 @@ pveum user token add berth@pve berth --privsep 0`;
           placeholder="100"
         />
       </Field>
-      <Field label="Backup storage" id="px-store" hint="Where vzdump backups started from Berth go.">
+      <Field label="Backup storage" id="px-store" hint="Where vzdump backups started from Nodestarr go.">
         <input id="px-store" class="input mono" bind:value={p.backup_storage} placeholder="backups" spellcheck="false" />
       </Field>
     </Group>

@@ -153,7 +153,7 @@
     <p class="faint"><Spinner size={13} /> Loading…</p>
   {:else if stacks.length === 0}
     <EmptyState icon={Layers} title="No stacks yet">
-      Stacks are groups of containers defined in a compose file. Berth finds them on its own, and also lists folders in your stacks directory that haven't been deployed.
+      Stacks are groups of containers defined in a compose file. Nodestarr finds them on its own, and also lists folders in your stacks directory that haven't been deployed.
       {#snippet actions()}
         {#if session.isAdmin}<a class="btn primary" href={href('/stacks/new')}>Create a stack</a>{/if}
       {/snippet}
@@ -200,7 +200,7 @@
           {/if}
           <footer class="faint small">
             {#if r.members.length}{r.running} of {r.members.length} running{/if}
-            {#if !r.stack.editable}<span title="Berth can't read this stack's compose files; mount its folder into Berth to edit it.">, files not readable</span>{/if}
+            {#if !r.stack.editable}<span title="Nodestarr can't read this stack's compose files; mount its folder into Nodestarr to edit it.">, files not readable</span>{/if}
           </footer>
         </article>
       {/each}

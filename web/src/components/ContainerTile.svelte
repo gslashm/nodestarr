@@ -1,7 +1,7 @@
 <!--
-  One container drawn as a container: a corrugated block with a status band,
-  its name and version, live usage, and markers for updates, failures and
-  running tasks.
+  One container as a dashboard tile: a status band, its name and version,
+  live usage, and markers for updates, failures and running tasks, on a
+  faint star-field texture.
 -->
 <script lang="ts">
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
@@ -68,9 +68,7 @@
     padding: 11px 11px 9px 12px;
     border: 1px solid var(--line);
     border-radius: 4px;
-    background:
-      repeating-linear-gradient(90deg, var(--corrugation) 0 2px, transparent 2px 9px),
-      var(--raised);
+    background: var(--starfield) 0 0 / 220px 120px, var(--raised);
     color: var(--text);
     text-decoration: none;
     overflow: hidden;
@@ -90,9 +88,8 @@
     background: var(--state);
   }
   .tile.down {
-    background:
-      repeating-linear-gradient(90deg, var(--corrugation) 0 2px, transparent 2px 9px),
-      color-mix(in srgb, var(--raised) 55%, var(--bg));
+    /* A stopped container: no stars, dimmed. */
+    background: color-mix(in srgb, var(--raised) 55%, var(--bg));
     border-style: dashed;
   }
   .tile.down .name,

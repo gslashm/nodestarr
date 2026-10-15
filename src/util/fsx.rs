@@ -16,7 +16,7 @@ pub fn atomic_write(path: &Path, contents: &[u8]) -> std::io::Result<()> {
         .ok_or_else(|| std::io::Error::other("path has no file name"))?
         .to_string_lossy()
         .to_string();
-    let tmp = dir.join(format!(".{file_name}.berth-tmp-{}", crate::util::short_id()));
+    let tmp = dir.join(format!(".{file_name}.nodestarr-tmp-{}", crate::util::short_id()));
 
     let existing = std::fs::metadata(path).ok();
     {

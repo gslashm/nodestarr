@@ -1,10 +1,10 @@
 {
-  "name": "berth-web",
+  "name": "nodestarr-web",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "version": "0.1.0",
   "type": "module",
-  "description": "Web UI for Berth",
+  "description": "Web UI for Nodestarr",
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/precompress.mjs",

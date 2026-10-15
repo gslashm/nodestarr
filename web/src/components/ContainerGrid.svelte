@@ -1,13 +1,13 @@
-<!-- All containers as a yard: one row ("bay") per stack, standalone last. -->
+<!-- All containers as tiles: one row per stack, standalone containers last. -->
 <script lang="ts">
   import { href } from '../lib/router.svelte';
   import { isUp, stateOf } from '../lib/format';
   import type { ContainerView } from '../lib/types';
-  import YardTile from './YardTile.svelte';
+  import ContainerTile from './ContainerTile.svelte';
 
   let { containers }: { containers: ContainerView[] } = $props();
 
-  const bays = $derived.by(() => {
+  const groups = $derived.by(() => {
     const map = new Map<string, ContainerView[]>();
     for (const c of containers) {
       const key = c.stack ?? '';
@@ -20,20 +20,20 @@
   });
 </script>
 
-<div class="yard">
-  {#each bays as bay (bay.stack)}
-    <section class="bay" aria-label={bay.stack || 'Standalone containers'}>
+<div class="grid">
+  {#each groups as group (group.stack)}
+    <section class="group" aria-label={group.stack || 'Standalone containers'}>
       <div class="label">
-        {#if bay.stack}
-          <a class="stack" href={href(`/stacks/${encodeURIComponent(bay.stack)}`)}>{bay.stack}</a>
+        {#if group.stack}
+          <a class="stack" href={href(`/stacks/${encodeURIComponent(group.stack)}`)}>{group.stack}</a>
         {:else}
           <span class="stack plain">Standalone</span>
         {/if}
-        <span class="count num" class:partial={bay.running < bay.items.length}>{bay.running} of {bay.items.length} up</span>
+        <span class="count num" class:partial={group.running < group.items.length}>{group.running} of {group.items.length} up</span>
       </div>
       <div class="tiles">
-        {#each bay.items as c (c.id)}
-          <YardTile {c} />
+        {#each group.items as c (c.id)}
+          <ContainerTile {c} />
         {/each}
       </div>
     </section>
@@ -41,18 +41,18 @@
 </div>
 
 <style>
-  .yard {
+  .grid {
     display: flex;
     flex-direction: column;
   }
-  .bay {
+  .group {
     display: grid;
     grid-template-columns: 148px 1fr;
     gap: 16px;
     padding: 14px 0;
     border-top: 1px solid var(--line);
   }
-  .bay:first-child {
+  .group:first-child {
     border-top: 0;
     padding-top: 4px;
   }
@@ -86,7 +86,7 @@
     gap: 8px;
   }
   @media (max-width: 760px) {
-    .bay {
+    .group {
       grid-template-columns: 1fr;
       gap: 8px;
     }

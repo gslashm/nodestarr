@@ -1,5 +1,5 @@
 <!--
-  Earlier versions of a stack's files (kept on every save from Berth and on
+  Earlier versions of a stack's files (kept on every save from Nodestarr and on
   tag switches), compared with the current file, and restorable.
 -->
 <script lang="ts">

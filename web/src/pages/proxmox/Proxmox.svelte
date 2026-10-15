@@ -1,5 +1,5 @@
 <!--
-  Proxmox VE: the node Berth runs on and its guests (with power actions,
+  Proxmox VE: the node Nodestarr runs on and its guests (with power actions,
   snapshots and vzdump backups), backup archives, node tasks, and the
   node's disks, package updates and history.
 -->
@@ -96,7 +96,7 @@
     <p class="faint"><Spinner size={13} /> Connecting to Proxmox…</p>
   {:else if !status.enabled}
     <EmptyState icon={Server} title="Proxmox isn't connected">
-      Connect Berth to your Proxmox VE node to see its guests, take snapshots and vzdump backups, and watch the host.
+      Connect Nodestarr to your Proxmox VE node to see its guests, take snapshots and vzdump backups, and watch the host.
       {#snippet actions()}
         {#if session.isAdmin}<a class="btn primary" href={href('/settings/proxmox')}>Set up Proxmox</a>{/if}
       {/snippet}
@@ -105,7 +105,7 @@
     {#if status.error}
       <div class="banner">
         <TriangleAlert size={18} />
-        <span>Couldn't reach Proxmox: {status.error}{o ? ' Showing the last data Berth received.' : ''} <a href={href('/settings/proxmox')}>Check the connection</a></span>
+        <span>Couldn't reach Proxmox: {status.error}{o ? ' Showing the last data Nodestarr received.' : ''} <a href={href('/settings/proxmox')}>Check the connection</a></span>
       </div>
     {/if}
     {#if o && Tab}

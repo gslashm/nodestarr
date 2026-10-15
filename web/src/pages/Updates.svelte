@@ -288,7 +288,7 @@
         </div>
       </section>
       {#if available.some((c) => c.is_self)}
-        <p class="faint small note">Berth updates itself from Settings > System.</p>
+        <p class="faint small note">Nodestarr updates itself from Settings > System.</p>
       {/if}
     {/if}
 
@@ -346,7 +346,7 @@
       {:else if !history}
         <p class="panel-body faint"><Spinner size={13} /> Loading…</p>
       {:else if history.length === 0}
-        <EmptyState icon={History} title="No updates yet">Updates made by Berth, by hand or automatically, show up here.</EmptyState>
+        <EmptyState icon={History} title="No updates yet">Updates made by Nodestarr, by hand or automatically, show up here.</EmptyState>
       {:else}
         <UpdateHistory entries={history} showTarget />
       {/if}

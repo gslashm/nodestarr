@@ -1,4 +1,4 @@
--- Berth schema, version 1.
+-- Nodestarr schema, version 1.
 -- Timestamps are unix seconds unless the column name ends in _ms.
 
 CREATE TABLE settings (
@@ -176,7 +176,7 @@ CREATE TABLE alerts (
 CREATE INDEX alerts_open ON alerts(resolved_at, rule_id, target);
 CREATE INDEX alerts_started ON alerts(started_at);
 
--- Previous versions of files edited through Berth (compose files and app
+-- Previous versions of files edited through Nodestarr (compose files and app
 -- config files), zstd compressed.
 CREATE TABLE file_versions (
     id        INTEGER PRIMARY KEY,

@@ -1,8 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#121b23"/>
-  <g transform="translate(256 256) scale(11) translate(-16 -16)">
-    <rect x="2.5" y="6.5" width="27" height="19" rx="2.6" fill="#f2c230"/>
-    <path d="M8 10.2v11.6M12.2 10.2v11.6M19.8 10.2v11.6M24 10.2v11.6" stroke="#1d1600" stroke-opacity=".42" stroke-width="1.7" stroke-linecap="round"/>
-    <path d="M16 9v14M14.2 14.5h1.1M16.7 17.5h1.1" stroke="#1d1600" stroke-opacity=".75" stroke-width="1.7" stroke-linecap="round"/>
+  <rect width="512" height="512" rx="112" fill="#121a2b"/>
+  <circle cx="118" cy="128" r="3.2" fill="#ffffff" fill-opacity="0.35"/><circle cx="392" cy="108" r="2.4" fill="#ffffff" fill-opacity="0.28"/><circle cx="404" cy="372" r="3.0" fill="#ffffff" fill-opacity="0.3"/><circle cx="132" cy="396" r="2.2" fill="#ffffff" fill-opacity="0.24"/><circle cx="256" cy="92" r="1.8" fill="#ffffff" fill-opacity="0.2"/><circle cx="92" cy="262" r="1.8" fill="#ffffff" fill-opacity="0.2"/><circle cx="424" cy="246" r="2.0" fill="#ffffff" fill-opacity="0.22"/>
+  <g transform="translate(256 256) scale(10.5) translate(-16 -16.6)">
+    <path d="M16 3.5 19.47 12.13 28.74 12.76 21.61 18.72 23.88 27.74 16 22.8 8.12 27.74 10.39 18.72 3.26 12.76 12.53 12.13Z" fill="#e46cff" stroke="#e46cff" stroke-width="1.8" stroke-linejoin="round"/>
+    <g fill="#1b0526" stroke="#1b0526" opacity=".88">
+      <path d="M16 16.9V9M16 16.9 23.51 14.46M16 16.9 20.64 23.29M16 16.9 11.36 23.29M16 16.9 8.49 14.46" fill="none" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="16" cy="9" r="1.3" stroke="none"/>
+      <circle cx="23.51" cy="14.46" r="1.3" stroke="none"/>
+      <circle cx="20.64" cy="23.29" r="1.3" stroke="none"/>
+      <circle cx="11.36" cy="23.29" r="1.3" stroke="none"/>
+      <circle cx="8.49" cy="14.46" r="1.3" stroke="none"/>
+      <circle cx="16" cy="16.9" r="2" stroke="none"/>
+    </g>
   </g>
 </svg>

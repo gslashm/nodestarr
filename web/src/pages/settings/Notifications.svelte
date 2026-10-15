@@ -78,7 +78,7 @@
   }
 </script>
 
-<SettingsSection section="notifications" title="Notifications" intro="Where Berth sends updates, crashes, backups and alerts. Changes apply once you save.">
+<SettingsSection section="notifications" title="Notifications" intro="Where Nodestarr sends updates, crashes, backups and alerts. Changes apply once you save.">
   {#snippet children(n)}
     <Group title="Channels">
       {#if n.providers.length === 0}
@@ -123,7 +123,7 @@
       </div>
     </Group>
 
-    <Group title="Quiet hours" hint="Times in Berth's time zone.">
+    <Group title="Quiet hours" hint="Times in Nodestarr's time zone.">
       <Field label="Quiet hours">
         <Toggle bind:checked={n.quiet_hours.enabled} label="Hold notifications at night" hint="Held messages are sent together when quiet hours end." />
       </Field>

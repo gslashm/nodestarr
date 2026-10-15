@@ -7,7 +7,7 @@
 use serde_json::Value;
 
 /// Sent to the UI instead of a stored secret; sending it back means "unchanged".
-pub const SECRET_PLACEHOLDER: &str = "__berth_secret__";
+pub const SECRET_PLACEHOLDER: &str = "__nodestarr_secret__";
 
 /// Field names whose values are secret wherever they appear.
 const SECRET_KEYS: &[&str] = &[

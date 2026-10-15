@@ -15,7 +15,7 @@
   const targets = $derived(storages.filter((s) => s.active && s.content.includes('backup')));
   let storage = $state('');
   let mode = $state<'snapshot' | 'suspend' | 'stop'>('snapshot');
-  let notes = $state('{{guestname}}, by Berth');
+  let notes = $state('{{guestname}}, by Nodestarr');
   let protect = $state(false);
   let busy = $state(false);
 
@@ -36,8 +36,8 @@
     if (!storage || busy) return;
     if (mode === 'stop' && guest.is_self) {
       const ok = await ui.confirm({
-        title: 'Stop the guest that runs Berth?',
-        message: 'Berth goes offline while the backup runs and comes back when the guest starts again.',
+        title: 'Stop the guest that runs Nodestarr?',
+        message: 'Nodestarr goes offline while the backup runs and comes back when the guest starts again.',
         confirmLabel: 'Back up',
         danger: true,
       });

@@ -96,10 +96,10 @@
 
   function downloadCodes() {
     if (!recovery) return;
-    const blob = new Blob([`Berth recovery codes for ${me?.username}\nEach code works once.\n\n${recovery.join('\n')}\n`], { type: 'text/plain' });
+    const blob = new Blob([`Nodestarr recovery codes for ${me?.username}\nEach code works once.\n\n${recovery.join('\n')}\n`], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'berth-recovery-codes.txt';
+    a.download = 'nodestarr-recovery-codes.txt';
     a.click();
     URL.revokeObjectURL(a.href);
   }
@@ -144,11 +144,11 @@
     return os ? `${browser} on ${os}` : browser;
   }
 
-  /** How the current request is authenticated, for sign-ins without a Berth session. */
+  /** How the current request is authenticated, for sign-ins without a Nodestarr session. */
   const NO_SESSION: Record<string, string> = {
     api_key: "You're using an API key, which has no password or sessions.",
-    external: 'Your reverse proxy signs you in, so there is no Berth password or session to manage here.',
-    local_bypass: "You're on a local network that Berth lets in without signing in (see Sign-in and security), so there's no password or session to manage.",
+    external: 'Your reverse proxy signs you in, so there is no Nodestarr password or session to manage here.',
+    local_bypass: "You're on a local network that Nodestarr lets in without signing in (see Sign-in and security), so there's no password or session to manage.",
   };
   const ROLE_TEXT = (role: string) => (role === 'admin' ? 'admin' : 'viewer, read-only');
 </script>
@@ -187,7 +187,7 @@
       </form>
     </Group>
   {:else if me}
-    <Group title="Password"><p class="muted">{NO_SESSION[me.via] ?? "There's no Berth password to change for this sign-in."}</p></Group>
+    <Group title="Password"><p class="muted">{NO_SESSION[me.via] ?? "There's no Nodestarr password to change for this sign-in."}</p></Group>
   {/if}
 
   {#if me?.can_change_password}

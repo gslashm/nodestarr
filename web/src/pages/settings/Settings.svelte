@@ -17,11 +17,11 @@
   }
 
   const SECTIONS: Section[] = [
-    { key: 'general', label: 'General', group: 'Berth', load: () => import('./General.svelte') },
-    { key: 'account', label: 'Your account', group: 'Berth', load: () => import('./Account.svelte') },
-    { key: 'users', label: 'Users', group: 'Berth', admin: true, load: () => import('./Users.svelte') },
-    { key: 'apikeys', label: 'API keys', group: 'Berth', admin: true, load: () => import('./ApiKeys.svelte') },
-    { key: 'security', label: 'Sign-in and security', group: 'Berth', load: () => import('./Security.svelte') },
+    { key: 'general', label: 'General', group: 'Nodestarr', load: () => import('./General.svelte') },
+    { key: 'account', label: 'Your account', group: 'Nodestarr', load: () => import('./Account.svelte') },
+    { key: 'users', label: 'Users', group: 'Nodestarr', admin: true, load: () => import('./Users.svelte') },
+    { key: 'apikeys', label: 'API keys', group: 'Nodestarr', admin: true, load: () => import('./ApiKeys.svelte') },
+    { key: 'security', label: 'Sign-in and security', group: 'Nodestarr', load: () => import('./Security.svelte') },
     { key: 'docker', label: 'Docker', group: 'Containers', load: () => import('./Docker.svelte') },
     { key: 'updates', label: 'Updates', group: 'Containers', load: () => import('./UpdatesSettings.svelte') },
     { key: 'backups', label: 'Backups', group: 'Containers', load: () => import('./BackupsSettings.svelte') },

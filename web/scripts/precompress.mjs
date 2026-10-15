@@ -1,4 +1,4 @@
-// Writes .br and .gz next to compressible build outputs, so Berth can serve
+// Writes .br and .gz next to compressible build outputs, so Nodestarr can serve
 // them without compressing on the fly. Skips files that don't shrink.
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

@@ -3,7 +3,7 @@
 //!
 //! API keys are discovered automatically from the apps' config files
 //! (config.xml, sabnzbd.ini, settings.json, Preferences.xml), read either
-//! directly (when the config folder is mounted into Berth) or through
+//! directly (when the config folder is mounted into Nodestarr) or through
 //! `docker exec cat` as a fallback. They can be overridden per container.
 
 mod clients;
@@ -174,7 +174,7 @@ pub async fn creds_for(app: &App, entry: &Entry) -> Result<Creds> {
         creds.state = CredState::Configured;
     }
     if creds.base_url.is_empty() {
-        return Err(AppError::conflict("Berth can't work out how to reach this app; set its URL in the container's settings"));
+        return Err(AppError::conflict("Nodestarr can't work out how to reach this app; set its URL in the container's settings"));
     }
     app.integrations
         .inner
@@ -269,7 +269,7 @@ pub async fn active_streams(app: &App) -> Option<u32> {
 pub async fn native_backup(app: &App, entry: &Entry, dir: &Path) -> Result<std::path::PathBuf> {
     let kind = kind_of(entry).ok_or_else(|| AppError::conflict("this app has no API integration"))?;
     if kind != "arr" {
-        return Err(AppError::conflict("this app has no built-in backup Berth can trigger"));
+        return Err(AppError::conflict("this app has no built-in backup Nodestarr can trigger"));
     }
     let creds = creds_for(app, entry).await?;
     clients::arr_backup(app.integrations.http(), entry, &creds, dir).await

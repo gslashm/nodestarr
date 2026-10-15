@@ -462,7 +462,7 @@ fn handle_lifecycle(app: &App, ev: &Lifecycle) -> Option<(AlertKind, String)> {
 
 /// Runs the alert engine forever.
 pub async fn run(app: App) {
-    // Re-adopt alerts that were open when Berth stopped.
+    // Re-adopt alerts that were open when Nodestarr stopped.
     if let Ok(open) = list(&app, true, 500).await {
         let mut state = app.monitor.inner.alerts.lock();
         for a in open {

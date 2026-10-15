@@ -71,7 +71,7 @@ pub async fn run(app: &App) {
     let settings = app.settings.get();
     let actor = Actor::auto_update();
     let mut entries = app.docker.entries();
-    // Berth updates itself last, since that restarts this process.
+    // Nodestarr updates itself last, since that restarts this process.
     entries.sort_by_key(|e| (e.summary.is_self, e.summary.stack.clone(), e.summary.name.clone()));
 
     let mut updated = Vec::new();

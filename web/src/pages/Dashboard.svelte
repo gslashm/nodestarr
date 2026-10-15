@@ -1,5 +1,5 @@
 <!--
-  The overview: the yard (every container by stack), what needs attention,
+  The overview: every container as a tile, grouped by stack, what needs attention,
   host resources and recent activity.
 -->
 <script lang="ts">
@@ -20,7 +20,7 @@
   import PageHeader from '../components/PageHeader.svelte';
   import Sparkline from '../components/Sparkline.svelte';
   import TimeAgo from '../components/TimeAgo.svelte';
-  import Yard from '../components/Yard.svelte';
+  import ContainerGrid from '../components/ContainerGrid.svelte';
   import { confirmUpdate, runAction } from '../lib/actions';
   import { api } from '../lib/api';
   import { bytes, duration, hasUpdate, isUp, STATE_LABEL, stateOf, updateLabel } from '../lib/format';
@@ -142,7 +142,7 @@
   const severityTone: Record<string, string> = { error: 'bad', warning: 'warn', success: 'ok', info: '' };
 </script>
 
-<PageHeader title="Dashboard" subtitle={session.settings?.general.instance_name !== 'Berth' ? session.settings?.general.instance_name : ''}>
+<PageHeader title="Dashboard" subtitle={session.settings?.general.instance_name !== 'Nodestarr' ? session.settings?.general.instance_name : ''}>
   {#snippet actions()}
     {#if session.isAdmin}
       <Button variant="ghost" icon={CircleArrowUp} onclick={checkAll} busy={live.checkingUpdates}>Check for updates</Button>
@@ -172,12 +172,12 @@
     </a>
   </div>
 
-  <section class="panel yard-panel" aria-label="Containers by stack">
+  <section class="panel grid-panel" aria-label="Containers by stack">
     {#if !live.loaded}
       <div class="placeholder">Loading containers…</div>
     {:else if all.length === 0}
       <EmptyState icon={Ship} title="No containers yet">
-        Berth shows every container on this Docker host, including the ones in your compose stacks.
+        Nodestarr shows every container on this Docker host, including the ones in your compose stacks.
         {#snippet actions()}
           {#if session.isAdmin}
             <a class="btn primary" href={href('/containers/new')}>Add a container</a>
@@ -186,7 +186,7 @@
         {/snippet}
       </EmptyState>
     {:else}
-      <Yard containers={all} />
+      <ContainerGrid containers={all} />
     {/if}
   </section>
 
@@ -328,7 +328,7 @@
   .dot.idle {
     background: var(--idle);
   }
-  .yard-panel {
+  .grid-panel {
     padding: 14px 18px;
   }
   .placeholder {

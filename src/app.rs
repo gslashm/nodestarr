@@ -177,10 +177,10 @@ pub async fn start_background(app: &App) {
     crate::notify::start(app.clone());
 }
 
-/// `berth serve`.
+/// `nodestarr serve`.
 pub async fn serve(boot: BootConfig) -> anyhow::Result<()> {
     crate::logging::init(&boot.log);
-    tracing::info!(version = crate::VERSION, data = %boot.data_dir.display(), "starting Berth");
+    tracing::info!(version = crate::VERSION, data = %boot.data_dir.display(), "starting Nodestarr");
 
     let app = build(boot).await?;
     crate::auth::bootstrap_admin(&app).await?;
@@ -192,7 +192,7 @@ pub async fn serve(boot: BootConfig) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("binding {listen}"))?;
     tracing::info!(%listen, "web UI ready");
-    app.note(NewActivity::new("system.started", Severity::Info, format!("Berth {} started", crate::VERSION)).actor(&Actor::system()))
+    app.note(NewActivity::new("system.started", Severity::Info, format!("Nodestarr {} started", crate::VERSION)).actor(&Actor::system()))
         .await;
 
     axum::serve(

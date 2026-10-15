@@ -27,7 +27,7 @@
     'auto-update': { text: 'Installs updates for containers set to update automatically.', settings: '/settings/updates' },
     backup: { text: 'Backs up every included container, then runs the after-backup hook.', settings: '/settings/backups' },
     maintenance: { text: 'Prunes old history, logs and expired backups; tidies the database.' },
-    'berth-update': { text: 'Looks for a new version of Berth.', settings: '/settings/general' },
+    'nodestarr-update': { text: 'Looks for a new version of Nodestarr.', settings: '/settings/general' },
   };
 
   async function load() {
@@ -75,7 +75,7 @@
           <div class="when small">
             <span>{#if !j.enabled}<span class="faint">Off</span>{:else if j.next_run}Next {dateTime(j.next_run)}{:else}<span class="faint">No next run</span>{/if}</span>
             <span class="faint">
-              {#if running}<span class="text-update">Running now</span>{:else if j.last_run}Last ran <TimeAgo ts={j.last_run.started_at} />{#if j.last_run.finished_at}, took {duration(j.last_run.finished_at - j.last_run.started_at)}{/if}{:else}Not run since Berth started{/if}
+              {#if running}<span class="text-update">Running now</span>{:else if j.last_run}Last ran <TimeAgo ts={j.last_run.started_at} />{#if j.last_run.finished_at}, took {duration(j.last_run.finished_at - j.last_run.started_at)}{/if}{:else}Not run since Nodestarr started{/if}
             </span>
           </div>
           {#if session.isAdmin}

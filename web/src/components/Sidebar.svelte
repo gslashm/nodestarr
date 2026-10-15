@@ -81,8 +81,8 @@
 <aside class="sidebar" class:open={ui.navOpen} aria-label="Main navigation">
   <a class="brand" href={href('/')}>
     <Logo size={30} />
-    <span class="word">berth</span>
-    {#if session.settings?.general.instance_name && session.settings.general.instance_name !== 'Berth'}
+    <span class="word">node<span class="starr">starr</span></span>
+    {#if session.settings?.general.instance_name && session.settings.general.instance_name !== 'Nodestarr'}
       <span class="instance ellipsis">{session.settings.general.instance_name}</span>
     {/if}
   </a>
@@ -113,7 +113,7 @@
   <div class="foot">
     <TaskTray />
     <div class="account">
-      <span class="conn" class:on={live.connected} title={live.connected ? 'Live updates connected' : 'Reconnecting to Berth'}></span>
+      <span class="conn" class:on={live.connected} title={live.connected ? 'Live updates connected' : 'Reconnecting to Nodestarr'}></span>
       <span class="user ellipsis">{session.me?.username ?? ''}</span>
       <span class="ver faint num">v{session.status?.version}</span>
       <Menu items={accountItems} label="Account" small />
@@ -145,6 +145,9 @@
   .word {
     font: 700 25px / 1 var(--font-data);
     letter-spacing: -0.01em;
+  }
+  .starr {
+    color: var(--accent-text);
   }
   .instance {
     margin-left: auto;

@@ -51,7 +51,7 @@ impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
     }
 }
 
-/// Serves Berth under a URL base ("/berth") by stripping it before routing.
+/// Serves Nodestarr under a URL base ("/nodestarr") by stripping it before routing.
 pub async fn strip_base(State(app): State<App>, mut req: Request, next: Next) -> Response {
     let base = app.settings.get().general.url_base.clone();
     // The health probe stays reachable without the base, so the container
@@ -236,9 +236,9 @@ pub async fn authenticate(State(app): State<App>, ConnectInfo(addr): ConnectInfo
     let mutating = !matches!(method, Method::GET | Method::HEAD | Method::OPTIONS);
     if mutating && principal.via == AuthVia::Session {
         // Cross-site requests can't set custom headers without a CORS
-        // preflight, which Berth never approves.
-        if req.headers().get("x-berth-request").is_none() {
-            return AppError::forbidden("missing X-Berth-Request header").into_response();
+        // preflight, which Nodestarr never approves.
+        if req.headers().get("x-nodestarr-request").is_none() {
+            return AppError::forbidden("missing X-Nodestarr-Request header").into_response();
         }
     }
     if mutating && !principal.is_admin() && !allowed_for_viewer(&path) {
@@ -263,8 +263,8 @@ mod tests {
 
     #[test]
     fn query_params() {
-        let uri: Uri = "/x?a=1&apikey=brt_abc%2B1".parse().unwrap();
-        assert_eq!(query_param(&uri, "apikey").as_deref(), Some("brt_abc+1"));
+        let uri: Uri = "/x?a=1&apikey=nsr_abc%2B1".parse().unwrap();
+        assert_eq!(query_param(&uri, "apikey").as_deref(), Some("nsr_abc+1"));
         assert_eq!(query_param(&uri, "b"), None);
     }
 }

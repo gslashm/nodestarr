@@ -1,4 +1,4 @@
-//! Berth itself: health, status, settings (with tests, export and import),
+//! Nodestarr itself: health, status, settings (with tests, export and import),
 //! tasks, activity, Docker resources (images, volumes, networks, cleanup),
 //! scheduled jobs, self-update and Prometheus metrics.
 
@@ -86,7 +86,7 @@ async fn health(State(app): State<App>) -> Json<Value> {
     }))
 }
 
-/// Resident memory of the Berth process, from /proc.
+/// Resident memory of the Nodestarr process, from /proc.
 fn process_memory() -> Option<u64> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;
     status
@@ -248,7 +248,7 @@ async fn export(State(app): State<App>, Auth(p): Auth, Query(q): Query<ExportQue
         mask_secrets(&mut prefs);
     }
     let doc = json!({
-        "berth_export": EXPORT_FORMAT,
+        "nodestarr_export": EXPORT_FORMAT,
         "version": crate::VERSION,
         "exported_at": crate::util::now(),
         "includes_secrets": q.secrets,
@@ -261,7 +261,7 @@ async fn export(State(app): State<App>, Auth(p): Auth, Query(q): Query<ExportQue
     )
     .await;
     let mut resp = Json(doc).into_response();
-    let name = format!("berth-settings-{}.json", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+    let name = format!("nodestarr-settings-{}.json", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
     if let Ok(v) = HeaderValue::from_str(&format!("attachment; filename=\"{name}\"")) {
         resp.headers_mut().insert(header::CONTENT_DISPOSITION, v);
     }
@@ -282,8 +282,8 @@ fn yes() -> bool {
 
 async fn import(State(app): State<App>, Auth(p): Auth, Query(q): Query<ImportQuery>, Json(doc): Json<Value>) -> Result<Json<Value>> {
     p.require_admin()?;
-    if doc["berth_export"].as_u64() != Some(EXPORT_FORMAT as u64) {
-        return Err(AppError::bad_request("this is not a Berth settings export"));
+    if doc["nodestarr_export"].as_u64() != Some(EXPORT_FORMAT as u64) {
+        return Err(AppError::bad_request("this is not a Nodestarr settings export"));
     }
     let mut sections = Vec::new();
     if q.settings {
@@ -294,7 +294,7 @@ async fn import(State(app): State<App>, Auth(p): Auth, Query(q): Query<ImportQue
                 .update(|s| {
                     let mut current = serde_json::to_value(&*s)?;
                     for (section, value) in incoming {
-                        // Unknown sections (from a newer Berth) are ignored.
+                        // Unknown sections (from a newer Nodestarr) are ignored.
                         let Some(cur) = current.get(&section).cloned() else { continue };
                         let mut value = value;
                         // Masked secrets in the file keep the stored values.
@@ -494,7 +494,7 @@ async fn run_job(State(app): State<App>, Auth(p): Auth, Path(job): Path<String>)
 
 #[derive(Deserialize, Default)]
 struct SelfUpdateBody {
-    /// Switch Berth to another tag (for example a pinned version).
+    /// Switch Nodestarr to another tag (for example a pinned version).
     #[serde(default)]
     tag: Option<String>,
 }
@@ -507,7 +507,7 @@ async fn self_update(State(app): State<App>, Auth(p): Auth, body: Option<Json<Se
         .list()
         .into_iter()
         .find(|c| c.is_self)
-        .ok_or_else(|| AppError::conflict("Berth isn't running in a Docker container Berth can see, so it can't update itself; update it the way you installed it"))?;
+        .ok_or_else(|| AppError::conflict("Nodestarr isn't running in a Docker container Nodestarr can see, so it can't update itself; update it the way you installed it"))?;
     let req = crate::updates::apply::UpdateRequest { tag: body.tag, skip_backup: true };
     let task = crate::updates::apply::start_update(&app, &me.id, req, &p.actor(), crate::updates::apply::Trigger::Manual)?;
     Ok(Json(json!({ "task_id": task })))

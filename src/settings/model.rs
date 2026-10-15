@@ -32,31 +32,31 @@ pub struct Settings {
 pub struct General {
     /// Shown in the page title and notifications.
     pub instance_name: String,
-    /// Path prefix when served behind a reverse proxy, e.g. "/berth".
+    /// Path prefix when served behind a reverse proxy, e.g. "/nodestarr".
     pub url_base: String,
     /// Host used for quick links to app web UIs (e.g. "192.168.1.50").
-    /// Empty uses whatever address the browser opened Berth with.
+    /// Empty uses whatever address the browser opened Nodestarr with.
     pub public_host: String,
-    /// Address of Berth itself as reachable by people, used in notification
+    /// Address of Nodestarr itself as reachable by people, used in notification
     /// links (e.g. "http://192.168.1.50:7979"). Optional.
     pub external_url: String,
     /// IANA time zone for schedules; empty uses the TZ environment variable.
     pub timezone: String,
     pub ui: UiSettings,
-    /// Check GitHub for new Berth releases.
-    pub check_berth_updates: bool,
+    /// Check GitHub for new Nodestarr releases.
+    pub check_nodestarr_updates: bool,
 }
 
 impl Default for General {
     fn default() -> Self {
         Self {
-            instance_name: "Berth".into(),
+            instance_name: "Nodestarr".into(),
             url_base: String::new(),
             public_host: String::new(),
             external_url: String::new(),
             timezone: String::new(),
             ui: UiSettings::default(),
-            check_berth_updates: true,
+            check_nodestarr_updates: true,
         }
     }
 }
@@ -83,7 +83,7 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             theme: "dark".into(),
-            accent: "#f2c230".into(),
+            accent: "#e46cff".into(),
             density: "comfortable".into(),
             icon_url_template: String::new(),
             group_by_stack: true,
@@ -99,7 +99,7 @@ impl Default for UiSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthMode {
-    /// Berth's own login page (default).
+    /// Nodestarr's own login page (default).
     #[default]
     Forms,
     /// Trust a username header set by an authenticating reverse proxy
@@ -183,7 +183,7 @@ impl Default for DockerSettings {
 // Updates
 // ---------------------------------------------------------------------------
 
-/// What Berth does when an update is found.
+/// What Nodestarr does when an update is found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum UpdatePolicy {
@@ -317,7 +317,7 @@ pub enum HookWhen {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BackupHook {
-    /// Shell command run in Berth's environment after a backup run.
+    /// Shell command run in Nodestarr's environment after a backup run.
     pub command: String,
     /// Or: run `exec_command` inside this container (e.g. an rclone container).
     pub exec_container: String,
@@ -484,7 +484,7 @@ pub enum ProviderConfig {
         method: String,
         #[serde(default)]
         headers: std::collections::BTreeMap<String, String>,
-        /// Optional MiniJinja template for the body; empty sends Berth's JSON.
+        /// Optional MiniJinja template for the body; empty sends Nodestarr's JSON.
         #[serde(default)]
         body_template: String,
     },
@@ -628,7 +628,7 @@ pub struct Proxmox {
     pub enabled: bool,
     /// e.g. https://192.168.1.10:8006
     pub url: String,
-    /// e.g. "berth@pve!berth"
+    /// e.g. "nodestarr@pve!nodestarr"
     pub token_id: String,
     pub token_secret: String,
     pub tls_mode: TlsMode,
@@ -636,7 +636,7 @@ pub struct Proxmox {
     pub fingerprint: String,
     /// Node name; empty picks the first node.
     pub node: String,
-    /// VMID of the guest Berth runs in (protects it from accidental stops).
+    /// VMID of the guest Nodestarr runs in (protects it from accidental stops).
     pub self_vmid: Option<u32>,
     /// Default storage for "Back up now".
     pub backup_storage: String,
@@ -689,9 +689,9 @@ impl Default for Mqtt {
             tls: false,
             username: String::new(),
             password: String::new(),
-            client_id: "berth".into(),
+            client_id: "nodestarr".into(),
             discovery_prefix: "homeassistant".into(),
-            base_topic: "berth".into(),
+            base_topic: "nodestarr".into(),
             expose_stats: true,
             expose_controls: true,
         }
@@ -719,7 +719,7 @@ pub enum AlertKind {
     RestartLoop,
     /// Health check failing for `duration_secs`.
     Unhealthy,
-    /// Exited with a non-zero code without being stopped from Berth/Docker.
+    /// Exited with a non-zero code without being stopped from Nodestarr/Docker.
     UnexpectedExit,
     /// Killed by the kernel OOM killer.
     Oom,
@@ -778,7 +778,7 @@ pub struct Monitoring {
     pub rollup_retention_days: u32,
     /// Refresh interval for live stats while the UI is open.
     pub live_secs: u32,
-    /// Filesystems to watch for the disk alert (paths as Berth sees them).
+    /// Filesystems to watch for the disk alert (paths as Nodestarr sees them).
     pub disk_paths: Vec<String>,
     pub rules: Vec<AlertRule>,
     pub activity_retention_days: u32,
@@ -890,7 +890,7 @@ impl Settings {
     pub fn validate(&self) -> Result<(), String> {
         let g = &self.general;
         if !g.url_base.is_empty() && (!g.url_base.starts_with('/') || g.url_base.ends_with('/')) {
-            return Err("URL base must start with '/' and not end with '/', e.g. /berth".into());
+            return Err("URL base must start with '/' and not end with '/', e.g. /nodestarr".into());
         }
         if !g.timezone.is_empty() && g.timezone.parse::<chrono_tz::Tz>().is_err() {
             return Err(format!("unknown time zone '{}'", g.timezone));
@@ -1068,7 +1068,7 @@ mod tests {
     #[test]
     fn empty_document_deserializes_to_defaults() {
         let s: Settings = serde_json::from_str("{}").unwrap();
-        assert_eq!(s.general.instance_name, "Berth");
+        assert_eq!(s.general.instance_name, "Nodestarr");
         assert_eq!(s.docker.stacks_dirs, vec!["/opt/stacks".to_string()]);
         let partial: Settings =
             serde_json::from_str(r#"{"updates": {"min_age_hours": 0}}"#).unwrap();
@@ -1091,7 +1091,7 @@ mod tests {
         assert!(s.validate().is_err());
 
         let mut s = Settings::default();
-        s.general.url_base = "berth/".into();
+        s.general.url_base = "nodestarr/".into();
         assert!(s.validate().is_err());
 
         let mut s = Settings::default();

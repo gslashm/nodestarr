@@ -22,11 +22,11 @@ pub enum Job {
     AutoUpdate,
     Backup,
     Maintenance,
-    BerthUpdate,
+    NodestarrUpdate,
 }
 
 impl Job {
-    pub const ALL: [Job; 5] = [Job::UpdateCheck, Job::AutoUpdate, Job::Backup, Job::Maintenance, Job::BerthUpdate];
+    pub const ALL: [Job; 5] = [Job::UpdateCheck, Job::AutoUpdate, Job::Backup, Job::Maintenance, Job::NodestarrUpdate];
 
     /// Human-readable name.
     pub fn name(self) -> &'static str {
@@ -35,7 +35,7 @@ impl Job {
             Job::AutoUpdate => "automatic updates",
             Job::Backup => "scheduled backup",
             Job::Maintenance => "maintenance",
-            Job::BerthUpdate => "Berth update check",
+            Job::NodestarrUpdate => "Nodestarr update check",
         }
     }
 
@@ -46,7 +46,7 @@ impl Job {
             Job::AutoUpdate => "auto-update",
             Job::Backup => "backup",
             Job::Maintenance => "maintenance",
-            Job::BerthUpdate => "berth-update",
+            Job::NodestarrUpdate => "nodestarr-update",
         }
     }
 }
@@ -69,7 +69,7 @@ pub struct JobRun {
 
 static RUNS: LazyLock<Mutex<HashMap<Job, JobRun>>> = LazyLock::new(Default::default);
 
-/// Last run of each job since Berth started.
+/// Last run of each job since Nodestarr started.
 pub fn last_runs() -> HashMap<Job, JobRun> {
     RUNS.lock().clone()
 }
@@ -84,8 +84,8 @@ fn schedule(s: &Settings) -> Vec<(Job, String)> {
     if s.backups.schedule_enabled {
         jobs.push((Job::Backup, s.backups.cron.clone()));
     }
-    if s.general.check_berth_updates {
-        jobs.push((Job::BerthUpdate, "41 9 * * *".to_string()));
+    if s.general.check_nodestarr_updates {
+        jobs.push((Job::NodestarrUpdate, "41 9 * * *".to_string()));
     }
     jobs
 }
@@ -172,7 +172,7 @@ async fn execute(app: &App, job: Job) {
         Job::AutoUpdate => crate::updates::auto::run(app).await,
         Job::Backup => crate::backups::run_scheduled(app).await,
         Job::Maintenance => maintenance(app).await,
-        Job::BerthUpdate => crate::selfupdate::check_for_release(app).await,
+        Job::NodestarrUpdate => crate::selfupdate::check_for_release(app).await,
     }
 }
 

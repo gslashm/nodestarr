@@ -14,7 +14,7 @@ use clap::{Args, Parser, Subcommand};
 pub const DEFAULT_PORT: u16 = 7979;
 
 #[derive(Debug, Parser)]
-#[command(name = "berth", version = crate::VERSION, about = "Lightweight Docker and Compose manager")]
+#[command(name = "nodestarr", version = crate::VERSION, about = "Lightweight Docker and Compose manager")]
 pub struct Cli {
     #[command(flatten)]
     pub boot: BootConfig,
@@ -26,46 +26,46 @@ pub struct Cli {
 #[derive(Debug, Clone, Args)]
 pub struct BootConfig {
     /// Directory for the database and other persistent state.
-    #[arg(long, env = "BERTH_DATA_DIR", default_value = "/config", global = true)]
+    #[arg(long, env = "NODESTARR_DATA_DIR", default_value = "/config", global = true)]
     pub data_dir: PathBuf,
 
     /// Address and port to listen on.
-    #[arg(long, env = "BERTH_LISTEN", default_value_t = SocketAddr::from(([0, 0, 0, 0], DEFAULT_PORT)), global = true)]
+    #[arg(long, env = "NODESTARR_LISTEN", default_value_t = SocketAddr::from(([0, 0, 0, 0], DEFAULT_PORT)), global = true)]
     pub listen: SocketAddr,
 
     /// Docker endpoint, e.g. unix:///var/run/docker.sock or tcp://host:2375.
     #[arg(long, env = "DOCKER_HOST", default_value = "unix:///var/run/docker.sock", global = true)]
     pub docker_host: String,
 
-    /// Log filter, e.g. "info" or "berth=debug,info".
-    #[arg(long, env = "BERTH_LOG", default_value = "info", global = true)]
+    /// Log filter, e.g. "info" or "nodestarr=debug,info".
+    #[arg(long, env = "NODESTARR_LOG", default_value = "info", global = true)]
     pub log: String,
 
     /// Number of async worker threads.
-    #[arg(long, env = "BERTH_WORKERS", default_value_t = 2, global = true)]
+    #[arg(long, env = "NODESTARR_WORKERS", default_value_t = 2, global = true)]
     pub workers: usize,
 
     /// Create this admin user on first start (skips the setup screen).
-    #[arg(long, env = "BERTH_ADMIN_USER", global = true, hide = true)]
+    #[arg(long, env = "NODESTARR_ADMIN_USER", global = true, hide = true)]
     pub admin_user: Option<String>,
 
-    /// Password for BERTH_ADMIN_USER.
-    #[arg(long, env = "BERTH_ADMIN_PASSWORD", global = true, hide = true, hide_env_values = true)]
+    /// Password for NODESTARR_ADMIN_USER.
+    #[arg(long, env = "NODESTARR_ADMIN_PASSWORD", global = true, hide = true, hide_env_values = true)]
     pub admin_password: Option<String>,
 
     /// Overrides the URL base setting (useful if a bad value locked you out).
-    #[arg(long, env = "BERTH_URL_BASE", global = true, hide = true)]
+    #[arg(long, env = "NODESTARR_URL_BASE", global = true, hide = true)]
     pub url_base: Option<String>,
 
     /// Directory to serve the web UI from instead of the embedded copy
     /// (development only).
-    #[arg(long, env = "BERTH_WEB_DIR", global = true, hide = true)]
+    #[arg(long, env = "NODESTARR_WEB_DIR", global = true, hide = true)]
     pub web_dir: Option<PathBuf>,
 }
 
 impl BootConfig {
     pub fn db_path(&self) -> PathBuf {
-        self.data_dir.join("berth.db")
+        self.data_dir.join("nodestarr.db")
     }
 }
 
@@ -88,7 +88,7 @@ pub enum Command {
     },
     /// Exit 0 if the local server answers its health endpoint (for Docker HEALTHCHECK).
     Healthcheck,
-    /// Internal: recreate the Berth container with a new image.
+    /// Internal: recreate the Nodestarr container with a new image.
     #[command(hide = true)]
     SelfUpdateHelper {
         #[arg(long)]

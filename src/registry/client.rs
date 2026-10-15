@@ -71,7 +71,7 @@ impl Default for Platform {
     }
 }
 
-/// What Berth learns about a remote image.
+/// What Nodestarr learns about a remote image.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct RemoteImage {
     /// Digest of the tag (index digest for multi-arch images).

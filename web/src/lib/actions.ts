@@ -1,4 +1,4 @@
-// Container and stack actions shared by lists, the yard, detail pages and the
+// Container and stack actions shared by lists, the dashboard, detail pages and the
 // command palette: confirmations, API calls, and feedback.
 
 import type { Component } from 'svelte';
@@ -106,7 +106,7 @@ export async function confirmUpdate(c: ContainerView): Promise<void> {
       : `Pulls the new build of ${imageTag(c.image)}.`;
   const r = await ui.ask({
     title: `Update ${c.display_name}?`,
-    message: [what, backup ? 'A backup is taken first.' : '', 'If the new version fails to start, Berth rolls back automatically.']
+    message: [what, backup ? 'A backup is taken first.' : '', 'If the new version fails to start, Nodestarr rolls back automatically.']
       .filter(Boolean)
       .join(' '),
     confirmLabel: 'Update',

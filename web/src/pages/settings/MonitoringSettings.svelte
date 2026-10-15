@@ -9,11 +9,11 @@
   import SettingsSection from './SettingsSection.svelte';
 </script>
 
-<SettingsSection section="monitoring" title="Monitoring" intro="Berth samples resources cheaply: often while someone is looking, rarely otherwise.">
+<SettingsSection section="monitoring" title="Monitoring" intro="Nodestarr samples resources cheaply: often while someone is looking, rarely otherwise.">
   {#snippet children(m)}
     <Group title="History">
       <Field label="Resource history">
-        <Toggle bind:checked={m.history_enabled} label="Record CPU, memory, network and disk history" hint="Kept in Berth's database; a few megabytes for a typical server." />
+        <Toggle bind:checked={m.history_enabled} label="Record CPU, memory, network and disk history" hint="Kept in Nodestarr's database; a few megabytes for a typical server." />
       </Field>
       <Field label="Sample every" id="m-sample" hint="Seconds between history samples.">
         <input id="m-sample" class="input num short" type="number" min="10" bind:value={m.sample_secs} />
@@ -27,7 +27,7 @@
       <Field label="Keep averaged history" id="m-rollup" hint="Days.">
         <input id="m-rollup" class="input num short" type="number" min="1" bind:value={m.rollup_retention_days} />
       </Field>
-      <Field label="Watched disks" hint="Paths whose free space is shown and alerted on. The backup folder and Berth's data are always watched.">
+      <Field label="Watched disks" hint="Paths whose free space is shown and alerted on. The backup folder and Nodestarr's data are always watched.">
         <ListEditor bind:items={m.disk_paths} placeholder="/mnt/storage" mono addLabel="Add path" />
       </Field>
     </Group>

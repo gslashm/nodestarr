@@ -1,11 +1,11 @@
-//! Maintenance subcommands, meant for `docker exec berth berth <command>`.
+//! Maintenance subcommands, meant for `docker exec nodestarr nodestarr <command>`.
 
 use crate::config::BootConfig;
 use crate::db::Db;
 
 fn open_db(boot: &BootConfig) -> anyhow::Result<Db> {
     if !boot.db_path().exists() {
-        anyhow::bail!("no database at {} (is BERTH_DATA_DIR right?)", boot.db_path().display());
+        anyhow::bail!("no database at {} (is NODESTARR_DATA_DIR right?)", boot.db_path().display());
     }
     Ok(Db::open(&boot.db_path())?)
 }

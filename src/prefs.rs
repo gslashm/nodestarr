@@ -65,7 +65,7 @@ pub struct UptimePrefs {
 #[serde(default)]
 pub struct IntegrationPrefs {
     pub enabled: Option<bool>,
-    /// Override the URL Berth uses to reach the app's API.
+    /// Override the URL Nodestarr uses to reach the app's API.
     pub base_url: String,
     pub api_key: String,
     pub username: String,

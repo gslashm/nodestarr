@@ -82,7 +82,7 @@
     {#snippet actions()}<a class="btn primary" href={href(`/stacks/${encodeURIComponent(c.stack ?? '')}/compose`)}>Open the compose file</a>{/snippet}
   </EmptyState>
 {:else if c.is_self}
-  <EmptyState icon={Layers} title="Berth can't edit its own container">Change Berth's settings where you deployed it (its compose file or run command).</EmptyState>
+  <EmptyState icon={Layers} title="Nodestarr can't edit its own container">Change Nodestarr's settings where you deployed it (its compose file or run command).</EmptyState>
 {:else if !session.isAdmin}
   <EmptyState icon={Layers} title="Only admins can edit containers" />
 {:else if loadError}

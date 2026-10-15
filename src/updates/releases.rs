@@ -95,7 +95,7 @@ pub fn github_repo(url: &str) -> Option<String> {
 /// Picks the repository to read release notes from.
 pub fn repo_for(app_slug: Option<&str>, source: Option<&str>) -> Option<String> {
     if let Some(slug) = app_slug {
-        if slug == "berth" {
+        if slug == "nodestarr" {
             if let Some(repo) = crate::selfupdate::REPO {
                 return Some(repo.to_string());
             }

@@ -50,7 +50,7 @@
       };
       const r = await ui.ask({
         title: `${VERB[action]} ${g.name} (${g.vmid})?`,
-        message: `${what[action]}${g.is_self ? ' This guest runs Berth, so Berth goes offline too.' : ''}`,
+        message: `${what[action]}${g.is_self ? ' This guest runs Nodestarr, so Nodestarr goes offline too.' : ''}`,
         confirmLabel: VERB[action],
         danger: action === 'stop' || g.is_self,
         typeToConfirm: g.is_self ? g.name : undefined,
@@ -154,7 +154,7 @@
               <div class="name">
                 <span class="kind" title={g.kind === 'lxc' ? 'Container (LXC)' : 'Virtual machine'}>{g.kind === 'lxc' ? 'CT' : 'VM'}</span>
                 <span>{g.name}</span>
-                {#if g.is_self}<span class="chip self" title="Berth runs in this guest">Berth</span>{/if}
+                {#if g.is_self}<span class="chip self" title="Nodestarr runs in this guest">Nodestarr</span>{/if}
                 {#each g.tags as t (t)}<span class="chip">{t}</span>{/each}
               </div>
             </td>

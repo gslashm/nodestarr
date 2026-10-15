@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn uri() {
-        let u = otpauth_uri("ABC", "jake", "Berth");
-        assert!(u.starts_with("otpauth://totp/Berth:jake?secret=ABC&issuer=Berth"));
+        let u = otpauth_uri("ABC", "jake", "Nodestarr");
+        assert!(u.starts_with("otpauth://totp/Nodestarr:jake?secret=ABC&issuer=Nodestarr"));
     }
 }

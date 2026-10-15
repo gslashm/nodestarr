@@ -43,7 +43,7 @@ pub const EVENT_KINDS: &[(&str, &str)] = &[
     ("app.health", "App reports a health problem"),
     ("proxmox.task", "Proxmox task finished (backups, snapshots)"),
     ("security.login_failed", "Repeated failed logins"),
-    ("system.update", "New Berth version"),
+    ("system.update", "New Nodestarr version"),
     ("test", "Test message"),
 ];
 
@@ -86,7 +86,7 @@ impl Notification {
         self
     }
 
-    /// Links to a Berth page when an external URL is configured.
+    /// Links to a Nodestarr page when an external URL is configured.
     pub fn link(mut self, app: &App, path: &str) -> Self {
         let settings = app.settings.get();
         let base = settings.general.external_url.trim_end_matches('/');
@@ -205,8 +205,8 @@ impl Notifier {
         let n = Notification::new(
             "test",
             Severity::Info,
-            "Berth test notification",
-            "If you can read this, notifications from Berth work.",
+            "Nodestarr test notification",
+            "If you can read this, notifications from Nodestarr work.",
         )
         .field("Instance", app.settings.get().general.instance_name.clone())
         .link(app, "/settings/notifications");

@@ -1,4 +1,4 @@
-<!-- Berth itself: version and updates, what it's connected to, and how much it uses. -->
+<!-- Nodestarr itself: version and updates, what it's connected to, and how much it uses. -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
@@ -52,18 +52,18 @@
     return () => clearInterval(t);
   });
 
-  async function updateBerth() {
+  async function updateNodestarr() {
     const ok = await ui.confirm({
-      title: 'Update Berth?',
-      message: `Berth pulls ${updateLabel(status?.self?.update) ?? 'the new version'} and restarts itself. The page reconnects on its own after a few seconds.`,
-      confirmLabel: 'Update Berth',
+      title: 'Update Nodestarr?',
+      message: `Nodestarr pulls ${updateLabel(status?.self?.update) ?? 'the new version'} and restarts itself. The page reconnects on its own after a few seconds.`,
+      confirmLabel: 'Update Nodestarr',
     });
     if (!ok) return;
     try {
       const r = await api.post<{ task_id: string }>('/system/update');
-      ui.taskStarted(r.task_id, 'Updating Berth');
+      ui.taskStarted(r.task_id, 'Updating Nodestarr');
     } catch (err) {
-      ui.error(err, "Couldn't update Berth");
+      ui.error(err, "Couldn't update Nodestarr");
     }
   }
 
@@ -72,7 +72,7 @@
     try {
       const info = await api.post<UpdateInfo>(`/containers/${encodeURIComponent(status.self.id)}/check`);
       if (status.self) status.self.update = info;
-      ui.toast(hasUpdate(info) ? `Berth ${updateLabel(info)} is available` : 'Berth is up to date', hasUpdate(info) ? 'info' : 'success');
+      ui.toast(hasUpdate(info) ? `Nodestarr ${updateLabel(info)} is available` : 'Nodestarr is up to date', hasUpdate(info) ? 'info' : 'success');
     } catch (err) {
       ui.error(err);
     }
@@ -88,18 +88,18 @@
   <div class="grid">
     <section class="panel hero">
       <div class="panel-body">
-        <p class="big">Berth <span class="num">{s.version}</span></p>
+        <p class="big">Nodestarr <span class="num">{s.version}</span></p>
         {#if s.self}
           {#if hasUpdate(s.self.update)}
             <p class="text-update">Version {updateLabel(s.self.update)} is available.</p>
-            {#if session.isAdmin}<Button variant="primary" icon={ArrowUp} onclick={updateBerth}>Update Berth</Button>{/if}
+            {#if session.isAdmin}<Button variant="primary" icon={ArrowUp} onclick={updateNodestarr}>Update Nodestarr</Button>{/if}
           {:else}
             <p class="muted">{s.self.update?.status === 'up_to_date' ? 'Up to date.' : 'Not checked yet.'}</p>
             {#if session.isAdmin}<Button variant="ghost" onclick={checkSelf}>Check for a new version</Button>{/if}
           {/if}
           <p class="faint small">Running as container <a href={href(`/containers/${encodeURIComponent(s.self.name)}`)}>{s.self.name}</a> from <span class="mono">{s.self.image}</span></p>
         {:else}
-          <p class="muted small">Berth isn't running in a container it can see, so update it the way you installed it.</p>
+          <p class="muted small">Nodestarr isn't running in a container it can see, so update it the way you installed it.</p>
         {/if}
         {#if s.repo}<a class="small" href="https://github.com/{s.repo}" target="_blank" rel="noopener">Source and release notes <ExternalLink size={12} /></a>{/if}
       </div>

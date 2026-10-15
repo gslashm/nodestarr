@@ -1,8 +1,8 @@
-// Thin client for Berth's REST API, live event stream and WebSockets.
+// Thin client for Nodestarr's REST API, live event stream and WebSockets.
 //
-// Every request carries `X-Berth-Request: 1`, which the server requires for
+// Every request carries `X-Nodestarr-Request: 1`, which the server requires for
 // cookie-authenticated changes (browsers can't add custom headers to
-// cross-site requests without a CORS preflight Berth never approves).
+// cross-site requests without a CORS preflight Nodestarr never approves).
 
 export class ApiError extends Error {
   readonly status: number;
@@ -15,7 +15,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Path prefix Berth is served under ("" or e.g. "/berth"), from <base href>. */
+/** Path prefix Nodestarr is served under ("" or e.g. "/nodestarr"), from <base href>. */
 export function basePath(): string {
   return new URL('.', document.baseURI).pathname.replace(/\/$/, '');
 }
@@ -44,7 +44,7 @@ interface RequestOptions {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, opts: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = { 'X-Berth-Request': '1', Accept: 'application/json' };
+  const headers: Record<string, string> = { 'X-Nodestarr-Request': '1', Accept: 'application/json' };
   let payload: string | undefined;
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -55,7 +55,7 @@ async function request<T>(method: string, path: string, body?: unknown, opts: Re
     resp = await fetch(apiUrl(path), { method, headers, body: payload, credentials: 'same-origin', signal: opts.signal });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
-    throw new ApiError(0, 'network', 'Berth is not reachable. Check that it is running and that this device is on the same network.');
+    throw new ApiError(0, 'network', 'Nodestarr is not reachable. Check that it is running and that this device is on the same network.');
   }
   if (resp.status === 401 && !opts.quiet401) unauthorizedHandler?.();
   const text = await resp.text();

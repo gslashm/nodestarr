@@ -8,7 +8,7 @@
   import SettingsSection from './SettingsSection.svelte';
 </script>
 
-<SettingsSection section="security" title="Sign-in and security" intro="Changes here can lock you out; Berth checks the values before saving.">
+<SettingsSection section="security" title="Sign-in and security" intro="Changes here can lock you out; Nodestarr checks the values before saving.">
   {#snippet children(s)}
     <Group title="Sign-in">
       <Field label="Sign in with">
@@ -16,14 +16,14 @@
           label="Sign-in method"
           bind:value={s.auth_mode}
           options={[
-            { value: 'forms', label: 'Berth accounts' },
+            { value: 'forms', label: 'Nodestarr accounts' },
             { value: 'external', label: 'Reverse proxy (SSO)' },
           ]}
         />
       </Field>
       {#if s.auth_mode === 'external'}
         <p class="warn">
-          Berth trusts the user name your proxy (Authelia, Authentik, oauth2-proxy…) sends in a header, but only from the proxy addresses below. Make sure the proxy is the only way to reach Berth.
+          Nodestarr trusts the user name your proxy (Authelia, Authentik, oauth2-proxy…) sends in a header, but only from the proxy addresses below. Make sure the proxy is the only way to reach Nodestarr.
         </p>
         <Field label="User header" id="s-hdr" hint="The header your proxy sets to the signed-in user.">
           <input id="s-hdr" class="input mono" bind:value={s.external_header} placeholder="Remote-User" spellcheck="false" />

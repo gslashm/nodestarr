@@ -1,5 +1,5 @@
 [package]
-name = "berth"
+name = "nodestarr"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
@@ -7,14 +7,14 @@ description = "A lightweight, self-hosted manager for Docker containers and Comp
 license = "AGPL-3.0-or-later"
 authors = ["gslashm"]
 readme = "README.md"
-default-run = "berth"
+default-run = "nodestarr"
 
 [[bin]]
-name = "berth"
+name = "nodestarr"
 path = "src/main.rs"
 
 [lib]
-name = "berth"
+name = "nodestarr"
 path = "src/lib.rs"
 
 [dependencies]

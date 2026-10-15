@@ -172,7 +172,7 @@ fn v_f64(v: &Value) -> f64 {
 
 impl ProxmoxService {
     /// `docker` provides the Docker host's name, used to recognize the guest
-    /// Berth runs in when no guest ID is configured.
+    /// Nodestarr runs in when no guest ID is configured.
     pub fn new(settings: SettingsStore, docker: DockerService) -> Self {
         Self {
             inner: Arc::new(Inner {
@@ -184,7 +184,7 @@ impl ProxmoxService {
         }
     }
 
-    /// The guest Berth runs in: the configured ID, or the one guest whose
+    /// The guest Nodestarr runs in: the configured ID, or the one guest whose
     /// name matches the Docker host's name.
     pub fn self_vmid(&self) -> Option<u32> {
         if let Some(id) = self.inner.settings.get().proxmox.self_vmid {
@@ -455,7 +455,7 @@ impl GuestAction {
     }
 }
 
-/// Waits for a Proxmox task (UPID) and streams its log into the Berth task.
+/// Waits for a Proxmox task (UPID) and streams its log into the Nodestarr task.
 async fn follow_upid(app: &App, ctx: &TaskCtx, upid: &str) -> Result<()> {
     let c = app.proxmox.client()?;
     let node = node_from_upid(upid).ok_or_else(|| AppError::upstream("Proxmox returned an invalid task id"))?;
@@ -507,7 +507,7 @@ pub fn detect_self(guests: &[Guest], host_name: &str) -> Option<u32> {
 fn guard_self(app: &App, vmid: u32, confirm_self: bool) -> Result<()> {
     if app.proxmox.self_vmid() == Some(vmid) && !confirm_self {
         return Err(AppError::conflict(
-            "this guest runs Berth itself; confirm to continue (Berth will go offline)",
+            "this guest runs Nodestarr itself; confirm to continue (Nodestarr will go offline)",
         ));
     }
     Ok(())
@@ -618,7 +618,7 @@ pub async fn backup_now(app: &App, vmid: u32, req: BackupRequest, actor: &Actor)
             ("mode", req.mode.clone()),
             ("compress", "zstd".to_string()),
         ];
-        let notes = if req.notes.is_empty() { "{{guestname}} (Berth)".to_string() } else { req.notes.clone() };
+        let notes = if req.notes.is_empty() { "{{guestname}} (Nodestarr)".to_string() } else { req.notes.clone() };
         form.push(("notes-template", notes));
         if req.protected {
             form.push(("protected", "1".into()));
@@ -710,7 +710,7 @@ mod tests {
 
     #[test]
     fn upid_node() {
-        assert_eq!(node_from_upid("UPID:pve:0000F00D:0001:6713:vzdump:100:berth@pve!berth:").as_deref(), Some("pve"));
+        assert_eq!(node_from_upid("UPID:pve:0000F00D:0001:6713:vzdump:100:nodestarr@pve!nodestarr:").as_deref(), Some("pve"));
         assert_eq!(node_from_upid("garbage"), None);
     }
 }

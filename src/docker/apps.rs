@@ -1,13 +1,13 @@
 //! Catalog of well-known self-hosted apps.
 //!
-//! Recognizing an app by its image lets Berth link to its web UI, pick a
+//! Recognizing an app by its image lets Nodestarr link to its web UI, pick a
 //! sensible backup profile (skip Plex's cache, Sonarr's MediaCover, ...),
 //! choose a consistent backup method for its database, and wire up API
 //! integrations. Unknown images still work, just with generic defaults.
 
 use std::collections::HashMap;
 
-/// Database engines Berth knows how to dump consistently.
+/// Database engines Nodestarr knows how to dump consistently.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DbEngine {
@@ -29,7 +29,7 @@ pub struct AppInfo {
     pub web_https: bool,
     /// Path used for uptime checks (defaults to web_path).
     pub health_path: Option<&'static str>,
-    /// API integration kind, if Berth can talk to the app.
+    /// API integration kind, if Nodestarr can talk to the app.
     pub integration: Option<&'static str>,
     /// The app keeps SQLite databases in its config folder.
     pub sqlite: bool,
@@ -200,7 +200,7 @@ pub static CATALOG: &[AppInfo] = &[
     app!("watchtower", "Watchtower", ["watchtower"], None, config_paths = NONE),
     app!("gitea", "Gitea", ["gitea"], Some(3000), sqlite = true, config_paths = &["/data"]),
     app!("code-server", "code-server", ["code-server"], Some(8443), config_paths = &["/config"]),
-    app!("berth", "Berth", ["berth"], Some(7979), config_paths = &["/config"]),
+    app!("nodestarr", "Nodestarr", ["nodestarr"], Some(7979), config_paths = &["/config"]),
     // --- Databases (dumped instead of copied) --------------------------------------------
     app!("postgres", "PostgreSQL", ["postgres", "postgis", "pgvecto-rs", "pgvector", "postgresql"], None,
          db = Some(DbEngine::Postgres), config_paths = NONE, version_env = &["PG_VERSION", "PG_MAJOR"]),
@@ -229,9 +229,9 @@ pub fn by_slug(slug: &str) -> Option<&'static AppInfo> {
     CATALOG.iter().find(|a| a.slug == slug)
 }
 
-/// Recognizes an app from its image reference, honoring a `berth.app` label.
+/// Recognizes an app from its image reference, honoring a `nodestarr.app` label.
 pub fn detect(image: &str, labels: &HashMap<String, String>) -> Option<&'static AppInfo> {
-    if let Some(slug) = labels.get("berth.app") {
+    if let Some(slug) = labels.get("nodestarr.app") {
         return by_slug(slug);
     }
     let reference = crate::registry::reference::ImageRef::parse(image)?;
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn label_override() {
         let mut labels = HashMap::new();
-        labels.insert("berth.app".to_string(), "radarr".to_string());
+        labels.insert("nodestarr.app".to_string(), "radarr".to_string());
         assert_eq!(detect("myimage:1", &labels).map(|a| a.slug), Some("radarr"));
     }
 

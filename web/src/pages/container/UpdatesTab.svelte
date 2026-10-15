@@ -133,7 +133,7 @@
       message: [
         `The image changes from ${currentTag} to ${tag}${tags?.is_compose ? ', and the compose files are edited as shown' : ''}.`,
         backup ? 'A backup is taken first.' : '',
-        'If it fails to start, Berth switches back automatically.',
+        'If it fails to start, Nodestarr switches back automatically.',
       ]
         .filter(Boolean)
         .join(' '),
@@ -349,7 +349,7 @@
       {:else if !history}
         <p class="panel-body faint"><Spinner size={13} /> Loading…</p>
       {:else if history.length === 0}
-        <p class="panel-body muted">No updates yet. Updates made by Berth show up here, and the last ones can be rolled back.</p>
+        <p class="panel-body muted">No updates yet. Updates made by Nodestarr show up here, and the last ones can be rolled back.</p>
       {:else}
         <UpdateHistory entries={history} />
       {/if}
@@ -367,7 +367,7 @@
       {:else if !notes}
         <p class="faint"><Spinner size={13} /> Loading…</p>
       {:else if !notes.repo}
-        <p class="muted">Berth doesn't know where this app publishes its releases. Images that set the <code>org.opencontainers.image.source</code> label to a GitHub repository get notes here.</p>
+        <p class="muted">Nodestarr doesn't know where this app publishes its releases. Images that set the <code>org.opencontainers.image.source</code> label to a GitHub repository get notes here.</p>
       {:else if notes.releases.length === 0}
         <p class="muted">No releases published on GitHub.</p>
       {:else}

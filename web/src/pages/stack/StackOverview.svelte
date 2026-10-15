@@ -121,7 +121,7 @@
       {#each detail.stack.files as f (f)}<li class="mono small">{f}</li>{/each}
     </ul>
     {#if !detail.stack.editable}
-      <p class="muted small">Berth can't read these files, so the stack can be controlled but not edited. Mount the folder into Berth at the same path to edit it here.</p>
+      <p class="muted small">Nodestarr can't read these files, so the stack can be controlled but not edited. Mount the folder into Nodestarr at the same path to edit it here.</p>
     {:else if !detail.stack.in_stacks_dir}
       <p class="faint small">This stack lives outside the stacks folders set in Settings > Docker. It works the same; it's just not grouped with the others.</p>
     {/if}

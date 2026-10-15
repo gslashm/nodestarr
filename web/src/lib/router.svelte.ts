@@ -1,5 +1,5 @@
 // A small history-API router. Paths are app-relative ("/containers/x");
-// the URL base Berth runs under is added and removed here.
+// the URL base Nodestarr runs under is added and removed here.
 
 import { basePath } from './api';
 

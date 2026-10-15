@@ -1,6 +1,6 @@
 //! Live view of every container, kept current from Docker's event stream.
 //!
-//! Instead of polling, Berth holds one long-lived `/events` connection and
+//! Instead of polling, Nodestarr holds one long-lived `/events` connection and
 //! re-inspects only the container that changed. A periodic full resync
 //! covers anything missed while the stream was down.
 
@@ -26,7 +26,7 @@ use crate::settings::SettingsStore;
 /// public host is configured.
 pub const BROWSER_HOST: &str = "{host}";
 
-/// A container as Berth knows it.
+/// A container as Nodestarr knows it.
 #[derive(Debug)]
 pub struct Entry {
     pub summary: Arc<ContainerSummary>,

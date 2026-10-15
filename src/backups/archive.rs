@@ -7,7 +7,7 @@
 //! db/<engine>.sql          database dump (or db/mongo.archive)
 //! native/<file>.zip        the app's own backup (e.g. Sonarr)
 //! compose/<file>           compose file(s) and .env of the stack
-//! berth-backup.json        manifest (also stored next to the archive)
+//! nodestarr-backup.json        manifest (also stored next to the archive)
 //! ```
 
 use std::collections::HashSet;
@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::settings::Compression;
 
-pub const MANIFEST_NAME: &str = "berth-backup.json";
+pub const MANIFEST_NAME: &str = "nodestarr-backup.json";
 /// Files up to this size are read into memory before archiving so a file
 /// that changes during a live copy can't corrupt the tar stream.
 const BUFFER_LIMIT: u64 = 64 * 1024 * 1024;
@@ -37,7 +37,7 @@ pub fn build_globs(patterns: &[String]) -> GlobSet {
 
 /// True when a directory and everything below it is excluded.
 fn dir_excluded(globs: &GlobSet, rel: &str) -> bool {
-    globs.is_match(rel) || globs.is_match(format!("{rel}/__berth_probe__"))
+    globs.is_match(rel) || globs.is_match(format!("{rel}/__nodestarr_probe__"))
 }
 
 #[derive(Debug, Default, Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -203,7 +203,7 @@ impl ArchiveWriter {
                 Some((_, rest)) => rest.to_string(),
                 None => continue,
             };
-            if rel.is_empty() || excludes.is_match(&rel) || excludes.is_match(format!("{rel}/__berth_probe__")) {
+            if rel.is_empty() || excludes.is_match(&rel) || excludes.is_match(format!("{rel}/__nodestarr_probe__")) {
                 stats.skipped += 1;
                 continue;
             }

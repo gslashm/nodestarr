@@ -1,7 +1,7 @@
 <!--
   Config file editor: browse the container's mounted folders, edit a file
   with syntax highlighting, save (optionally restarting the app), and look
-  at or restore earlier versions Berth kept.
+  at or restore earlier versions Nodestarr kept.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -334,8 +334,8 @@
       </div>
       {#if current && !current.accessible}
         <div class="hint">
-          <p><strong>Berth can't see this folder.</strong></p>
-          <p class="muted">Mount <code>{current.source}</code> into the Berth container at the same path, for example <code>{current.source}:{current.source}</code>.</p>
+          <p><strong>Nodestarr can't see this folder.</strong></p>
+          <p class="muted">Mount <code>{current.source}</code> into the Nodestarr container at the same path, for example <code>{current.source}:{current.source}</code>.</p>
         </div>
       {:else}
         <nav class="crumbs" aria-label="Path">
@@ -378,7 +378,7 @@
       {#if !file}
         <div class="placeholder panel">
           <EmptyState icon={FileIcon} title="Pick a file to edit">
-            Berth keeps the previous version every time you save, so changes can be undone.
+            Nodestarr keeps the previous version every time you save, so changes can be undone.
           </EmptyState>
         </div>
       {:else}
@@ -436,7 +436,7 @@
   {:else if !versions}
     <p class="faint"><Spinner size={13} /> Loading…</p>
   {:else if versions.length === 0}
-    <p class="muted">No earlier versions yet. Berth keeps one each time the file is saved from here, from the compose editor, or by an update.</p>
+    <p class="muted">No earlier versions yet. Nodestarr keeps one each time the file is saved from here, from the compose editor, or by an update.</p>
   {:else}
     <div class="versions">
       <ul>

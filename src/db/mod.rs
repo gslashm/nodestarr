@@ -1,6 +1,6 @@
 //! SQLite storage.
 //!
-//! One connection guarded by a mutex is plenty for Berth's write volume (a
+//! One connection guarded by a mutex is plenty for Nodestarr's write volume (a
 //! handful of writes per minute). Calls run on tokio's blocking pool so the
 //! async workers never wait on disk.
 
@@ -71,7 +71,7 @@ impl Db {
         let current = current.max(0) as usize;
         if current > MIGRATIONS.len() {
             return Err(AppError::Other(anyhow::anyhow!(
-                "database schema version {current} is newer than this Berth build supports ({}); \
+                "database schema version {current} is newer than this Nodestarr build supports ({}); \
                  refusing to start to avoid damaging it",
                 MIGRATIONS.len()
             )));

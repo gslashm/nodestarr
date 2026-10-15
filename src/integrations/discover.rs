@@ -17,7 +17,7 @@ pub struct Creds {
 }
 
 /// Reads a file from the container's config folder: directly when mounted
-/// into Berth, otherwise with `docker exec cat`.
+/// into Nodestarr, otherwise with `docker exec cat`.
 pub async fn read_config(app: &App, entry: &Entry, container_path: &str) -> Option<String> {
     for m in &entry.summary.mounts {
         if m.kind != "bind" {

@@ -1,6 +1,6 @@
 <!--
-  An app's icon: the configured icon URL (if any), else a monogram in a
-  shipping-container color. Falls back to the monogram if the image fails.
+  An app's icon: the configured icon URL (if any), else a colored monogram.
+  Falls back to the monogram if the image fails to load.
 -->
 <script lang="ts">
   import { iconUrl, monogramColor, monogramText } from '../lib/monogram';

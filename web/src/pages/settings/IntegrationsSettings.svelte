@@ -1,5 +1,5 @@
 <!--
-  App integrations: Berth talks to apps it recognizes (the *arrs, Plex,
+  App integrations: Nodestarr talks to apps it recognizes (the *arrs, Plex,
   SABnzbd, qBittorrent, Jellyfin, Immich, ...) for versions, health warnings
   and activity. Shows what was found and whether each one answers.
 -->
@@ -48,11 +48,11 @@
   }
 </script>
 
-<SettingsSection section="integrations" title="App integrations" intro="API keys are read from each app's own config file when Berth can see it, so most apps need no setup.">
+<SettingsSection section="integrations" title="App integrations" intro="API keys are read from each app's own config file when Nodestarr can see it, so most apps need no setup.">
   {#snippet children(s)}
     <Group>
       <Field label="Integrations">
-        <Toggle bind:checked={s.enabled} label="Talk to the apps Berth recognizes" hint="Versions, health warnings (like Sonarr's), queue sizes and active streams." />
+        <Toggle bind:checked={s.enabled} label="Talk to the apps Nodestarr recognizes" hint="Versions, health warnings (like Sonarr's), queue sizes and active streams." />
       </Field>
       <Field label="Find them">
         <Toggle bind:checked={s.auto_discover} label="Connect to recognized apps on their own" hint="Off: only apps you switch on in their container settings." />
@@ -60,7 +60,7 @@
       <Field label="Ask every" id="i-poll" hint="Seconds between checks. Apps are only asked while their container runs.">
         <input id="i-poll" class="input num short" type="number" min="15" bind:value={s.poll_secs} />
       </Field>
-      <Field label="qBittorrent login" id="i-qb" hint="qBittorrent has no API key; Berth signs in with these if its web UI asks for a password.">
+      <Field label="qBittorrent login" id="i-qb" hint="qBittorrent has no API key; Nodestarr signs in with these if its web UI asks for a password.">
         <div class="inline">
           <input id="i-qb" class="input" bind:value={s.qbittorrent_username} placeholder="User name" autocomplete="off" />
           <SecretInput bind:value={s.qbittorrent_password} placeholder="Password" label="qBittorrent password" />

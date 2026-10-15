@@ -1,7 +1,7 @@
-//! Working out how Berth can reach a container's HTTP port.
+//! Working out how Nodestarr can reach a container's HTTP port.
 //!
-//! Depends on where Berth runs: on the host (or with host networking) the
-//! published port on 127.0.0.1 works; inside a bridge network Berth can use
+//! Depends on where Nodestarr runs: on the host (or with host networking) the
+//! published port on 127.0.0.1 works; inside a bridge network Nodestarr can use
 //! the container's IP when they share a network, otherwise the published
 //! port on the Docker host (via the default gateway).
 
@@ -10,7 +10,7 @@ use std::net::Ipv4Addr;
 use crate::app::App;
 use crate::docker::Entry;
 
-/// How Berth itself is attached to the network.
+/// How Nodestarr itself is attached to the network.
 #[derive(Debug, Clone)]
 pub enum SelfNet {
     /// Not in a container, or `network_mode: host`.
@@ -44,7 +44,7 @@ pub fn default_gateway() -> Option<Ipv4Addr> {
     None
 }
 
-/// Base URL (scheme://host:port) for a container port, as reachable from Berth.
+/// Base URL (scheme://host:port) for a container port, as reachable from Nodestarr.
 pub fn base_url(app: &App, entry: &Entry, private_port: u16, https: bool) -> Option<String> {
     let s = &entry.summary;
     let scheme = if https { "https" } else { "http" };
@@ -80,7 +80,7 @@ pub fn base_url(app: &App, entry: &Entry, private_port: u16, https: bool) -> Opt
     }
 }
 
-/// The container's IP, optionally restricted to networks Berth is on.
+/// The container's IP, optionally restricted to networks Nodestarr is on.
 fn container_ip(entry: &Entry, only: Option<&[String]>) -> Option<String> {
     let nets = entry.inspect.network_settings.as_ref()?.networks.as_ref()?;
     nets.iter()

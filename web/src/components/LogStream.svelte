@@ -35,7 +35,7 @@
 
   /** Lines kept in the browser; older ones are dropped (the download has everything). */
   const MAX_LINES = 5000;
-  const PREFS_KEY = 'berth.logs';
+  const PREFS_KEY = 'nodestarr.logs';
 
   interface ViewPrefs {
     tail: string;

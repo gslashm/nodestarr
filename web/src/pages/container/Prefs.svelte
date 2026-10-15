@@ -148,7 +148,7 @@
       <section class="panel">
         <div class="panel-head"><h2>General</h2></div>
         <div class="panel-body">
-          <Field label="Name" id="p-name" hint="How it's shown in Berth. Leave empty for the automatic name.">
+          <Field label="Name" id="p-name" hint="How it's shown in Nodestarr. Leave empty for the automatic name.">
             <input id="p-name" class="input" bind:value={form.display_name} placeholder={c.display_name} />
           </Field>
           <Field label="Icon" id="p-icon" hint="An image URL, or the name of an app icon if an icon source is set in Settings > General.">
@@ -157,7 +157,7 @@
               <AppIcon name={form.display_name || c.display_name} slug={c.app} icon={form.icon} size={34} />
             </div>
           </Field>
-          <Field label="Web address" id="p-web" hint={'Where "Open" goes. {host} is replaced with the address you use for Berth.'}>
+          <Field label="Web address" id="p-web" hint={'Where "Open" goes. {host} is replaced with the address you use for Nodestarr.'}>
             <input id="p-web" class="input mono" bind:value={form.web_url} placeholder={c.links[0]?.url ?? 'http://{host}:8080'} />
           </Field>
           <Field label="Tags" hint="For filtering and grouping.">
@@ -320,9 +320,9 @@
         <div class="panel-body">
           <p class="muted intro">
             {#if c.app_name}
-              Berth talks to {c.app_name}'s API for its version, health warnings and activity.
+              Nodestarr talks to {c.app_name}'s API for its version, health warnings and activity.
             {:else}
-              Berth doesn't recognize this app, so there's nothing to connect to unless you set it up below.
+              Nodestarr doesn't recognize this app, so there's nothing to connect to unless you set it up below.
             {/if}
           </p>
           <Field label="Integration" id="p-int">

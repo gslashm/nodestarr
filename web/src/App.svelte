@@ -108,7 +108,7 @@
       {#if !live.dockerConnected}
         <div class="banner" role="alert">
           <TriangleAlert size={18} />
-          <span>Berth can't reach Docker right now. What you see may be out of date; it reconnects automatically.</span>
+          <span>Nodestarr can't reach Docker right now. What you see may be out of date; it reconnects automatically.</span>
         </div>
       {/if}
       {#if live.loadError && !live.loaded}

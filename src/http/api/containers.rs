@@ -78,7 +78,7 @@ async fn list(State(app): State<App>, Query(q): Query<ListQuery>) -> Result<Json
         .list()
         .into_iter()
         .filter(|s| q.all || !name_matches(&hidden_patterns, &s.name))
-        .filter(|s| !s.name.starts_with("berth-updater-") && !s.name.contains("-berth-old-"))
+        .filter(|s| !s.name.starts_with("nodestarr-updater-") && !s.name.contains("-nodestarr-old-"))
         .map(|s| container_view(&app, &ctx, s))
         .filter(|v| q.all || !v.prefs.hidden)
         .collect();
@@ -304,7 +304,7 @@ async fn put_spec(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>,
         return Err(AppError::bad_request("this container belongs to a compose stack; edit the compose file instead"));
     }
     if e.summary.is_self {
-        return Err(AppError::forbidden("Berth can't edit its own container"));
+        return Err(AppError::forbidden("Nodestarr can't edit its own container"));
     }
     let (body, extra_networks) = spec.to_create_body()?;
     let name = display_name(&app, &e);
@@ -694,7 +694,7 @@ async fn backup_plan(State(app): State<App>, Path(id): Path<String>) -> Result<J
             tokio::task::spawn_blocking(move || {
                 crate::util::fsx::dir_size(FsPath::new(&src), &|rel| {
                     let r = rel.to_string_lossy();
-                    ex.is_match(r.as_ref()) || ex.is_match(format!("{r}/__berth_probe__"))
+                    ex.is_match(r.as_ref()) || ex.is_match(format!("{r}/__nodestarr_probe__"))
                 })
             }),
         )

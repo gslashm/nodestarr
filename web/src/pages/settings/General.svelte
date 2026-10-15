@@ -19,11 +19,12 @@
       .catch(() => {});
   });
 
-  const ACCENTS = ['#f2c230', '#ff8a3d', '#38c793', '#3f9fcf', '#9aa8ff', '#e86fa8'];
+  // Nodestarr magenta first; the others are alternatives people often like.
+  const ACCENTS = ['#e46cff', '#f2c230', '#2fd3c0', '#4fb3ff', '#b8e04a', '#dfe4f5'];
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 </script>
 
-<SettingsSection section="general" title="General" intro="How this Berth is named and reached, and how it looks for everyone.">
+<SettingsSection section="general" title="General" intro="How this Nodestarr is named and reached, and how it looks for everyone.">
   {#snippet children(g)}
     <Group title="This instance">
       <Field label="Name" id="g-name" hint="Shown in the sidebar, the browser tab and notifications.">
@@ -32,18 +33,18 @@
       <Field label="Host address" id="g-host" hint={'The address of this Docker host as you open it, used for container links ({host}). Empty uses the address in your browser.'}>
         <input id="g-host" class="input mono" bind:value={g.public_host} placeholder="192.168.1.50" spellcheck="false" />
       </Field>
-      <Field label="Berth's address" id="g-ext" hint="The full address of Berth, used for links in notifications, like http://192.168.1.50:7979.">
+      <Field label="Nodestarr's address" id="g-ext" hint="The full address of Nodestarr, used for links in notifications, like http://192.168.1.50:7979.">
         <input id="g-ext" class="input mono" bind:value={g.external_url} placeholder="http://192.168.1.50:7979" spellcheck="false" />
       </Field>
-      <Field label="URL path" id="g-base" hint="When Berth sits behind a reverse proxy under a path, like /berth. Takes effect after a restart.">
+      <Field label="URL path" id="g-base" hint="When Nodestarr sits behind a reverse proxy under a path, like /nodestarr. Takes effect after a restart.">
         <input id="g-base" class="input mono" bind:value={g.url_base} placeholder="(served at the root)" spellcheck="false" />
       </Field>
       <Field label="Time zone" id="g-tz" hint="For schedules and times in notifications. Empty uses the TZ variable, then UTC.">
         <input id="g-tz" class="input" bind:value={g.timezone} list="g-zones" placeholder={browserZone} spellcheck="false" />
         <datalist id="g-zones">{#each zones as z (z)}<option value={z}></option>{/each}</datalist>
       </Field>
-      <Field label="Berth updates">
-        <Toggle bind:checked={g.check_berth_updates} label="Tell me when a new Berth version is out" hint="Checks the Berth image once a day." />
+      <Field label="Nodestarr updates">
+        <Toggle bind:checked={g.check_nodestarr_updates} label="Tell me when a new Nodestarr version is out" hint="Checks the Nodestarr image once a day." />
       </Field>
     </Group>
 
@@ -110,7 +111,7 @@
       <Field
         label="App icons"
         id="g-icons"
-        hint={'Berth draws a monogram for each app. To use real icons, give the address of an icon set you trust; {name} becomes the app (sonarr, radarr…). Berth never downloads icons on its own.'}
+        hint={'Nodestarr draws a monogram for each app. To use real icons, give the address of an icon set you trust; {name} becomes the app (sonarr, radarr…). Nodestarr never downloads icons on its own.'}
       >
         <input id="g-icons" class="input mono" bind:value={g.ui.icon_url_template} placeholder={'https://icons.example.com/png/{name}.png'} spellcheck="false" />
         <div class="preview">

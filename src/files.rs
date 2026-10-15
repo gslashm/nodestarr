@@ -1,7 +1,7 @@
 //! File editing with history: compose files, `.env` files and app config
 //! files (config.xml, sabnzbd.ini, ...).
 //!
-//! Every save through Berth stores the previous content (compressed) so any
+//! Every save through Nodestarr stores the previous content (compressed) so any
 //! edit can be reviewed and undone. Access to app config folders is confined
 //! to the container's own bind mounts.
 
@@ -115,7 +115,7 @@ pub struct BrowseRoot {
     pub destination: String,
     /// Host path.
     pub source: String,
-    /// Whether Berth can see this path (it must be mounted into Berth at the same path).
+    /// Whether Nodestarr can see this path (it must be mounted into Nodestarr at the same path).
     pub accessible: bool,
     /// Looks like media/bulk data rather than configuration.
     pub data: bool,
@@ -185,7 +185,7 @@ fn root_for(entry: &Entry, destination: &str) -> Result<PathBuf> {
     let p = PathBuf::from(&m.source);
     if !p.is_dir() {
         return Err(AppError::conflict(format!(
-            "{} is not visible to Berth; mount it into the Berth container at the same path",
+            "{} is not visible to Nodestarr; mount it into the Nodestarr container at the same path",
             m.source
         )));
     }

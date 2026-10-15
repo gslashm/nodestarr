@@ -54,7 +54,7 @@ fn index_html(app: &App) -> Response {
     let escaped = config.replace('&', "&amp;").replace('\'', "&#39;").replace('<', "&lt;");
     let injected = html.replacen(
         "<head>",
-        &format!("<head><base href=\"{base}/\"><meta name=\"berth-config\" content='{escaped}'>"),
+        &format!("<head><base href=\"{base}/\"><meta name=\"nodestarr-config\" content='{escaped}'>"),
         1,
     );
     let mut resp = injected.into_response();
@@ -72,7 +72,7 @@ pub async fn serve(State(app): State<App>, req: Request) -> Response {
     if path.is_empty() || path == "index.html" {
         return index_html(&app);
     }
-    // Only plain relative paths reach the file system (BERTH_WEB_DIR serves
+    // Only plain relative paths reach the file system (NODESTARR_WEB_DIR serves
     // from disk): no "." or ".." segments and no backslashes.
     if path.contains('\\') || path.split('/').any(|seg| seg == "." || seg == "..") {
         return (StatusCode::NOT_FOUND, "not found").into_response();

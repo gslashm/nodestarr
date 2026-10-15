@@ -129,7 +129,7 @@ impl TaskCtx {
         &self.id
     }
 
-    /// Appends a log line (also mirrored to Berth's own log at debug level).
+    /// Appends a log line (also mirrored to Nodestarr's own log at debug level).
     pub fn log(&self, line: impl Into<String>) {
         let line = line.into();
         tracing::debug!(task = %self.id, "{line}");

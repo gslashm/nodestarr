@@ -1,4 +1,4 @@
-// Shapes of the JSON the Berth API returns. Kept in one place so pages and
+// Shapes of the JSON the Nodestarr API returns. Kept in one place so pages and
 // stores agree; field names match the Rust structs (snake_case).
 
 export type Severity = 'info' | 'success' | 'warning' | 'error';
@@ -703,7 +703,7 @@ export interface Settings {
       group_by_stack: boolean;
       time_format: string;
     };
-    check_berth_updates: boolean;
+    check_nodestarr_updates: boolean;
   };
   security: {
     auth_mode: 'forms' | 'external';

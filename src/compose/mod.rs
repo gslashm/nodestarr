@@ -1,7 +1,7 @@
 //! Docker Compose stacks: discovery, the `docker compose` CLI runner,
 //! resolved configuration, stack file editing and image tag changes.
 //!
-//! Berth drives the real `docker compose` binary rather than reimplementing
+//! Nodestarr drives the real `docker compose` binary rather than reimplementing
 //! Compose, so behavior always matches what you get in a shell.
 
 pub mod envfile;
@@ -72,7 +72,7 @@ pub struct StackSummary {
     pub running: usize,
     pub total: usize,
     pub containers: Vec<StackContainer>,
-    /// Compose files exist and are readable by Berth.
+    /// Compose files exist and are readable by Nodestarr.
     pub editable: bool,
     /// Found in one of the configured stacks folders.
     pub in_stacks_dir: bool,
@@ -244,7 +244,7 @@ impl ComposeService {
 
     fn command(&self) -> Result<Vec<String>> {
         self.inner.command.read().clone().ok_or_else(|| {
-            AppError::conflict("docker compose is not available to Berth (install the compose plugin or set the compose command in Settings > Docker)")
+            AppError::conflict("docker compose is not available to Nodestarr (install the compose plugin or set the compose command in Settings > Docker)")
         })
     }
 
@@ -357,7 +357,7 @@ impl ComposeService {
             .dir
             .clone()
             .or_else(|| summary.files.first().and_then(|f| Path::new(f).parent().map(|p| p.to_string_lossy().into_owned())))
-            .ok_or_else(|| AppError::conflict(format!("Berth doesn't know where stack '{name}' lives")))?;
+            .ok_or_else(|| AppError::conflict(format!("Nodestarr doesn't know where stack '{name}' lives")))?;
         let mut files = summary.files.clone();
         if files.is_empty() {
             files = find_compose_files(Path::new(&dir));
@@ -368,7 +368,7 @@ impl ComposeService {
         for f in &files {
             if !Path::new(f).is_file() {
                 return Err(AppError::conflict(format!(
-                    "compose file {f} is not visible to Berth; mount your stacks folder into the Berth container at the same path"
+                    "compose file {f} is not visible to Nodestarr; mount your stacks folder into the Nodestarr container at the same path"
                 )));
             }
         }
@@ -625,7 +625,7 @@ impl ComposeService {
             };
         }
         Err(AppError::bad_request(format!(
-            "service '{service}' has no image line Berth can edit (it may be built locally or come from an anchor)"
+            "service '{service}' has no image line Nodestarr can edit (it may be built locally or come from an anchor)"
         )))
     }
 
@@ -684,7 +684,7 @@ impl ComposeService {
             .iter()
             .any(|d| Path::new(d) == parent);
         if !in_stacks_dir {
-            return Err(AppError::forbidden("only stacks inside a configured stacks folder can be deleted from Berth"));
+            return Err(AppError::forbidden("only stacks inside a configured stacks folder can be deleted from Nodestarr"));
         }
         let trash = parent.join(".trash");
         tokio::fs::create_dir_all(&trash).await?;

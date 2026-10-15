@@ -1,4 +1,4 @@
-<!-- People who can sign in to Berth, and what they may do. -->
+<!-- People who can sign in to Nodestarr, and what they may do. -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import Trash2 from '@lucide/svelte/icons/trash-2';

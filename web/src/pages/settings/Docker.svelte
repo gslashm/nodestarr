@@ -6,10 +6,10 @@
   import SettingsSection from './SettingsSection.svelte';
 </script>
 
-<SettingsSection section="docker" title="Docker" intro="Stacks found outside these folders still show up and work; these are where new stacks go and where Berth looks for undeployed ones.">
+<SettingsSection section="docker" title="Docker" intro="Stacks found outside these folders still show up and work; these are where new stacks go and where Nodestarr looks for undeployed ones.">
   {#snippet children(d)}
     <Group title="Stacks">
-      <Field label="Stacks folders" hint="Absolute paths. Each subfolder with a compose file is a stack. New stacks are created in the first one. Berth must see these folders at the same path.">
+      <Field label="Stacks folders" hint="Absolute paths. Each subfolder with a compose file is a stack. New stacks are created in the first one. Nodestarr must see these folders at the same path.">
         <ListEditor bind:items={d.stacks_dirs} placeholder="/opt/stacks" mono addLabel="Add folder" />
       </Field>
       <Field label="Compose command" id="d-compose" hint="Empty finds it on its own (docker compose, then docker-compose).">

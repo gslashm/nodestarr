@@ -217,12 +217,12 @@ export function titleCase(s: string): string {
 
 /** Who did something, from the server's actor string ("user:jake", "api:ha", "schedule"). */
 export function actorLabel(actor: string | null | undefined): string {
-  if (!actor) return 'Berth';
+  if (!actor) return 'Nodestarr';
   if (actor.startsWith('user:')) return actor.slice(5);
   if (actor.startsWith('api:')) return `API key "${actor.slice(4)}"`;
   switch (actor) {
     case 'system':
-      return 'Berth';
+      return 'Nodestarr';
     case 'auto-update':
       return 'Automatic update';
     case 'schedule':
