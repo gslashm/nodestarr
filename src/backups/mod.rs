@@ -221,12 +221,11 @@ impl BackupService {
                     let p = e.path();
                     if p.is_dir() {
                         walk(&p, out, depth + 1);
-                    } else if p.to_string_lossy().ends_with(".nodestarr.json") {
-                        if let Ok(text) = std::fs::read_to_string(&p) {
-                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
-                                out.push((p, v));
-                            }
-                        }
+                    } else if p.to_string_lossy().ends_with(".nodestarr.json")
+                        && let Ok(text) = std::fs::read_to_string(&p)
+                        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&text)
+                    {
+                        out.push((p, v));
                     }
                 }
             }
@@ -341,7 +340,7 @@ pub fn start_stack_backup(app: &App, stack: &str, actor: &Actor) -> Result<Strin
                 ctx.log(format!("{name}: nothing to back up"));
                 continue;
             }
-            ctx.log(format!("— {name}"));
+            ctx.log(format!("Backing up {name}"));
             let rec = run_container_backup(&app2, &ctx, entry, BackupKind::Manual).await;
             report(&app2, &name, &entry.summary.identity, &rec, &actor).await;
             match rec {
@@ -763,9 +762,64 @@ pub async fn run_hook(app: &App, ctx: &TaskCtx, success: bool) {
     }
 }
 
+/// Folder (inside the backup folder) for copies of Nodestarr's own database.
+pub const OWN_DATABASE_DIR: &str = "nodestarr-database";
+/// Copies kept when archive retention is unlimited.
+const OWN_DATABASE_KEEP_DEFAULT: usize = 30;
+
+/// Saves a consistent copy of Nodestarr's own database (settings, users,
+/// history) in the backup folder and prunes old copies, keeping as many as
+/// the archive retention (or 30 when that is unlimited). Restoring one is a
+/// matter of stopping Nodestarr and putting the file back as
+/// `/config/nodestarr.db`.
+pub async fn backup_own_database(app: &App) -> Result<PathBuf> {
+    let settings = app.settings.get();
+    let dir = PathBuf::from(&settings.backups.root).join(OWN_DATABASE_DIR);
+    tokio::fs::create_dir_all(&dir).await?;
+    let ts = chrono::Utc::now().with_timezone(&settings.tz()).format("%Y%m%d-%H%M%S").to_string();
+    let path = dir.join(format!("nodestarr-{ts}.db"));
+    let partial = dir.join(format!(".nodestarr-{ts}.db.partial"));
+    let _ = tokio::fs::remove_file(&partial).await;
+    app.db.snapshot_to(partial.clone()).await?;
+    // The copy holds password hashes and API tokens, like the original.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = tokio::fs::set_permissions(&partial, std::fs::Permissions::from_mode(0o600)).await;
+    }
+    tokio::fs::rename(&partial, &path).await?;
+    let keep = match settings.backups.retention_count {
+        0 => OWN_DATABASE_KEEP_DEFAULT,
+        n => n as usize,
+    };
+    prune_own_database_copies(&dir, keep).await;
+    Ok(path)
+}
+
+/// Deletes all but the newest `keep` database copies in `dir`. File names
+/// carry the time, so name order is age order.
+async fn prune_own_database_copies(dir: &Path, keep: usize) {
+    let Ok(mut rd) = tokio::fs::read_dir(dir).await else { return };
+    let mut copies = Vec::new();
+    while let Ok(Some(e)) = rd.next_entry().await {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name.starts_with("nodestarr-") && name.ends_with(".db") {
+            copies.push(e.path());
+        }
+    }
+    copies.sort();
+    let excess = copies.len().saturating_sub(keep);
+    for old in &copies[..excess] {
+        if let Err(err) = tokio::fs::remove_file(old).await {
+            tracing::warn!(%err, path = %old.display(), "could not delete an old database copy");
+        }
+    }
+}
+
 /// Scheduled run over every container with backups enabled.
 /// Backs up every container that has backups enabled (the scheduled job;
-/// "Run now" uses it too, even when the schedule itself is off).
+/// "Run now" uses it too, even when the schedule itself is off), then
+/// Nodestarr's own database, then runs the post-backup hook.
 pub async fn run_scheduled(app: &App) {
     let settings = app.settings.get();
     let actor = Actor::schedule();
@@ -776,7 +830,6 @@ pub async fn run_scheduled(app: &App) {
         .filter(|e| app.prefs.get(&e.summary.identity).backup_enabled(&settings))
         .filter(|e| !e.summary.is_self)
         .collect();
-    let total = entries.len();
     let mut ok = 0;
     let mut failed = Vec::new();
     for entry in entries {
@@ -800,9 +853,24 @@ pub async fn run_scheduled(app: &App) {
             Err(err) => failed.push(format!("{name}: {err}")),
         }
     }
-    if total == 0 {
-        return;
-    }
+    // Nodestarr's own database, so a lost /config can be restored too.
+    let spec = TaskSpec::new("backup", "Back up Nodestarr's database", &actor);
+    let app2 = app.clone();
+    let own_db = app
+        .tasks
+        .run(spec, move |ctx| async move {
+            let path = backup_own_database(&app2).await?;
+            ctx.log(format!("Saved {}", path.display()));
+            Ok(json!({ "path": path }))
+        })
+        .await;
+    let own_db_ok = match own_db {
+        Ok(_) => true,
+        Err(err) => {
+            failed.push(format!("Nodestarr's database: {err}"));
+            false
+        }
+    };
     // Hook once per run.
     let spec = TaskSpec::new("backup", "Post-backup hook", &actor);
     let app2 = app.clone();
@@ -820,7 +888,11 @@ pub async fn run_scheduled(app: &App) {
     }
     let severity = if failed.is_empty() { Severity::Success } else { Severity::Error };
     let message = if failed.is_empty() {
-        format!("{ok} container{} backed up", if ok == 1 { "" } else { "s" })
+        format!(
+            "{ok} container{} backed up{}",
+            if ok == 1 { "" } else { "s" },
+            if own_db_ok { ", plus Nodestarr's own database" } else { "" }
+        )
     } else {
         format!("{ok} backed up, {} failed:\n{}", failed.len(), failed.join("\n"))
     };
@@ -845,5 +917,26 @@ pub async fn run_scheduled(app: &App) {
             "Scheduled backup finished",
             message,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn database_copies_keep_the_newest() {
+        let dir = tempfile::tempdir().unwrap();
+        for ts in ["20261001-033000", "20261002-033000", "20261003-033000", "20261004-033000"] {
+            std::fs::write(dir.path().join(format!("nodestarr-{ts}.db")), b"x").unwrap();
+        }
+        std::fs::write(dir.path().join("notes.txt"), b"not a copy").unwrap();
+        prune_own_database_copies(dir.path(), 2).await;
+        let mut left: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["nodestarr-20261003-033000.db", "nodestarr-20261004-033000.db", "notes.txt"]);
     }
 }

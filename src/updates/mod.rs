@@ -49,6 +49,9 @@ pub enum UpdateStatus {
 pub struct NewerTag {
     pub tag: String,
     pub scope: TagScope,
+    /// When Nodestarr first saw this tag (for the minimum-age rule).
+    #[serde(default)]
+    pub first_seen: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

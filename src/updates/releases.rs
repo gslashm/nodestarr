@@ -91,10 +91,10 @@ pub fn github_repo(url: &str) -> Option<String> {
 /// Picks the repository to read release notes from.
 pub fn repo_for(app_slug: Option<&str>, source: Option<&str>) -> Option<String> {
     if let Some(slug) = app_slug {
-        if slug == "nodestarr" {
-            if let Some(repo) = crate::selfupdate::REPO {
-                return Some(repo.to_string());
-            }
+        if slug == "nodestarr"
+            && let Some(repo) = crate::selfupdate::REPO
+        {
+            return Some(repo.to_string());
         }
         if let Some((_, repo)) = UPSTREAM.iter().find(|(s, _)| *s == slug) {
             return Some(repo.to_string());
@@ -104,10 +104,10 @@ pub fn repo_for(app_slug: Option<&str>, source: Option<&str>) -> Option<String> 
 }
 
 pub async fn fetch(app: &App, repo: &str) -> Result<ReleaseNotes> {
-    if let Some((at, notes)) = cache().lock().get(repo) {
-        if at.elapsed() < Duration::from_secs(3600) {
-            return Ok(notes.clone());
-        }
+    if let Some((at, notes)) = cache().lock().get(repo)
+        && at.elapsed() < Duration::from_secs(3600)
+    {
+        return Ok(notes.clone());
     }
     #[derive(Deserialize)]
     struct Gh {

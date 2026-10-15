@@ -39,10 +39,14 @@ pub fn decide(
         return Decision::Skip("no update".into());
     }
     // A newer version tag within the allowed scope takes precedence.
-    if let Some(newer) = &info.newer_tag {
-        if scope != TagScope::Digest && newer.scope <= scope {
-            return Decision::Update(UpdateRequest { tag: Some(newer.tag.clone()), skip_backup: false });
+    if let Some(newer) = &info.newer_tag
+        && scope != TagScope::Digest
+        && newer.scope <= scope
+    {
+        if let Some(wait) = too_new(newer.first_seen, min_age_hours, now) {
+            return Decision::Skip(wait);
         }
+        return Decision::Update(UpdateRequest { tag: Some(newer.tag.clone()), skip_backup: false });
     }
     let digest_update = info.digest_changed() || info.status == UpdateStatus::PendingRecreate;
     if !digest_update {
@@ -51,16 +55,21 @@ pub fn decide(
     if !skipped_digest.is_empty() && info.latest_digest.as_deref() == Some(skipped_digest) {
         return Decision::Skip("this version was skipped (it failed before or was rolled back)".into());
     }
-    if min_age_hours > 0 {
-        let age = now - info.first_seen.unwrap_or(now);
-        if age < min_age_hours as i64 * 3600 {
-            return Decision::Skip(format!(
-                "waiting until the update is {min_age_hours}h old ({}h so far)",
-                age / 3600
-            ));
-        }
+    if let Some(wait) = too_new(info.first_seen, min_age_hours, now) {
+        return Decision::Skip(wait);
     }
     Decision::Update(UpdateRequest::default())
+}
+
+/// The reason to wait when an update first seen at `first_seen` is younger
+/// than the minimum age, or None when it may be installed.
+fn too_new(first_seen: Option<i64>, min_age_hours: u32, now: i64) -> Option<String> {
+    if min_age_hours == 0 {
+        return None;
+    }
+    let age = now - first_seen.unwrap_or(now);
+    (age < min_age_hours as i64 * 3600)
+        .then(|| format!("waiting until the update is {min_age_hours}h old ({}h so far)", age / 3600))
 }
 
 /// Runs one auto-update pass (scheduled).
@@ -104,11 +113,10 @@ pub async fn run(app: &App) {
         };
         if settings.updates.plex_guard
             && s.app.as_deref().and_then(crate::docker::apps::by_slug).is_some_and(|a| a.streaming_server)
+            && let Some(n) = crate::integrations::active_streams(app).await.filter(|n| *n > 0)
         {
-            if let Some(n) = crate::integrations::active_streams(app).await.filter(|n| *n > 0) {
-                deferred.push(format!("{name} ({n} active stream{})", if n == 1 { "" } else { "s" }));
-                continue;
-            }
+            deferred.push(format!("{name} ({n} active stream{})", if n == 1 { "" } else { "s" }));
+            continue;
         }
         let identity = s.identity.clone();
         let title = match &req.tag {
@@ -196,11 +204,23 @@ mod tests {
     fn tag_bumps_respect_scope() {
         let now = 1_000_000;
         let mut i = info(UpdateStatus::Available, "a", "a", now);
-        i.newer_tag = Some(NewerTag { tag: "8.5.0".into(), scope: TagScope::Minor });
+        i.newer_tag = Some(NewerTag { tag: "8.5.0".into(), scope: TagScope::Minor, first_seen: Some(now - 10 * 3600) });
         assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Patch, false, "", 0, &i, now), Decision::Skip(_)));
-        match decide(UpdatePolicy::Auto, TagScope::Minor, false, "", 0, &i, now) {
+        match decide(UpdatePolicy::Auto, TagScope::Minor, false, "", 6, &i, now) {
             Decision::Update(req) => assert_eq!(req.tag.as_deref(), Some("8.5.0")),
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    #[test]
+    fn tag_bumps_wait_for_the_minimum_age() {
+        let now = 1_000_000;
+        let mut i = info(UpdateStatus::Available, "a", "a", now);
+        i.newer_tag = Some(NewerTag { tag: "8.5.0".into(), scope: TagScope::Minor, first_seen: Some(now - 3600) });
+        match decide(UpdatePolicy::Auto, TagScope::Minor, false, "", 6, &i, now) {
+            Decision::Skip(why) => assert!(why.contains("6h old"), "{why}"),
+            other => panic!("unexpected {other:?}"),
+        }
+        assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Minor, false, "", 1, &i, now), Decision::Update(_)));
     }
 }

@@ -3,11 +3,11 @@
 //! Layout inside an archive:
 //!
 //! ```text
-//! files/<n>/...            contents of the n-th backed-up mount
-//! db/<engine>.sql          database dump (or db/mongo.archive)
-//! native/<file>.zip        the app's own backup (e.g. Sonarr)
-//! compose/<file>           compose file(s) and .env of the stack
-//! nodestarr-backup.json        manifest (also stored next to the archive)
+//! files/<n>/...              contents of the n-th backed-up mount
+//! db/<engine>.sql            database dump (or db/mongo.archive)
+//! native/<file>.zip          the app's own backup (e.g. Sonarr)
+//! compose/<file>             compose file(s) and .env of the stack
+//! nodestarr-backup.json      manifest (also stored next to the archive)
 //! ```
 
 use std::collections::HashSet;

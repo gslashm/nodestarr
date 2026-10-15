@@ -146,13 +146,12 @@ pub fn kind_of(entry: &Entry) -> Option<&'static str> {
 pub async fn creds_for(app: &App, entry: &Entry) -> Result<Creds> {
     let identity = &entry.summary.identity;
     let prefs = app.prefs.get(identity);
-    if let Some((c, at)) = app.integrations.inner.creds.lock().get(identity) {
-        if crate::util::now() - at < 600
-            && prefs.integration.base_url.is_empty()
-            && prefs.integration.api_key.is_empty()
-        {
-            return Ok(c.clone());
-        }
+    if let Some((c, at)) = app.integrations.inner.creds.lock().get(identity)
+        && crate::util::now() - at < 600
+        && prefs.integration.base_url.is_empty()
+        && prefs.integration.api_key.is_empty()
+    {
+        return Ok(c.clone());
     }
     let mut creds = discover::discover(app, entry).await;
     let ip = &prefs.integration;
@@ -236,10 +235,10 @@ pub async fn poll(app: &App, entry: &Entry) -> Option<Arc<AppStatus>> {
 
 /// Active media streams across Plex (or Tautulli). Cached for 30 seconds.
 pub async fn active_streams(app: &App) -> Option<u32> {
-    if let Some((at, n)) = *app.integrations.inner.streams.lock() {
-        if crate::util::now() - at < 30 {
-            return n;
-        }
+    if let Some((at, n)) = *app.integrations.inner.streams.lock()
+        && crate::util::now() - at < 30
+    {
+        return n;
     }
     let mut result = None;
     for entry in app.docker.entries() {
@@ -247,12 +246,12 @@ pub async fn active_streams(app: &App) -> Option<u32> {
         if !entry.summary.is_running() || !matches!(kind, "plex" | "tautulli") {
             continue;
         }
-        if let Ok(creds) = creds_for(app, &entry).await {
-            if let Ok(n) = clients::streams(app.integrations.http(), kind, &creds).await {
-                result = Some(result.unwrap_or(0).max(n));
-                if kind == "plex" {
-                    break;
-                }
+        if let Ok(creds) = creds_for(app, &entry).await
+            && let Ok(n) = clients::streams(app.integrations.http(), kind, &creds).await
+        {
+            result = Some(result.unwrap_or(0).max(n));
+            if kind == "plex" {
+                break;
             }
         }
     }

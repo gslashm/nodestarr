@@ -79,10 +79,9 @@ pub async fn status(
                         if entry.summary.app.as_deref() != Some("prowlarr") {
                             if let Ok(q) =
                                 get_json(http, &format!("{base}/api/{v}/queue/status"), &[("X-Api-Key", k)]).await
+                                && let Some(n) = q["totalCount"].as_i64()
                             {
-                                if let Some(n) = q["totalCount"].as_i64() {
-                                    st.details.insert("Queue".into(), n.to_string());
-                                }
+                                st.details.insert("Queue".into(), n.to_string());
                             }
                         } else if let Ok(Value::Array(ix)) =
                             get_json(http, &format!("{base}/api/{v}/indexerstatus"), &[("X-Api-Key", k)]).await
@@ -101,22 +100,22 @@ pub async fn status(
             let s = get_json(http, &format!("{base}/api/system/status"), &[("X-API-KEY", k)]).await?;
             st.reachable = true;
             st.version = s["data"]["bazarr_version"].as_str().map(str::to_string);
-            if let Ok(h) = get_json(http, &format!("{base}/api/system/health"), &[("X-API-KEY", k)]).await {
-                if let Some(items) = h["data"].as_array() {
-                    st.health = items
-                        .iter()
-                        .map(|i| HealthIssue {
-                            level: "warning".into(),
-                            message: format!(
-                                "{}: {}",
-                                i["object"].as_str().unwrap_or(""),
-                                i["issue"].as_str().unwrap_or("")
-                            ),
-                            source: None,
-                            wiki: None,
-                        })
-                        .collect();
-                }
+            if let Ok(h) = get_json(http, &format!("{base}/api/system/health"), &[("X-API-KEY", k)]).await
+                && let Some(items) = h["data"].as_array()
+            {
+                st.health = items
+                    .iter()
+                    .map(|i| HealthIssue {
+                        level: "warning".into(),
+                        message: format!(
+                            "{}: {}",
+                            i["object"].as_str().unwrap_or(""),
+                            i["issue"].as_str().unwrap_or("")
+                        ),
+                        source: None,
+                        wiki: None,
+                    })
+                    .collect();
             }
             Ok(())
         }
@@ -137,20 +136,20 @@ pub async fn status(
                     st.details.insert("Speed".into(), format!("{}/s", s.trim()));
                 }
             }
-            if let Ok(w) = get_json(http, &format!("{base}/api?mode=warnings&output=json&apikey={k}"), &[]).await {
-                if let Some(items) = w["warnings"].as_array() {
-                    st.health = items
-                        .iter()
-                        .rev()
-                        .take(5)
-                        .map(|i| HealthIssue {
-                            level: if i["type"].as_str() == Some("ERROR") { "error".into() } else { "warning".into() },
-                            message: i["text"].as_str().or(i.as_str()).unwrap_or_default().to_string(),
-                            source: None,
-                            wiki: None,
-                        })
-                        .collect();
-                }
+            if let Ok(w) = get_json(http, &format!("{base}/api?mode=warnings&output=json&apikey={k}"), &[]).await
+                && let Some(items) = w["warnings"].as_array()
+            {
+                st.health = items
+                    .iter()
+                    .rev()
+                    .take(5)
+                    .map(|i| HealthIssue {
+                        level: if i["type"].as_str() == Some("ERROR") { "error".into() } else { "warning".into() },
+                        message: i["text"].as_str().or(i.as_str()).unwrap_or_default().to_string(),
+                        source: None,
+                        wiki: None,
+                    })
+                    .collect();
             }
             Ok(())
         }
@@ -159,14 +158,13 @@ pub async fn status(
             let info = get_json(http, &format!("{base}/api/v2?apikey={k}&cmd=get_tautulli_info"), &[]).await?;
             st.reachable = true;
             st.version = info["response"]["data"]["tautulli_version"].as_str().map(str::to_string);
-            if let Ok(a) = get_json(http, &format!("{base}/api/v2?apikey={k}&cmd=get_activity"), &[]).await {
-                if let Some(n) = a["response"]["data"]["stream_count"]
+            if let Ok(a) = get_json(http, &format!("{base}/api/v2?apikey={k}&cmd=get_activity"), &[]).await
+                && let Some(n) = a["response"]["data"]["stream_count"]
                     .as_str()
                     .and_then(|s| s.parse::<u32>().ok())
                     .or(a["response"]["data"]["stream_count"].as_u64().map(|n| n as u32))
-                {
-                    st.details.insert("Streams".into(), n.to_string());
-                }
+            {
+                st.details.insert("Streams".into(), n.to_string());
             }
             Ok(())
         }
@@ -182,10 +180,10 @@ pub async fn status(
             if let Some(n) = s["commitsBehind"].as_i64().filter(|n| *n > 0) {
                 st.details.insert("Commits behind".into(), n.to_string());
             }
-            if let Ok(c) = get_json(http, &format!("{base}/api/v1/request/count"), &headers).await {
-                if let Some(n) = c["pending"].as_i64() {
-                    st.details.insert("Pending requests".into(), n.to_string());
-                }
+            if let Ok(c) = get_json(http, &format!("{base}/api/v1/request/count"), &headers).await
+                && let Some(n) = c["pending"].as_i64()
+            {
+                st.details.insert("Pending requests".into(), n.to_string());
             }
             Ok(())
         }
@@ -214,14 +212,14 @@ pub async fn status(
             }
             st.reachable = true;
             st.version = Some(version.text().await?.trim().trim_start_matches('v').to_string());
-            if let Ok(info) = client.get(format!("{base}/api/v2/transfer/info")).send().await {
-                if let Ok(v) = info.json::<Value>().await {
-                    if let Some(dl) = v["dl_info_speed"].as_u64() {
-                        st.details.insert("Download".into(), format!("{}/s", crate::util::human_bytes(dl)));
-                    }
-                    if let Some(ul) = v["up_info_speed"].as_u64() {
-                        st.details.insert("Upload".into(), format!("{}/s", crate::util::human_bytes(ul)));
-                    }
+            if let Ok(info) = client.get(format!("{base}/api/v2/transfer/info")).send().await
+                && let Ok(v) = info.json::<Value>().await
+            {
+                if let Some(dl) = v["dl_info_speed"].as_u64() {
+                    st.details.insert("Download".into(), format!("{}/s", crate::util::human_bytes(dl)));
+                }
+                if let Some(ul) = v["up_info_speed"].as_u64() {
+                    st.details.insert("Upload".into(), format!("{}/s", crate::util::human_bytes(ul)));
                 }
             }
             Ok(())
@@ -230,10 +228,10 @@ pub async fn status(
             let s = get_json(http, &format!("{base}/api/v2/status"), &[]).await?;
             st.reachable = true;
             st.version = s["version"].as_str().map(str::to_string);
-            if let Ok(nodes) = get_json(http, &format!("{base}/api/v2/get-nodes"), &[]).await {
-                if let Some(obj) = nodes.as_object() {
-                    st.details.insert("Nodes".into(), obj.len().to_string());
-                }
+            if let Ok(nodes) = get_json(http, &format!("{base}/api/v2/get-nodes"), &[]).await
+                && let Some(obj) = nodes.as_object()
+            {
+                st.details.insert("Nodes".into(), obj.len().to_string());
             }
             Ok(())
         }
@@ -243,14 +241,14 @@ pub async fn status(
             if let (Some(a), Some(b), Some(c)) = (v["major"].as_u64(), v["minor"].as_u64(), v["patch"].as_u64()) {
                 st.version = Some(format!("{a}.{b}.{c}"));
             }
-            if let Some(k) = creds.api_key.as_deref() {
-                if let Ok(stats) = get_json(http, &format!("{base}/api/server/statistics"), &[("x-api-key", k)]).await {
-                    if let Some(p) = stats["photos"].as_u64() {
-                        st.details.insert("Photos".into(), p.to_string());
-                    }
-                    if let Some(p) = stats["videos"].as_u64() {
-                        st.details.insert("Videos".into(), p.to_string());
-                    }
+            if let Some(k) = creds.api_key.as_deref()
+                && let Ok(stats) = get_json(http, &format!("{base}/api/server/statistics"), &[("x-api-key", k)]).await
+            {
+                if let Some(p) = stats["photos"].as_u64() {
+                    st.details.insert("Photos".into(), p.to_string());
+                }
+                if let Some(p) = stats["videos"].as_u64() {
+                    st.details.insert("Videos".into(), p.to_string());
                 }
             }
             Ok(())

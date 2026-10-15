@@ -77,7 +77,9 @@ pub fn start_update(app: &App, key: &str, req: UpdateRequest, actor: &Actor, tri
         Some(t) => format!("Switch {name} to {t}"),
         None => format!("Update {name}"),
     };
-    let spec = TaskSpec::new("update", title, actor).target(identity.clone(), name);
+    // One update at a time, so bulk updates run one after another (the
+    // target also locks the container's stack).
+    let spec = TaskSpec::new("update", title, actor).target(identity.clone(), name).lock("updates");
     let app2 = app.clone();
     let actor = actor.clone();
     Ok(app.tasks.spawn(spec, move |ctx| async move { run_update(&app2, &ctx, &identity, req, &actor, trigger).await }))
@@ -233,10 +235,10 @@ pub async fn run_update(
 
     match verdict {
         Ok(()) => {
-            if let Applied::Standalone(r) = &applied {
-                if let Err(err) = recreate::finalize(&app.docker.api, r).await {
-                    ctx.log(format!("Could not remove the old container: {err}"));
-                }
+            if let Applied::Standalone(r) = &applied
+                && let Err(err) = recreate::finalize(&app.docker.api, r).await
+            {
+                ctx.log(format!("Could not remove the old container: {err}"));
             }
             app.docker.refresh(&new_id).await;
             let to_version =
@@ -522,10 +524,10 @@ async fn recreate_network_dependents(app: &App, ctx: &TaskCtx, old: &Entry) {
         } else {
             let cfg = app.docker.image_meta(&ds.image_id).await.and_then(|m| m.config.clone());
             let mut body = recreate::body_from_inspect(&dep.inspect, cfg.as_ref(), &ds.image);
-            if let Some(new_target) = app.docker.by_identity(&old.summary.identity) {
-                if let Some(h) = body.host_config.as_mut() {
-                    h.network_mode = Some(format!("container:{}", new_target.summary.id));
-                }
+            if let Some(new_target) = app.docker.by_identity(&old.summary.identity)
+                && let Some(h) = body.host_config.as_mut()
+            {
+                h.network_mode = Some(format!("container:{}", new_target.summary.id));
             }
             match recreate::replace(&app.docker.api, &ds.id, body, stop_timeout(app), &|l| ctx.log(l)).await {
                 Ok(r) => recreate::finalize(&app.docker.api, &r).await,
@@ -583,17 +585,17 @@ pub async fn pull(app: &App, ctx: &TaskCtx, r: &ImageRef) -> Result<()> {
         }
         let status = info.status.unwrap_or_default();
         let id = info.id.unwrap_or_default();
-        if let Some(p) = info.progress_detail {
-            if let (Some(cur), Some(total)) = (p.current, p.total) {
-                if total > 0 && status.starts_with("Downloading") {
-                    layers.insert(id.clone(), (cur, total));
-                    let (c, t) = layers.values().fold((0i64, 0i64), |acc, (c, t)| (acc.0 + c, acc.1 + t));
-                    if t > 0 {
-                        ctx.progress(0.2 + 0.35 * (c as f32 / t as f32));
-                    }
-                    continue;
-                }
+        if let Some(p) = info.progress_detail
+            && let (Some(cur), Some(total)) = (p.current, p.total)
+            && total > 0
+            && status.starts_with("Downloading")
+        {
+            layers.insert(id.clone(), (cur, total));
+            let (c, t) = layers.values().fold((0i64, 0i64), |acc, (c, t)| (acc.0 + c, acc.1 + t));
+            if t > 0 {
+                ctx.progress(0.2 + 0.35 * (c as f32 / t as f32));
             }
+            continue;
         }
         // Log status changes only (not every progress tick).
         if status.starts_with("Downloading") || status.starts_with("Extracting") || status.starts_with("Waiting") {

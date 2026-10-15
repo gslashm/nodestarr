@@ -106,12 +106,12 @@ impl Splitter {
 }
 
 fn make_line(kind: &'static str, raw: String, timestamps: bool) -> LogLine {
-    if timestamps {
-        if let Some((ts, rest)) = raw.split_once(' ') {
-            if ts.len() >= 20 && ts.as_bytes().get(4) == Some(&b'-') {
-                return LogLine { ts: Some(ts.to_string()), s: kind, t: rest.to_string() };
-            }
-        }
+    if timestamps
+        && let Some((ts, rest)) = raw.split_once(' ')
+        && ts.len() >= 20
+        && ts.as_bytes().get(4) == Some(&b'-')
+    {
+        return LogLine { ts: Some(ts.to_string()), s: kind, t: rest.to_string() };
     }
     LogLine { ts: None, s: kind, t: raw }
 }
@@ -160,11 +160,9 @@ pub fn follow(api: &Docker, id: &str, q: &LogQuery) -> impl Stream<Item = Result
 pub fn to_text(lines: &[LogLine], with_ts: bool) -> String {
     let mut out = String::with_capacity(lines.iter().map(|l| l.t.len() + 32).sum());
     for l in lines {
-        if with_ts {
-            if let Some(ts) = &l.ts {
-                out.push_str(ts);
-                out.push(' ');
-            }
+        if with_ts && let Some(ts) = &l.ts {
+            out.push_str(ts);
+            out.push(' ');
         }
         out.push_str(&strip_ansi(&l.t));
         out.push('\n');

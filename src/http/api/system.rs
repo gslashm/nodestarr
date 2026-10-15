@@ -304,43 +304,43 @@ async fn import(
         return Err(AppError::bad_request("this is not a Nodestarr settings export"));
     }
     let mut sections = Vec::new();
-    if q.settings {
-        if let Some(incoming) = doc["settings"].as_object().cloned() {
-            let before = app.settings.get();
-            let after = app
-                .settings
-                .update(|s| {
-                    let mut current = serde_json::to_value(&*s)?;
-                    for (section, value) in incoming {
-                        // Unknown sections (from a newer Nodestarr) are ignored.
-                        let Some(cur) = current.get(&section).cloned() else { continue };
-                        let mut value = value;
-                        // Masked secrets in the file keep the stored values.
-                        merge_secrets(&mut value, &cur);
-                        current[&section] = value;
-                        sections.push(section);
-                    }
-                    *s = serde_json::from_value(current)
-                        .map_err(|e| AppError::bad_request(format!("the file has invalid settings: {e}")))?;
-                    Ok(())
-                })
-                .await?;
-            after_settings_change(&app, &before, &after).await;
-        }
+    if q.settings
+        && let Some(incoming) = doc["settings"].as_object().cloned()
+    {
+        let before = app.settings.get();
+        let after = app
+            .settings
+            .update(|s| {
+                let mut current = serde_json::to_value(&*s)?;
+                for (section, value) in incoming {
+                    // Unknown sections (from a newer Nodestarr) are ignored.
+                    let Some(cur) = current.get(&section).cloned() else { continue };
+                    let mut value = value;
+                    // Masked secrets in the file keep the stored values.
+                    merge_secrets(&mut value, &cur);
+                    current[&section] = value;
+                    sections.push(section);
+                }
+                *s = serde_json::from_value(current)
+                    .map_err(|e| AppError::bad_request(format!("the file has invalid settings: {e}")))?;
+                Ok(())
+            })
+            .await?;
+        after_settings_change(&app, &before, &after).await;
     }
     let mut prefs_count = 0;
-    if q.prefs {
-        if let Some(all) = doc["container_prefs"].as_object() {
-            for (identity, value) in all {
-                let current = serde_json::to_value(&*app.prefs.get(identity))?;
-                let mut value = value.clone();
-                merge_secrets(&mut value, &current);
-                let prefs: ContainerPrefs = serde_json::from_value(value)
-                    .map_err(|e| AppError::bad_request(format!("invalid preferences for {identity}: {e}")))?;
-                app.prefs.set(identity, prefs).await?;
-                app.bus.publish(Event::Prefs { identity: identity.clone() });
-                prefs_count += 1;
-            }
+    if q.prefs
+        && let Some(all) = doc["container_prefs"].as_object()
+    {
+        for (identity, value) in all {
+            let current = serde_json::to_value(&*app.prefs.get(identity))?;
+            let mut value = value.clone();
+            merge_secrets(&mut value, &current);
+            let prefs: ContainerPrefs = serde_json::from_value(value)
+                .map_err(|e| AppError::bad_request(format!("invalid preferences for {identity}: {e}")))?;
+            app.prefs.set(identity, prefs).await?;
+            app.bus.publish(Event::Prefs { identity: identity.clone() });
+            prefs_count += 1;
         }
     }
     app.note(

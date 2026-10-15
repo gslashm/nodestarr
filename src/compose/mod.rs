@@ -218,14 +218,14 @@ impl ComposeService {
         for cmd in candidates {
             let mut c = tokio::process::Command::new(&cmd[0]);
             c.args(&cmd[1..]).args(["version", "--short"]).stdin(Stdio::null());
-            if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), c.output()).await {
-                if out.status.success() {
-                    let v = String::from_utf8_lossy(&out.stdout).trim().trim_start_matches('v').to_string();
-                    *self.inner.command.write() = Some(cmd);
-                    *self.inner.version.write() = Some(v.clone());
-                    self.inner.docker.set_compose_version(Some(v.clone()));
-                    return Some(v);
-                }
+            if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), c.output()).await
+                && out.status.success()
+            {
+                let v = String::from_utf8_lossy(&out.stdout).trim().trim_start_matches('v').to_string();
+                *self.inner.command.write() = Some(cmd);
+                *self.inner.version.write() = Some(v.clone());
+                self.inner.docker.set_compose_version(Some(v.clone()));
+                return Some(v);
             }
         }
         *self.inner.command.write() = None;
@@ -474,10 +474,10 @@ impl ComposeService {
                 key.push_str(&format!("{}:{}:{};", f.display(), meta.mtime_nsec() ^ meta.mtime(), meta.size()));
             }
         }
-        if let Some((k, p)) = self.inner.config_cache.lock().get(&stack.name) {
-            if *k == key {
-                return Ok(p.clone());
-            }
+        if let Some((k, p)) = self.inner.config_cache.lock().get(&stack.name)
+            && *k == key
+        {
+            return Ok(p.clone());
         }
         let profiles = self.exec(stack, &["config", "--profiles"], None).await.unwrap_or_default();
         let mut args: Vec<String> = Vec::new();

@@ -97,6 +97,17 @@ impl Db {
         .await?
     }
 
+    /// Writes a consistent copy of the whole database to `dest` with SQLite's
+    /// `VACUUM INTO`, which reads one snapshot while the app keeps running.
+    /// `dest` must not exist yet.
+    pub async fn snapshot_to(&self, dest: std::path::PathBuf) -> Result<()> {
+        self.call(move |c| {
+            c.execute("VACUUM INTO ?1", [dest.to_string_lossy().as_ref()])?;
+            Ok(())
+        })
+        .await
+    }
+
     /// Synchronous access, for startup code and CLI tools.
     pub fn call_blocking<F, T>(&self, f: F) -> Result<T>
     where
@@ -198,5 +209,19 @@ mod tests {
         assert_eq!(v.unwrap()["b"], 2);
         let version: i64 = db.call(|c| Ok(c.query_row("PRAGMA user_version", [], |r| r.get(0))?)).await.unwrap();
         assert_eq!(version, MIGRATIONS.len() as i64);
+    }
+    #[tokio::test]
+    async fn snapshot_is_a_complete_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(&dir.path().join("live.db")).unwrap();
+        db.put_json("settings", "main".into(), &serde_json::json!({"kept": true})).await.unwrap();
+        let copy = dir.path().join("copy.db");
+        db.snapshot_to(copy.clone()).await.unwrap();
+        // The copy opens on its own, at the current schema, with the data.
+        let restored = Db::open(&copy).unwrap();
+        let v: Option<serde_json::Value> = restored.get_json("settings", "main".into()).await.unwrap();
+        assert_eq!(v.unwrap()["kept"], true);
+        // VACUUM INTO never overwrites an existing file.
+        assert!(db.snapshot_to(copy).await.is_err());
     }
 }

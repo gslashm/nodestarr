@@ -140,22 +140,21 @@ async fn resolve(app: &App, headers: &HeaderMap, uri: &Uri, ip: IpAddr, peer: Ip
     // 1. Authenticating reverse proxy.
     if sec.auth_mode == AuthMode::External {
         let trusted = CidrList::parse_lossy(&sec.trusted_proxies);
-        if trusted.contains(peer) {
-            if let Some(user) =
+        if trusted.contains(peer)
+            && let Some(user) =
                 headers.get(sec.external_header.as_str()).and_then(|v| v.to_str().ok()).filter(|u| !u.is_empty())
-            {
-                return Some((
-                    Principal {
-                        user_id: None,
-                        username: user.to_string(),
-                        role: Role::Admin,
-                        via: AuthVia::External,
-                        session_hash: None,
-                        key_id: None,
-                    },
-                    false,
-                ));
-            }
+        {
+            return Some((
+                Principal {
+                    user_id: None,
+                    username: user.to_string(),
+                    role: Role::Admin,
+                    via: AuthVia::External,
+                    session_hash: None,
+                    key_id: None,
+                },
+                false,
+            ));
         }
     }
 
@@ -172,17 +171,17 @@ async fn resolve(app: &App, headers: &HeaderMap, uri: &Uri, ip: IpAddr, peer: Ip
                 .map(str::to_string)
         })
         .or_else(|| if sec.allow_query_api_key { query_param(uri, "apikey") } else { None });
-    if let Some(k) = key {
-        if let Ok(Some(p)) = app.auth.api_key_principal(&k).await {
-            return Some((p, false));
-        }
+    if let Some(k) = key
+        && let Ok(Some(p)) = app.auth.api_key_principal(&k).await
+    {
+        return Some((p, false));
     }
 
     // 3. Session cookie.
-    if let Some(token) = cookie_value(headers, SESSION_COOKIE) {
-        if let Ok(Some((p, mfa_pending))) = app.auth.session_principal(&token).await {
-            return Some((p, mfa_pending));
-        }
+    if let Some(token) = cookie_value(headers, SESSION_COOKIE)
+        && let Ok(Some((p, mfa_pending))) = app.auth.session_principal(&token).await
+    {
+        return Some((p, mfa_pending));
     }
 
     // 4. Local network bypass.

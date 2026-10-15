@@ -91,7 +91,7 @@
   async function runScheduled() {
     try {
       await api.post('/backups/scheduled/run');
-      ui.toast('Backing up every included container now');
+      ui.toast("Backing up every included container and Nodestarr's own database now");
     } catch (err) {
       ui.error(err);
     }
@@ -155,7 +155,7 @@
         <h3>Schedule</h3>
         {#if data.schedule_enabled && s}
           <p class="big num">{data.next_run ? dateTime(data.next_run) : '–'}</p>
-          <p class="small muted">Next run, on the schedule <code>{s.cron}</code></p>
+          <p class="small muted">Next run, on the schedule <code>{s.cron}</code>. Each run also saves a copy of Nodestarr's own database.</p>
         {:else}
           <p class="big muted">Off</p>
           <p class="small muted">Only manual and pre-update backups are made. <a href={href('/settings/backups')}>Turn on</a></p>

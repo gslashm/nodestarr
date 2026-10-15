@@ -40,18 +40,18 @@ pub fn mask_secrets(v: &mut Value) {
         Value::Object(map) => {
             for (key, val) in map.iter_mut() {
                 if is_secret_key(key) {
-                    if let Value::String(s) = val {
-                        if !s.is_empty() {
-                            *s = SECRET_PLACEHOLDER.to_string();
-                        }
+                    if let Value::String(s) = val
+                        && !s.is_empty()
+                    {
+                        *s = SECRET_PLACEHOLDER.to_string();
                     }
                 } else if SECRET_MAPS.contains(&key.as_str()) {
                     if let Value::Object(headers) = val {
                         for hv in headers.values_mut() {
-                            if let Value::String(s) = hv {
-                                if !s.is_empty() {
-                                    *s = SECRET_PLACEHOLDER.to_string();
-                                }
+                            if let Value::String(s) = hv
+                                && !s.is_empty()
+                            {
+                                *s = SECRET_PLACEHOLDER.to_string();
                             }
                         }
                     }

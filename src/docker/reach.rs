@@ -59,10 +59,10 @@ pub fn base_url(app: &App, entry: &Entry, private_port: u16, https: bool) -> Opt
             container_ip(entry, None).map(|ip| format!("{scheme}://{ip}:{private_port}"))
         }
         SelfNet::Bridge { networks, gateway } => {
-            if s.network_mode != "host" {
-                if let Some(ip) = container_ip(entry, Some(&networks)) {
-                    return Some(format!("{scheme}://{ip}:{private_port}"));
-                }
+            if s.network_mode != "host"
+                && let Some(ip) = container_ip(entry, Some(&networks))
+            {
+                return Some(format!("{scheme}://{ip}:{private_port}"));
             }
             let host_port = if s.network_mode == "host" { Some(private_port) } else { published };
             let host = gateway.map(|g| g.to_string()).or_else(|| {
@@ -88,10 +88,10 @@ fn container_ip(entry: &Entry, only: Option<&[String]>) -> Option<String> {
 pub fn app_port(entry: &Entry) -> Option<u16> {
     let s = &entry.summary;
     let app = s.app.as_deref().and_then(crate::docker::apps::by_slug);
-    if let Some(port) = app.and_then(|a| a.web_port) {
-        if s.network_mode == "host" || s.ports.iter().any(|p| p.private_port == port) {
-            return Some(port);
-        }
+    if let Some(port) = app.and_then(|a| a.web_port)
+        && (s.network_mode == "host" || s.ports.iter().any(|p| p.private_port == port))
+    {
+        return Some(port);
     }
     s.ports
         .iter()

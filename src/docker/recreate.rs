@@ -246,10 +246,10 @@ pub async fn replace(
         Err(err) => {
             log(format!("Creating the new container failed: {err}; restoring the original"));
             // Remove a half-created container holding the name, if any.
-            if let Ok(i) = api.inspect_container(&name, None::<InspectContainerOptions>).await {
-                if i.id.as_deref() != Some(old_id.as_str()) {
-                    let _ = actions::remove(api, &name, true, false).await;
-                }
+            if let Ok(i) = api.inspect_container(&name, None::<InspectContainerOptions>).await
+                && i.id.as_deref() != Some(old_id.as_str())
+            {
+                let _ = actions::remove(api, &name, true, false).await;
             }
             let _ = actions::rename(api, &old_id, &name).await;
             if was_running {

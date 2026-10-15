@@ -56,16 +56,16 @@ pub async fn render(app: &App) -> String {
         let stack = c.stack.clone().unwrap_or_default();
         let labels = [("name", c.name.as_str()), ("stack", stack.as_str()), ("image", c.image.as_str())];
         o.sample("nodestarr_container_running", &labels, if c.is_running() { 1.0 } else { 0.0 });
-        if let Some(h) = &c.health {
-            if h != "starting" {
-                o.sample("nodestarr_container_healthy", &labels, if h == "healthy" { 1.0 } else { 0.0 });
-            }
+        if let Some(h) = &c.health
+            && h != "starting"
+        {
+            o.sample("nodestarr_container_healthy", &labels, if h == "healthy" { 1.0 } else { 0.0 });
         }
         o.sample("nodestarr_container_restarts", &labels, c.restart_count as f64);
-        if c.is_running() {
-            if let Some(started) = c.started_at {
-                o.sample("nodestarr_container_uptime_seconds", &labels, (now - started).max(0) as f64);
-            }
+        if c.is_running()
+            && let Some(started) = c.started_at
+        {
+            o.sample("nodestarr_container_uptime_seconds", &labels, (now - started).max(0) as f64);
         }
         let upd = updates.get(&c.identity).is_some_and(|u| u.has_update());
         o.sample("nodestarr_container_update_available", &labels, if upd { 1.0 } else { 0.0 });

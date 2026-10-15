@@ -201,10 +201,10 @@ impl ProxmoxService {
             s.proxmox.url, s.proxmox.token_id, s.proxmox.token_secret, s.proxmox.tls_mode, s.proxmox.fingerprint
         );
         let mut guard = self.inner.client.lock();
-        if let Some((k, c)) = guard.as_ref() {
-            if *k == key {
-                return Ok(c.clone());
-            }
+        if let Some((k, c)) = guard.as_ref()
+            && *k == key
+        {
+            return Ok(c.clone());
         }
         let c = PveClient::new(&s.proxmox)?;
         *guard = Some((key, c.clone()));
@@ -227,10 +227,10 @@ impl ProxmoxService {
 
     /// Cached overview (refreshed when older than `max_age` seconds).
     pub async fn overview(&self, max_age: i64) -> Result<Arc<Overview>> {
-        if let Some(o) = self.inner.overview.read().clone() {
-            if crate::util::now() - o.fetched_at <= max_age {
-                return Ok(o);
-            }
+        if let Some(o) = self.inner.overview.read().clone()
+            && crate::util::now() - o.fetched_at <= max_age
+        {
+            return Ok(o);
         }
         let c = self.client()?;
         let node = self.node(&c).await?;
@@ -312,11 +312,11 @@ impl ProxmoxService {
         }
         ov.guests.sort_by_key(|g| g.vmid);
         ov.storages.sort_by(|a, b| a.storage.cmp(&b.storage));
-        if configured_self.is_none() {
-            if let Some(found) = detect_self(&ov.guests, &self.inner.docker.info().name) {
-                for g in ov.guests.iter_mut() {
-                    g.is_self = g.vmid == found;
-                }
+        if configured_self.is_none()
+            && let Some(found) = detect_self(&ov.guests, &self.inner.docker.info().name)
+        {
+            for g in ov.guests.iter_mut() {
+                g.is_self = g.vmid == found;
             }
         }
         let ov = Arc::new(ov);
@@ -468,10 +468,10 @@ async fn follow_upid(app: &App, ctx: &TaskCtx, upid: &str) -> Result<()> {
         if let Ok(lines) = c.get::<Vec<Value>>(&format!("/nodes/{node}/tasks/{enc}/log?start={shown}&limit=500")).await
         {
             for l in &lines {
-                if let Some(t) = l["t"].as_str() {
-                    if t != "no content" {
-                        ctx.log(t.to_string());
-                    }
+                if let Some(t) = l["t"].as_str()
+                    && t != "no content"
+                {
+                    ctx.log(t.to_string());
                 }
             }
             shown += lines.len();
@@ -697,10 +697,10 @@ fn capitalize(s: &str) -> String {
 pub fn start(app: App) {
     tokio::spawn(async move {
         loop {
-            if app.proxmox.enabled() {
-                if let Err(err) = app.proxmox.overview(0).await {
-                    tracing::debug!(%err, "Proxmox poll failed");
-                }
+            if app.proxmox.enabled()
+                && let Err(err) = app.proxmox.overview(0).await
+            {
+                tracing::debug!(%err, "Proxmox poll failed");
             }
             tokio::time::sleep(Duration::from_secs(60)).await;
         }

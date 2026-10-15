@@ -108,10 +108,10 @@ pub async fn from_file(api: &Docker, container: &str, cmd: Vec<String>, src: &Pa
         };
         let reader = async {
             while let Some(chunk) = output.next().await {
-                if let Ok(LogOutput::StdErr { message } | LogOutput::StdOut { message }) = chunk {
-                    if stderr.len() < 64 * 1024 {
-                        stderr.push_str(&String::from_utf8_lossy(&message));
-                    }
+                if let Ok(LogOutput::StdErr { message } | LogOutput::StdOut { message }) = chunk
+                    && stderr.len() < 64 * 1024
+                {
+                    stderr.push_str(&String::from_utf8_lossy(&message));
                 }
             }
         };
@@ -132,10 +132,10 @@ fn last_lines(s: &str, n: usize) -> String {
 /// Tries shells in order and returns the first that exists in the container.
 pub async fn find_shell(api: &Docker, container: &str, candidates: &[String]) -> Option<String> {
     for shell in candidates {
-        if let Ok(out) = capture(api, container, vec![shell.clone(), "-c".into(), "exit 0".into()], None).await {
-            if out.exit_code == Some(0) {
-                return Some(shell.clone());
-            }
+        if let Ok(out) = capture(api, container, vec![shell.clone(), "-c".into(), "exit 0".into()], None).await
+            && out.exit_code == Some(0)
+        {
+            return Some(shell.clone());
         }
     }
     None

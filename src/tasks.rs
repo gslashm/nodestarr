@@ -78,25 +78,34 @@ pub struct TaskSpec {
     pub target: Option<String>,
     pub target_name: Option<String>,
     pub actor: Actor,
-    /// Tasks with the same key run one at a time (usually the container identity).
-    pub lock_key: Option<String>,
+    /// Tasks that share any of these keys run one at a time: the container
+    /// identity (from `target`), `stack:<name>`, `updates`, ... Keys are
+    /// taken in sorted order, so tasks holding several can't deadlock.
+    pub lock_keys: Vec<String>,
 }
 
 impl TaskSpec {
     pub fn new(kind: &'static str, title: impl Into<String>, actor: &Actor) -> Self {
-        Self { kind, title: title.into(), target: None, target_name: None, actor: actor.clone(), lock_key: None }
+        Self { kind, title: title.into(), target: None, target_name: None, actor: actor.clone(), lock_keys: Vec::new() }
     }
 
+    /// The container this task works on. It also locks the container and,
+    /// for Compose services, their stack, so work on one stack (deploys,
+    /// compose file edits, backups, updates) never overlaps.
     pub fn target(mut self, identity: impl Into<String>, name: impl Into<String>) -> Self {
         let identity = identity.into();
-        self.lock_key = Some(identity.clone());
+        self.lock_keys.push(identity.clone());
+        if let Some(stack) = identity.strip_prefix("compose:").and_then(|rest| rest.split('/').next()) {
+            self.lock_keys.push(format!("stack:{stack}"));
+        }
         self.target = Some(identity);
         self.target_name = Some(name.into());
         self
     }
 
+    /// Adds a lock key (see `lock_keys`).
     pub fn lock(mut self, key: impl Into<String>) -> Self {
-        self.lock_key = Some(key.into());
+        self.lock_keys.push(key.into());
         self
     }
 }
@@ -274,12 +283,16 @@ impl TaskManager {
         ctx.flush();
 
         let manager = self.clone();
-        let lock = spec.lock_key.as_deref().map(|k| self.lock_for(k));
+        let mut keys = spec.lock_keys.clone();
+        keys.sort();
+        keys.dedup();
+        let locks: Vec<_> = keys.iter().map(|k| self.lock_for(k)).collect();
         let fut = async move {
-            let _guard = match &lock {
-                Some(l) => Some(l.lock().await),
-                None => None,
-            };
+            // Waits (queued) until every lock is free, always in the same order.
+            let mut _guards = Vec::with_capacity(locks.len());
+            for lock in locks {
+                _guards.push(lock.lock_owned().await);
+            }
             {
                 let mut s = state.snapshot.lock();
                 s.status = TaskStatus::Running;
@@ -525,6 +538,45 @@ mod tests {
         .unwrap();
         assert_eq!(*order.lock(), vec!["a-start", "a-end", "b"]);
         assert!(!id1.is_empty());
+    }
+
+    #[test]
+    fn container_targets_lock_their_stack() {
+        let spec = TaskSpec::new("test", "T", &Actor::system()).target("compose:media/sonarr", "Sonarr");
+        assert_eq!(spec.lock_keys, ["compose:media/sonarr", "stack:media"]);
+        let spec = TaskSpec::new("test", "T", &Actor::system()).target("container:crashy", "crashy");
+        assert_eq!(spec.lock_keys, ["container:crashy"]);
+    }
+
+    #[tokio::test]
+    async fn tasks_wait_for_every_lock_they_share() {
+        let db = Db::open_in_memory().unwrap();
+        let tm = TaskManager::new(db, EventBus::new());
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let step = |order: &Arc<Mutex<Vec<&'static str>>>, start: &'static str, end: &'static str| {
+            let o = order.clone();
+            move |_| async move {
+                o.lock().push(start);
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                o.lock().push(end);
+                Ok(serde_json::Value::Null)
+            }
+        };
+        // A holds "x" and "y"; B needs "y" (waits for A); C needs only "z".
+        let a = TaskSpec::new("test", "A", &Actor::system()).lock("y").lock("x");
+        let b = TaskSpec::new("test", "B", &Actor::system()).lock("y");
+        let c = TaskSpec::new("test", "C", &Actor::system()).lock("z");
+        tm.spawn(a, step(&order, "a-start", "a-end"));
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let b = tm.run(b, step(&order, "b-start", "b-end"));
+        let c = tm.run(c, step(&order, "c-start", "c-end"));
+        let (rb, rc) = tokio::join!(b, c);
+        rb.unwrap();
+        rc.unwrap();
+        let order = order.lock().clone();
+        let pos = |s| order.iter().position(|x| *x == s).unwrap();
+        assert!(pos("a-end") < pos("b-start"), "B waits for A: {order:?}");
+        assert!(pos("c-start") < pos("a-end"), "C runs alongside A: {order:?}");
     }
 
     #[tokio::test]

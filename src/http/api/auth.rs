@@ -63,12 +63,11 @@ async fn status(State(app): State<App>, headers: HeaderMap, principal: Option<Au
     let settings = app.settings.get();
     let setup_required = app.auth.user_count().await? == 0;
     let mut mfa_pending = false;
-    if principal.is_none() {
-        if let Some(t) = session_token(&headers) {
-            if let Ok(Some((_, pending))) = app.auth.session_principal(&t).await {
-                mfa_pending = pending;
-            }
-        }
+    if principal.is_none()
+        && let Some(t) = session_token(&headers)
+        && let Ok(Some((_, pending))) = app.auth.session_principal(&t).await
+    {
+        mfa_pending = pending;
     }
     Ok(Json(json!({
         "authenticated": principal.is_some(),

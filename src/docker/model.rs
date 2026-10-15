@@ -110,10 +110,10 @@ impl ContainerSummary {
             return n.clone();
         }
         let base = self.service.as_deref().unwrap_or(&self.name);
-        if let (Some(slug), Some(app_name)) = (&self.app, &self.app_name) {
-            if base.eq_ignore_ascii_case(slug) || base.eq_ignore_ascii_case(&app_name.replace(' ', "-")) {
-                return app_name.clone();
-            }
+        if let (Some(slug), Some(app_name)) = (&self.app, &self.app_name)
+            && (base.eq_ignore_ascii_case(slug) || base.eq_ignore_ascii_case(&app_name.replace(' ', "-")))
+        {
+            return app_name.clone();
         }
         base.to_string()
     }
@@ -331,10 +331,10 @@ pub fn detect_version(
         }
         if let Some(bv) = meta.labels.get("build_version") {
             // "Linuxserver.io version:- 4.0.9.2244-ls250 Build-date:- 2024-..."
-            if let Some(rest) = bv.split("version:-").nth(1) {
-                if let Some(v) = rest.split_whitespace().next() {
-                    return (Some(v.to_string()), Some("label".into()));
-                }
+            if let Some(rest) = bv.split("version:-").nth(1)
+                && let Some(v) = rest.split_whitespace().next()
+            {
+                return (Some(v.to_string()), Some("label".into()));
             }
         }
         for key in ["version", "org.label-schema.version"] {
@@ -360,12 +360,11 @@ pub fn detect_version(
             }
         }
     }
-    if let Some(r) = crate::registry::reference::ImageRef::parse(image_ref) {
-        if let Some(tag) = r.tag.as_deref() {
-            if crate::registry::version::Version::parse(tag).is_some() {
-                return (Some(tag.to_string()), Some("tag".into()));
-            }
-        }
+    if let Some(r) = crate::registry::reference::ImageRef::parse(image_ref)
+        && let Some(tag) = r.tag.as_deref()
+        && crate::registry::version::Version::parse(tag).is_some()
+    {
+        return (Some(tag.to_string()), Some("tag".into()));
     }
     (None, None)
 }
@@ -390,12 +389,13 @@ fn web_links(
     // Traefik routers: Host(`app.example.com`)
     let mut traefik_hosts = BTreeMap::new();
     for (k, v) in labels {
-        if k.starts_with("traefik.http.routers.") && k.ends_with(".rule") {
-            if let Some(start) = v.find("Host(`") {
-                let rest = &v[start + 6..];
-                if let Some(end) = rest.find('`') {
-                    traefik_hosts.insert(rest[..end].to_string(), ());
-                }
+        if k.starts_with("traefik.http.routers.")
+            && k.ends_with(".rule")
+            && let Some(start) = v.find("Host(`")
+        {
+            let rest = &v[start + 6..];
+            if let Some(end) = rest.find('`') {
+                traefik_hosts.insert(rest[..end].to_string(), ());
             }
         }
     }
@@ -408,13 +408,13 @@ fn web_links(
         if app.is_some_and(|a| a.web_https) || matches!(port, 443 | 8443 | 9443) { "https" } else { "http" }
     };
     if network_mode == "host" {
-        if let Some(app) = app {
-            if let Some(port) = app.web_port {
-                links.push(WebLink {
-                    label: format!("{public_host}:{port}"),
-                    url: format!("{}://{public_host}:{port}{path}", scheme_for(port)),
-                });
-            }
+        if let Some(app) = app
+            && let Some(port) = app.web_port
+        {
+            links.push(WebLink {
+                label: format!("{public_host}:{port}"),
+                url: format!("{}://{public_host}:{port}{path}", scheme_for(port)),
+            });
         }
         return links;
     }

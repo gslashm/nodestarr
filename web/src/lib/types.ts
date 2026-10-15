@@ -71,6 +71,8 @@ export type UpdateStatus =
 export interface NewerTag {
   tag: string;
   scope: TagScope;
+  /** When Nodestarr first saw this tag (unix seconds). */
+  first_seen: number | null;
 }
 
 export interface UpdateInfo {

@@ -287,12 +287,10 @@ pub async fn save_file(db: &Db, entry: &Entry, req: &SaveFile, actor: &Actor) ->
     let base = root_for(entry, &req.root)?;
     let rel = req.path.clone();
     let path = tokio::task::spawn_blocking(move || fsx::confine(&base, &rel)).await??;
-    if let (Some(expected), Ok(meta)) = (&req.etag, std::fs::metadata(&path)) {
-        if &etag(&meta) != expected {
-            return Err(AppError::conflict(
-                "the file changed on disk since you opened it; reload to see the new version",
-            ));
-        }
+    if let (Some(expected), Ok(meta)) = (&req.etag, std::fs::metadata(&path))
+        && &etag(&meta) != expected
+    {
+        return Err(AppError::conflict("the file changed on disk since you opened it; reload to see the new version"));
     }
     if req.content.len() as u64 > MAX_EDIT_BYTES {
         return Err(AppError::bad_request("file is too large to save from the editor"));

@@ -2,7 +2,8 @@
 name = "nodestarr"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+# Dependencies and let chains need Rust 1.88.
+rust-version = "1.88"
 description = "A lightweight, self-hosted manager for Docker containers and Compose stacks, with Proxmox awareness."
 license = "AGPL-3.0-or-later"
 authors = ["gslashm"]
@@ -93,11 +94,13 @@ rustix = { version = "1", default-features = false, features = ["std", "fs", "sy
 [dev-dependencies]
 tempfile = "3"
 
+# Small and lean: Nodestarr is mostly idle, so size beats peak speed. Panics
+# unwind (the default) so a bug in one task can't take down an update or
+# backup running in another.
 [profile.release]
 opt-level = "s"
 lto = "fat"
 codegen-units = 1
-panic = "abort"
 strip = "symbols"
 
 [profile.dev]

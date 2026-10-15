@@ -459,15 +459,15 @@ impl AuthService {
         let (user_id, secret, recovery) = row.ok_or(AppError::Unauthorized)?;
         let mut ok = false;
         let mut remaining_recovery: Option<String> = None;
-        if let Some(secret) = secret {
-            if let Some(step) = totp::verify(&secret, code, crate::util::now()) {
-                let mut used = self.inner.used_steps.lock();
-                if used.get(&user_id).is_some_and(|s| *s >= step) {
-                    return Err(AppError::bad_request("that code was already used; wait for the next one"));
-                }
-                used.insert(user_id, step);
-                ok = true;
+        if let Some(secret) = secret
+            && let Some(step) = totp::verify(&secret, code, crate::util::now())
+        {
+            let mut used = self.inner.used_steps.lock();
+            if used.get(&user_id).is_some_and(|s| *s >= step) {
+                return Err(AppError::bad_request("that code was already used; wait for the next one"));
             }
+            used.insert(user_id, step);
+            ok = true;
         }
         if !ok {
             // Recovery codes: stored hashed, single use.

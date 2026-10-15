@@ -111,7 +111,14 @@ pub async fn check_one(app: &App, entry: &Entry, fresh: bool) -> UpdateInfo {
                 if let Some(newer) =
                     newest_within(&current, names, settings.updates.notify_scope, !settings.updates.ignore_prereleases)
                 {
-                    info.newer_tag = Some(NewerTag { scope: current.change_scope(&newer), tag: newer.raw });
+                    // Remember when this tag first appeared (minimum-age rule).
+                    let first_seen = previous
+                        .as_ref()
+                        .and_then(|p| p.newer_tag.as_ref())
+                        .filter(|t| t.tag == newer.raw)
+                        .and_then(|t| t.first_seen)
+                        .or(Some(crate::util::now()));
+                    info.newer_tag = Some(NewerTag { scope: current.change_scope(&newer), tag: newer.raw, first_seen });
                     if info.status == UpdateStatus::UpToDate {
                         info.status = UpdateStatus::Available;
                     }

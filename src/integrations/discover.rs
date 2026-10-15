@@ -70,11 +70,11 @@ pub fn ini_value(ini: &str, section: Option<&str>, key: &str) -> Option<String> 
         if section.is_some_and(|s| !s.eq_ignore_ascii_case(&current)) {
             continue;
         }
-        if let Some((k, v)) = t.split_once('=') {
-            if k.trim().eq_ignore_ascii_case(key) {
-                let v = v.trim().trim_matches('"').to_string();
-                return (!v.is_empty()).then_some(v);
-            }
+        if let Some((k, v)) = t.split_once('=')
+            && k.trim().eq_ignore_ascii_case(key)
+        {
+            let v = v.trim().trim_matches('"').to_string();
+            return (!v.is_empty()).then_some(v);
         }
     }
     None
@@ -88,13 +88,12 @@ fn yaml_value(yaml: &str, section: &str, key: &str) -> Option<String> {
             in_section = line.trim_end().trim_end_matches(':') == section;
             continue;
         }
-        if in_section {
-            if let Some((k, v)) = line.trim().split_once(':') {
-                if k.trim() == key {
-                    let v = v.trim().trim_matches(|c| c == '\'' || c == '"').to_string();
-                    return (!v.is_empty()).then_some(v);
-                }
-            }
+        if in_section
+            && let Some((k, v)) = line.trim().split_once(':')
+            && k.trim() == key
+        {
+            let v = v.trim().trim_matches(|c| c == '\'' || c == '"').to_string();
+            return (!v.is_empty()).then_some(v);
         }
     }
     None

@@ -108,10 +108,10 @@ pub fn sample(_app: &App) -> Option<HostStats> {
 
 /// A recent sample: the sampling loop's when it is fresh, a new one otherwise.
 pub fn current(app: &App) -> Option<HostStats> {
-    if let Some((at, s)) = LAST.lock().as_ref() {
-        if crate::util::now() - at <= 15 {
-            return Some(s.clone());
-        }
+    if let Some((at, s)) = LAST.lock().as_ref()
+        && crate::util::now() - at <= 15
+    {
+        return Some(s.clone());
     }
     sample(app)
 }

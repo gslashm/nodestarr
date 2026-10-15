@@ -442,20 +442,18 @@ impl ContainerSpec {
         if let Some(sys) = &host.sysctls {
             spec.sysctls = sys.iter().map(|(k, v)| KeyValue { key: k.clone(), value: v.clone() }).collect();
         }
-        if let Some(hc) = &body.healthcheck {
-            if let Some(test) = &hc.test {
-                if test.first().map(String::as_str) == Some("CMD-SHELL")
-                    || test.first().map(String::as_str) == Some("CMD")
-                {
-                    spec.healthcheck = Some(HealthSpec {
-                        command: test[1..].join(" "),
-                        interval_secs: ns_to_secs(hc.interval),
-                        timeout_secs: ns_to_secs(hc.timeout),
-                        retries: hc.retries.unwrap_or(0) as u32,
-                        start_period_secs: ns_to_secs(hc.start_period),
-                    });
-                }
-            }
+        if let Some(hc) = &body.healthcheck
+            && let Some(test) = &hc.test
+            && (test.first().map(String::as_str) == Some("CMD-SHELL")
+                || test.first().map(String::as_str) == Some("CMD"))
+        {
+            spec.healthcheck = Some(HealthSpec {
+                command: test[1..].join(" "),
+                interval_secs: ns_to_secs(hc.interval),
+                timeout_secs: ns_to_secs(hc.timeout),
+                retries: hc.retries.unwrap_or(0) as u32,
+                start_period_secs: ns_to_secs(hc.start_period),
+            });
         }
         if let Some(networks) = inspect.network_settings.as_ref().and_then(|n| n.networks.as_ref()) {
             let mut extra: Vec<String> = networks.keys().filter(|n| **n != spec.network_mode).cloned().collect();
@@ -627,22 +625,22 @@ impl ContainerSpec {
             }
             out.push_str("              capabilities: [gpu]\n");
         }
-        if let Some(h) = &self.healthcheck {
-            if !h.command.is_empty() {
-                out.push_str("    healthcheck:\n");
-                out.push_str(&format!("      test: [\"CMD-SHELL\", {}]\n", json_str(&h.command)));
-                if h.interval_secs > 0 {
-                    out.push_str(&format!("      interval: {}s\n", h.interval_secs));
-                }
-                if h.timeout_secs > 0 {
-                    out.push_str(&format!("      timeout: {}s\n", h.timeout_secs));
-                }
-                if h.retries > 0 {
-                    out.push_str(&format!("      retries: {}\n", h.retries));
-                }
-                if h.start_period_secs > 0 {
-                    out.push_str(&format!("      start_period: {}s\n", h.start_period_secs));
-                }
+        if let Some(h) = &self.healthcheck
+            && !h.command.is_empty()
+        {
+            out.push_str("    healthcheck:\n");
+            out.push_str(&format!("      test: [\"CMD-SHELL\", {}]\n", json_str(&h.command)));
+            if h.interval_secs > 0 {
+                out.push_str(&format!("      interval: {}s\n", h.interval_secs));
+            }
+            if h.timeout_secs > 0 {
+                out.push_str(&format!("      timeout: {}s\n", h.timeout_secs));
+            }
+            if h.retries > 0 {
+                out.push_str(&format!("      retries: {}\n", h.retries));
+            }
+            if h.start_period_secs > 0 {
+                out.push_str(&format!("      start_period: {}s\n", h.start_period_secs));
             }
         }
         if !self.log_driver.is_empty() {

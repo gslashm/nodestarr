@@ -236,10 +236,10 @@ impl RegistryClient {
 
     async fn token(&self, r: &ImageRef, challenge: &Challenge) -> RResult<String> {
         let key = (r.registry.clone(), r.repository.clone());
-        if let Some((tok, exp)) = self.inner.tokens.lock().get(&key) {
-            if *exp > Instant::now() {
-                return Ok(tok.clone());
-            }
+        if let Some((tok, exp)) = self.inner.tokens.lock().get(&key)
+            && *exp > Instant::now()
+        {
+            return Ok(tok.clone());
         }
         let realm = challenge
             .params
@@ -337,12 +337,11 @@ impl RegistryClient {
     /// Current digest of a tag (cached for a few minutes unless `fresh`).
     pub async fn digest(&self, r: &ImageRef, fresh: bool) -> RResult<String> {
         let key = format!("{}:{}", r.name(), r.tag_or_latest());
-        if !fresh {
-            if let Some((d, at)) = self.inner.digests.lock().get(&key) {
-                if at.elapsed() < DIGEST_TTL {
-                    return Ok(d.clone());
-                }
-            }
+        if !fresh
+            && let Some((d, at)) = self.inner.digests.lock().get(&key)
+            && at.elapsed() < DIGEST_TTL
+        {
+            return Ok(d.clone());
         }
         let url = format!("{}/manifests/{}", Self::base_url(r), r.tag_or_latest());
         let resp = self.send(r, reqwest::Method::HEAD, &url, Some(MANIFEST_ACCEPT)).await?;
@@ -419,12 +418,11 @@ impl RegistryClient {
     /// All tags of a repository, newest first when the registry tells us.
     pub async fn tags(&self, r: &ImageRef, fresh: bool) -> RResult<Arc<Vec<TagInfo>>> {
         let key = r.name();
-        if !fresh {
-            if let Some((tags, at)) = self.inner.tags.lock().get(&key) {
-                if at.elapsed() < TAGS_TTL {
-                    return Ok(tags.clone());
-                }
-            }
+        if !fresh
+            && let Some((tags, at)) = self.inner.tags.lock().get(&key)
+            && at.elapsed() < TAGS_TTL
+        {
+            return Ok(tags.clone());
         }
         let tags = if r.is_docker_hub() {
             match self.hub_tags(r).await {
@@ -581,10 +579,10 @@ pub fn version_from_labels(labels: &HashMap<String, String>) -> Option<String> {
     if let Some(v) = labels.get("org.opencontainers.image.version").filter(|v| !v.is_empty() && v.len() < 64) {
         return Some(v.clone());
     }
-    if let Some(bv) = labels.get("build_version") {
-        if let Some(rest) = bv.split("version:-").nth(1) {
-            return rest.split_whitespace().next().map(str::to_string);
-        }
+    if let Some(bv) = labels.get("build_version")
+        && let Some(rest) = bv.split("version:-").nth(1)
+    {
+        return rest.split_whitespace().next().map(str::to_string);
     }
     labels.get("version").filter(|v| !v.is_empty() && v.len() < 64).cloned()
 }
