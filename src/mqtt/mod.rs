@@ -124,6 +124,8 @@ fn discovery(app: &App, s: &MqttSettings, entry: &crate::docker::Entry) -> Vec<(
                 "unique_id": format!("nodestarr_{id}_status"),
                 "state_topic": state,
                 "value_template": "{{ value_json.state }}",
+                // Health, version and usage as attributes, for automations.
+                "json_attributes_topic": state,
                 "icon": "mdi:docker",
                 "device": device,
                 "availability": avail,

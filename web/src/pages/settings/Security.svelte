@@ -48,10 +48,10 @@
     </Group>
 
     <Group title="Sessions">
-      <Field label="Signed in for" id="s-hours" hint="Hours a sign-in lasts without “Remember me”.">
+      <Field label="Signed in for" id="s-hours" hint="Hours a sign-in lasts without “Keep me signed in”.">
         <input id="s-hours" class="input num short" type="number" min="1" bind:value={s.session_hours} />
       </Field>
-      <Field label="Remember me for" id="s-days" hint="Days a remembered sign-in lasts.">
+      <Field label="Kept signed in for" id="s-days" hint="Days a sign-in with “Keep me signed in” lasts.">
         <input id="s-days" class="input num short" type="number" min="1" bind:value={s.remember_days} />
       </Field>
     </Group>
