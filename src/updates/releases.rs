@@ -55,7 +55,6 @@ const UPSTREAM: &[(&str, &str)] = &[
     ("nginx-proxy-manager", "NginxProxyManager/nginx-proxy-manager"),
     ("gitea", "go-gitea/gitea"),
     ("syncthing", "syncthing/syncthing"),
-    ("berth", "your-user/berth"),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,6 +95,11 @@ pub fn github_repo(url: &str) -> Option<String> {
 /// Picks the repository to read release notes from.
 pub fn repo_for(app_slug: Option<&str>, source: Option<&str>) -> Option<String> {
     if let Some(slug) = app_slug {
+        if slug == "berth" {
+            if let Some(repo) = crate::selfupdate::REPO {
+                return Some(repo.to_string());
+            }
+        }
         if let Some((_, repo)) = UPSTREAM.iter().find(|(s, _)| *s == slug) {
             return Some(repo.to_string());
         }

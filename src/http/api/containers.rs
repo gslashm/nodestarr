@@ -288,7 +288,9 @@ async fn put_prefs(State(app): State<App>, Path(id): Path<String>, Json(mut inco
     Ok(Json(v))
 }
 
-async fn get_spec(State(app): State<App>, Path(id): Path<String>) -> Result<Json<Value>> {
+/// The full spec includes unmasked environment values, so only admins can read it.
+async fn get_spec(State(app): State<App>, Auth(p): Auth, Path(id): Path<String>) -> Result<Json<Value>> {
+    p.require_admin()?;
     let e = entry(&app, &id)?;
     let cfg = app.docker.image_meta(&e.summary.image_id).await.and_then(|m| m.config.clone());
     let spec = ContainerSpec::from_inspect(&e.inspect, cfg.as_ref());
@@ -363,8 +365,14 @@ async fn create(State(app): State<App>, Auth(p): Auth, Json(b): Json<CreateBody>
     let task = app.tasks.spawn(task_spec, move |ctx| async move {
         let image = body.image.clone().unwrap_or_default();
         let target = ImageRef::parse(&image).ok_or_else(|| AppError::bad_request("invalid image"))?;
-        ctx.log(format!("Pulling {}", target.familiar()));
-        crate::updates::apply::pull(&app2, &ctx, &target).await?;
+        // Like `docker run`: pull only when the image isn't here yet, so
+        // locally built images work and existing ones aren't changed.
+        if app2.docker.inspect_image_fresh(&image).await.is_some() {
+            ctx.log(format!("Using {} from this machine", target.familiar()));
+        } else {
+            ctx.log(format!("Pulling {}", target.familiar()));
+            crate::updates::apply::pull(&app2, &ctx, &target).await?;
+        }
         let resp = app2
             .docker
             .api

@@ -47,6 +47,8 @@ pub struct Lifecycle {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct DockerInfo {
+    /// Host name of the machine running the Docker daemon (the LXC or VM).
+    pub name: String,
     pub version: String,
     pub api_version: String,
     pub os: String,
@@ -324,6 +326,7 @@ impl DockerService {
         let (info, version) = tokio::join!(self.api.info(), self.api.version());
         let mut cur = self.inner.info.write();
         if let Ok(i) = info {
+            cur.name = i.name.unwrap_or_default();
             cur.os = i.operating_system.unwrap_or_default();
             cur.kernel = i.kernel_version.unwrap_or_default();
             cur.arch = i.architecture.unwrap_or_default();

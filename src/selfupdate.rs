@@ -21,11 +21,12 @@ use crate::registry::ImageRef;
 use crate::settings::Severity;
 use crate::tasks::TaskCtx;
 
-/// GitHub repository used for "new Berth version" checks. Set at build
-/// time with BERTH_REPO=owner/name.
-pub const REPO: &str = match option_env!("BERTH_REPO") {
-    Some(r) => r,
-    None => "your-user/berth",
+/// GitHub repository ("owner/name") that publishes Berth releases, used for
+/// "new Berth version" checks and release notes. Set at build time with
+/// BERTH_REPO; builds without it skip those checks.
+pub const REPO: Option<&str> = match option_env!("BERTH_REPO") {
+    Some(r) if !r.is_empty() => Some(r),
+    _ => None,
 };
 
 pub async fn start(app: &App, ctx: &TaskCtx, entry: &Entry, tag: Option<&str>) -> Result<serde_json::Value> {
@@ -124,12 +125,10 @@ pub async fn run_helper(boot: &BootConfig, container: &str, image: &str) -> anyh
 
 /// Notifies once per release when a newer Berth version is published.
 pub async fn check_for_release(app: &App) {
-    if REPO.starts_with("your-user/") {
-        return;
-    }
+    let Some(repo) = REPO else { return };
     let Ok(resp) = app
         .http
-        .get(format!("https://api.github.com/repos/{REPO}/releases/latest"))
+        .get(format!("https://api.github.com/repos/{repo}/releases/latest"))
         .header("Accept", "application/vnd.github+json")
         .send()
         .await

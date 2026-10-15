@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 
 use crate::activity::{Actor, NewActivity};
 use crate::app::App;
+use crate::docker::DockerService;
 use crate::error::{AppError, Result};
 use crate::notify::Notification;
 use crate::settings::{Severity, SettingsStore};
@@ -158,6 +159,7 @@ struct Inner {
     settings: SettingsStore,
     client: Mutex<Option<(String, PveClient)>>,
     overview: RwLock<Option<Arc<Overview>>>,
+    docker: DockerService,
 }
 
 fn v_u64(v: &Value) -> u64 {
@@ -169,14 +171,27 @@ fn v_f64(v: &Value) -> f64 {
 }
 
 impl ProxmoxService {
-    pub fn new(settings: SettingsStore) -> Self {
+    /// `docker` provides the Docker host's name, used to recognize the guest
+    /// Berth runs in when no guest ID is configured.
+    pub fn new(settings: SettingsStore, docker: DockerService) -> Self {
         Self {
             inner: Arc::new(Inner {
                 settings,
+                docker,
                 client: Mutex::new(None),
                 overview: RwLock::new(None),
             }),
         }
+    }
+
+    /// The guest Berth runs in: the configured ID, or the one guest whose
+    /// name matches the Docker host's name.
+    pub fn self_vmid(&self) -> Option<u32> {
+        if let Some(id) = self.inner.settings.get().proxmox.self_vmid {
+            return Some(id);
+        }
+        let overview = self.inner.overview.read().clone()?;
+        detect_self(&overview.guests, &self.inner.docker.info().name)
     }
 
     pub fn enabled(&self) -> bool {
@@ -227,7 +242,7 @@ impl ProxmoxService {
         let (status, resources) = tokio::join!(c.get::<Value>(&status_path), c.get::<Vec<Value>>("/cluster/resources"));
         let status = status?;
         let resources = resources?;
-        let self_vmid = self.inner.settings.get().proxmox.self_vmid;
+        let configured_self = self.inner.settings.get().proxmox.self_vmid;
         let mut ov = Overview {
             node: NodeStatus {
                 node: node.clone(),
@@ -274,7 +289,7 @@ impl ProxmoxService {
                         uptime: v_u64(&r["uptime"]),
                         tags: r["tags"].as_str().map(|t| t.split([';', ',']).filter(|x| !x.is_empty()).map(str::to_string).collect()).unwrap_or_default(),
                         template: v_u64(&r["template"]) == 1,
-                        is_self: Some(vmid) == self_vmid,
+                        is_self: Some(vmid) == configured_self,
                     });
                 }
                 Some("storage") if r["node"].as_str() == Some(node.as_str()) => {
@@ -293,6 +308,13 @@ impl ProxmoxService {
         }
         ov.guests.sort_by_key(|g| g.vmid);
         ov.storages.sort_by(|a, b| a.storage.cmp(&b.storage));
+        if configured_self.is_none() {
+            if let Some(found) = detect_self(&ov.guests, &self.inner.docker.info().name) {
+                for g in ov.guests.iter_mut() {
+                    g.is_self = g.vmid == found;
+                }
+            }
+        }
         let ov = Arc::new(ov);
         *self.inner.overview.write() = Some(ov.clone());
         Ok(ov)
@@ -466,8 +488,24 @@ async fn follow_upid(app: &App, ctx: &TaskCtx, upid: &str) -> Result<()> {
     }
 }
 
+/// The guest whose name is the Docker host's name, when exactly one running
+/// guest matches. In an LXC the host name is the guest's name in Proxmox.
+pub fn detect_self(guests: &[Guest], host_name: &str) -> Option<u32> {
+    let host = host_name.trim();
+    if host.is_empty() {
+        return None;
+    }
+    let mut matches = guests
+        .iter()
+        .filter(|g| !g.template && g.status == "running" && g.name.eq_ignore_ascii_case(host));
+    match (matches.next(), matches.next()) {
+        (Some(g), None) => Some(g.vmid),
+        _ => None,
+    }
+}
+
 fn guard_self(app: &App, vmid: u32, confirm_self: bool) -> Result<()> {
-    if app.settings.get().proxmox.self_vmid == Some(vmid) && !confirm_self {
+    if app.proxmox.self_vmid() == Some(vmid) && !confirm_self {
         return Err(AppError::conflict(
             "this guest runs Berth itself; confirm to continue (Berth will go offline)",
         ));
@@ -634,6 +672,40 @@ pub fn start(app: App) {
 
 #[cfg(test)]
 mod tests {
+
+    fn guest(vmid: u32, name: &str, status: &str) -> Guest {
+        Guest {
+            vmid,
+            name: name.into(),
+            kind: "lxc".into(),
+            node: "pve".into(),
+            status: status.into(),
+            cpu: 0.0,
+            cpus: 1.0,
+            mem: 0,
+            maxmem: 0,
+            disk: 0,
+            maxdisk: 0,
+            netin: 0,
+            netout: 0,
+            uptime: 0,
+            tags: Vec::new(),
+            template: false,
+            is_self: false,
+        }
+    }
+
+    #[test]
+    fn detects_the_guest_by_host_name() {
+        let guests = vec![guest(100, "docker", "running"), guest(101, "media", "running"), guest(102, "Docker", "stopped")];
+        assert_eq!(detect_self(&guests, "docker"), Some(100));
+        assert_eq!(detect_self(&guests, "DOCKER"), Some(100));
+        assert_eq!(detect_self(&guests, ""), None);
+        assert_eq!(detect_self(&guests, "nas"), None);
+        // Ambiguous names are not guessed.
+        let twins = vec![guest(100, "docker", "running"), guest(200, "docker", "running")];
+        assert_eq!(detect_self(&twins, "docker"), None);
+    }
     use super::*;
 
     #[test]

@@ -28,7 +28,7 @@ pub fn routes() -> Router<App> {
         .route("/auth/2fa/setup", post(totp_setup))
         .route("/auth/2fa/enable", post(totp_enable))
         .route("/auth/2fa/disable", post(totp_disable))
-        .route("/auth/sessions", get(sessions))
+        .route("/auth/sessions", get(sessions).delete(revoke_other_sessions))
         .route("/auth/sessions/{id}", delete(revoke_session))
         .route("/users", get(users).post(create_user))
         .route("/users/{id}", delete(delete_user))
@@ -220,6 +220,17 @@ async fn revoke_session(State(app): State<App>, Auth(p): Auth, Path(sid): Path<S
     let id = p.user_id.ok_or(AppError::Unauthorized)?;
     app.auth.revoke_session(id, &sid).await?;
     Ok(Json(json!({ "ok": true })))
+}
+
+/// Signs the current user out everywhere except this browser.
+async fn revoke_other_sessions(State(app): State<App>, Auth(p): Auth) -> Result<Json<Value>> {
+    let id = p.user_id.ok_or(AppError::Unauthorized)?;
+    let ended = app.auth.revoke_other_sessions(id, p.session_hash.clone()).await?;
+    if ended > 0 {
+        let what = if ended == 1 { "another session".to_string() } else { format!("{ended} other sessions") };
+        app.note(NewActivity::new("security.signed_out", Severity::Info, format!("{} signed out of {what}", p.username)).actor(&p.actor())).await;
+    }
+    Ok(Json(json!({ "ended": ended })))
 }
 
 async fn users(State(app): State<App>, Auth(p): Auth) -> Result<Json<Value>> {

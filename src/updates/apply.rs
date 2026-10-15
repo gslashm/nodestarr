@@ -168,6 +168,8 @@ pub async fn run_update(
         .inspect_image_fresh(&new_ref)
         .await
         .ok_or_else(|| AppError::conflict(format!("{new_ref} is not available after pulling")))?;
+    // The version being installed, for the history (also when it fails).
+    let attempted_version = crate::docker::model::detect_version(&new_ref, Some(&pulled), None).0;
     if pulled.id == s.image_id && req.tag.is_none() {
         ctx.log("Already running the newest image, nothing to do");
         unpin(app, rollback_tag.as_deref()).await;
@@ -185,7 +187,7 @@ pub async fn run_update(
             if let Some(tag) = &rollback_tag {
                 let _ = restore_compose_after_failure(app, ctx, &entry, tag, &old_ref, actor).await;
             }
-            record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), None, rollback_tag.as_deref(), None, "failed", trigger, ctx.id(), &err.to_string()).await;
+            record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), attempted_version.as_deref(), rollback_tag.as_deref(), None, "failed", trigger, ctx.id(), &err.to_string()).await;
             notify_failure(app, &name, identity, &format!("Update failed: {err}"), false);
             return Err(err);
         }
@@ -214,7 +216,7 @@ pub async fn run_update(
                 }
             }
             app.docker.refresh(&new_id).await;
-            let to_version = app.docker.get(&new_id).and_then(|e| e.summary.version.clone());
+            let to_version = app.docker.get(&new_id).and_then(|e| e.summary.version.clone()).or_else(|| attempted_version.clone());
             let files_json = match &applied {
                 Applied::Compose { files: Some(f), .. } => Some(serde_json::to_string(f).unwrap_or_default()),
                 _ => None,
@@ -269,7 +271,7 @@ pub async fn run_update(
                     Ok(()) => "rolled back to the previous version".to_string(),
                     Err(e) => format!("rollback also failed: {e}"),
                 };
-                record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), None, rollback_tag.as_deref(), None, "rolled_back", trigger, ctx.id(), &format!("{reason}; {outcome}")).await;
+                record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), attempted_version.as_deref(), rollback_tag.as_deref(), None, "rolled_back", trigger, ctx.id(), &format!("{reason}; {outcome}")).await;
                 app.note(
                     NewActivity::new("update.rolled_back", Severity::Error, format!("{name}: update failed ({reason}), {outcome}"))
                         .target(identity, &name)
@@ -279,7 +281,7 @@ pub async fn run_update(
                 notify_failure(app, &name, identity, &format!("{reason}. Berth {outcome}; this version will be skipped by auto-update."), true);
                 Err(AppError::conflict(format!("update failed ({reason}); {outcome}")))
             } else {
-                record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), None, rollback_tag.as_deref(), None, "failed", trigger, ctx.id(), &reason).await;
+                record_history(app, identity, &name, &old_ref, &new_ref, from_version.as_deref(), attempted_version.as_deref(), rollback_tag.as_deref(), None, "failed", trigger, ctx.id(), &reason).await;
                 notify_failure(app, &name, identity, &reason, false);
                 Err(AppError::conflict(format!("update applied but verification failed: {reason}")))
             }

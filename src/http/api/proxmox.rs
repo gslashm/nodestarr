@@ -43,12 +43,12 @@ async fn status(State(app): State<App>, Query(q): Query<StatusQuery>) -> Json<Va
     }
     let max_age = if q.refresh { 0 } else { 20 };
     match app.proxmox.overview(max_age).await {
-        Ok(o) => Json(json!({ "enabled": true, "overview": o, "self_vmid": settings.proxmox.self_vmid, "error": null })),
+        Ok(o) => Json(json!({ "enabled": true, "overview": o, "self_vmid": app.proxmox.self_vmid(), "error": null })),
         Err(err) => Json(json!({
             "enabled": true,
             // Show the last good data with the error, if there is any.
             "overview": app.proxmox.cached_overview(),
-            "self_vmid": settings.proxmox.self_vmid,
+            "self_vmid": app.proxmox.self_vmid(),
             "error": err.to_string(),
         })),
     }

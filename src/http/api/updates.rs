@@ -57,7 +57,8 @@ async fn check_all(State(app): State<App>, Auth(p): Auth) -> Result<Json<Value>>
 
 #[derive(Deserialize)]
 struct ApplyBody {
-    /// Container ids, names or identities.
+    /// Container ids, names or identities. Each gets its available update
+    /// (a newer tag when one was found, otherwise the new build of its tag).
     targets: Vec<String>,
     #[serde(default)]
     skip_backup: bool,
@@ -68,7 +69,14 @@ async fn apply(State(app): State<App>, Auth(p): Auth, Json(b): Json<ApplyBody>) 
     let mut tasks = Vec::new();
     let mut errors = Vec::new();
     for t in &b.targets {
-        let req = UpdateRequest { tag: None, skip_backup: b.skip_backup };
+        // "Apply the available update": when the update is a newer tag rather
+        // than a new build of the current one, switch to that tag.
+        let tag = app
+            .docker
+            .get(t)
+            .and_then(|e| app.updates.get(&e.summary.identity))
+            .and_then(|info| info.newer_tag.as_ref().map(|n| n.tag.clone()));
+        let req = UpdateRequest { tag, skip_backup: b.skip_backup };
         match crate::updates::apply::start_update(&app, t, req, &actor, Trigger::Manual) {
             Ok(id) => tasks.push(id),
             Err(e) => errors.push(json!({ "target": t, "error": e.to_string() })),

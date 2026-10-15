@@ -273,5 +273,6 @@ impl UpdateService {
                 .last_check
                 .store(crate::util::now(), std::sync::atomic::Ordering::Relaxed);
         }
+        self.inner.bus.publish(crate::events::Event::UpdateCheck { running: v, last_check: self.last_check() });
     }
 }

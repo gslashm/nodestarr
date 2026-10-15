@@ -6,10 +6,12 @@ pub mod totp;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
+use tokio::sync::watch;
 
 use crate::activity::{Actor, NewActivity};
 use crate::app::App;
@@ -59,6 +61,9 @@ pub struct Principal {
     pub via: AuthVia,
     #[serde(skip)]
     pub session_hash: Option<String>,
+    /// The API key used, for keys.
+    #[serde(skip)]
+    pub key_id: Option<i64>,
 }
 
 impl Principal {
@@ -131,7 +136,15 @@ struct Inner {
     attempts: Mutex<HashMap<IpAddr, Vec<i64>>>,
     setup_code: Mutex<Option<String>>,
     used_steps: Mutex<HashMap<i64, i64>>,
+    /// Bumped whenever access may have been withdrawn (sign-outs, password
+    /// changes, removed users or API keys, role changes), so long-lived
+    /// connections re-check theirs right away.
+    revocations: watch::Sender<u64>,
 }
+
+/// How often long-lived connections re-check their access even without a
+/// revocation, so expired sessions don't keep streaming.
+const RECHECK_INTERVAL: Duration = Duration::from_secs(300);
 
 impl AuthService {
     pub fn new(db: Db, settings: SettingsStore) -> Self {
@@ -142,7 +155,71 @@ impl AuthService {
                 attempts: Mutex::new(HashMap::new()),
                 setup_code: Mutex::new(None),
                 used_steps: Mutex::new(HashMap::new()),
+                revocations: watch::channel(0).0,
             }),
+        }
+    }
+
+    fn access_withdrawn(&self) {
+        self.inner.revocations.send_modify(|v| *v = v.wrapping_add(1));
+    }
+
+    /// Whether the access a principal was given still holds: its session or
+    /// API key still exists (and the user still has its role), or the
+    /// sign-in method it came through is still turned on.
+    pub async fn still_valid(&self, p: &Principal) -> bool {
+        match p.via {
+            AuthVia::Session => {
+                let (Some(hash), Some(user_id)) = (p.session_hash.clone(), p.user_id) else { return false };
+                let now = crate::util::now();
+                let role = self
+                    .db
+                    .call(move |c| {
+                        Ok(c.query_row(
+                            "SELECT u.role FROM sessions s JOIN users u ON u.id = s.user_id
+                             WHERE s.id = ?1 AND s.user_id = ?2 AND s.expires_at > ?3 AND s.mfa_pending = 0",
+                            params![hash, user_id, now],
+                            |r| r.get::<_, String>(0),
+                        )
+                        .optional()?)
+                    })
+                    .await;
+                // A demoted user loses admin connections; viewers keep theirs.
+                matches!(role, Ok(Some(r)) if Role::parse(&r) == Role::Admin || p.role == Role::Viewer)
+            }
+            AuthVia::ApiKey => {
+                let Some(id) = p.key_id else { return false };
+                self.db
+                    .call(move |c| Ok(c.query_row("SELECT 1 FROM api_keys WHERE id = ?1", [id], |_| Ok(())).optional()?))
+                    .await
+                    .is_ok_and(|r| r.is_some())
+            }
+            AuthVia::LocalBypass => self.settings.get().security.bypass_local,
+            AuthVia::External => self.settings.get().security.auth_mode == crate::settings::AuthMode::External,
+        }
+    }
+
+    /// Resolves once the principal has lost its access. Long-lived
+    /// connections (live events, logs, consoles) end when it does. Checks
+    /// whenever access is withdrawn anywhere, when settings change, and every
+    /// few minutes for expiry.
+    pub async fn revoked(&self, p: Principal) {
+        let mut revocations = self.inner.revocations.subscribe();
+        let mut settings = self.settings.subscribe();
+        let mut tick = tokio::time::interval(RECHECK_INTERVAL);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        tick.tick().await;
+        loop {
+            // Also checked before the first wait, in case access ended between
+            // the request's sign-in check and the subscriptions above.
+            if !self.still_valid(&p).await {
+                return;
+            }
+            tokio::select! {
+                r = revocations.changed() => if r.is_err() { return std::future::pending().await },
+                r = settings.changed() => if r.is_err() { return std::future::pending().await },
+                _ = tick.tick() => {}
+            }
         }
     }
 
@@ -236,7 +313,9 @@ impl AuthService {
                 c.execute("DELETE FROM users WHERE id = ?1", [id])?;
                 Ok(())
             })
-            .await
+            .await?;
+        self.access_withdrawn();
+        Ok(())
     }
 
     pub async fn set_role(&self, id: i64, role: Role) -> Result<()> {
@@ -255,7 +334,9 @@ impl AuthService {
                 c.execute("UPDATE users SET role = ?1 WHERE id = ?2", params![role.as_str(), id])?;
                 Ok(())
             })
-            .await
+            .await?;
+        self.access_withdrawn();
+        Ok(())
     }
 
     pub async fn set_password(&self, user_id: i64, new_password: &str, keep_session: Option<String>) -> Result<()> {
@@ -274,7 +355,9 @@ impl AuthService {
                 )?;
                 Ok(())
             })
-            .await
+            .await?;
+        self.access_withdrawn();
+        Ok(())
     }
 
     async fn password_hash_of(&self, user_id: i64) -> Result<String> {
@@ -458,6 +541,7 @@ impl AuthService {
                 role: Role::parse(&role),
                 via: AuthVia::Session,
                 session_hash: Some(hash),
+                key_id: None,
             },
             mfa_pending,
         )))
@@ -470,7 +554,9 @@ impl AuthService {
                 c.execute("DELETE FROM sessions WHERE id = ?1", [hash])?;
                 Ok(())
             })
-            .await
+            .await?;
+        self.access_withdrawn();
+        Ok(())
     }
 
     pub async fn sessions(&self, user_id: i64, current: Option<&str>) -> Result<Vec<SessionInfo>> {
@@ -509,7 +595,25 @@ impl AuthService {
                 c.execute("DELETE FROM sessions WHERE user_id = ?1 AND id LIKE ?2", params![user_id, pat])?;
                 Ok(())
             })
-            .await
+            .await?;
+        self.access_withdrawn();
+        Ok(())
+    }
+
+    /// Signs a user out everywhere except the given session. Returns how
+    /// many sessions ended.
+    pub async fn revoke_other_sessions(&self, user_id: i64, keep_session: Option<String>) -> Result<usize> {
+        let n = self
+            .db
+            .call(move |c| {
+                Ok(c.execute(
+                    "DELETE FROM sessions WHERE user_id = ?1 AND id != ?2",
+                    params![user_id, keep_session.unwrap_or_default()],
+                )?)
+            })
+            .await?;
+        self.access_withdrawn();
+        Ok(n)
     }
 
     // --- Two-factor ----------------------------------------------------------
@@ -623,7 +727,9 @@ impl AuthService {
                 c.execute("DELETE FROM api_keys WHERE id = ?1", [id])?;
                 Ok(())
             })
-            .await
+            .await?;
+        self.access_withdrawn();
+        Ok(())
     }
 
     pub async fn api_key_principal(&self, key: &str) -> Result<Option<Principal>> {
@@ -651,6 +757,7 @@ impl AuthService {
                     role: Role::parse(&role),
                     via: AuthVia::ApiKey,
                     session_hash: None,
+                    key_id: Some(id),
                 }))
             })
             .await
@@ -763,5 +870,64 @@ mod tests {
         assert!(auth.api_key_principal("brt_wrong").await.unwrap().is_none());
         auth.delete_api_key(info.id).await.unwrap();
         assert!(auth.api_key_principal(&key).await.unwrap().is_none());
+    }
+
+    async fn signed_in(auth: &AuthService, user: &str) -> (String, Principal) {
+        let ip: IpAddr = "192.168.1.50".parse().unwrap();
+        let LoginResult::Session { token, .. } = auth.login(user, "correct horse", false, ip, None).await.unwrap();
+        let (p, _) = auth.session_principal(&token).await.unwrap().unwrap();
+        (token, p)
+    }
+
+    /// Waits briefly for `revoked` to resolve; true if it did.
+    async fn ends(auth: &AuthService, p: &Principal) -> bool {
+        tokio::time::timeout(std::time::Duration::from_millis(500), auth.revoked(p.clone())).await.is_ok()
+    }
+
+    #[tokio::test]
+    async fn signing_out_others_ends_their_connections() {
+        let auth = svc().await;
+        let id = auth.create_user("jake", "correct horse", Role::Admin).await.unwrap();
+        let (_, here) = signed_in(&auth, "jake").await;
+        let (other_token, other) = signed_in(&auth, "jake").await;
+
+        let (watch_here, watch_other) = (auth.clone(), auth.clone());
+        let (h, o) = (here.clone(), other.clone());
+        let here_task = tokio::spawn(async move { ends(&watch_here, &h).await });
+        let other_task = tokio::spawn(async move { ends(&watch_other, &o).await });
+        tokio::task::yield_now().await;
+        assert_eq!(auth.revoke_other_sessions(id, here.session_hash.clone()).await.unwrap(), 1);
+        assert!(other_task.await.unwrap(), "the other session's connections end");
+        assert!(!here_task.await.unwrap(), "this session's connections stay");
+        assert!(auth.session_principal(&other_token).await.unwrap().is_none());
+        assert!(auth.still_valid(&here).await);
+    }
+
+    #[tokio::test]
+    async fn demotion_and_removal_withdraw_access() {
+        let auth = svc().await;
+        auth.create_user("jake", "correct horse", Role::Admin).await.unwrap();
+        let id = auth.create_user("guest", "correct horse", Role::Admin).await.unwrap();
+        let (_, admin_conn) = signed_in(&auth, "guest").await;
+        auth.set_role(id, Role::Viewer).await.unwrap();
+        assert!(!auth.still_valid(&admin_conn).await, "admin connections end after a demotion");
+        let (_, viewer_conn) = signed_in(&auth, "guest").await;
+        assert!(auth.still_valid(&viewer_conn).await);
+        auth.delete_user(id).await.unwrap();
+        assert!(!auth.still_valid(&viewer_conn).await, "a removed user's connections end");
+    }
+
+    #[tokio::test]
+    async fn deleting_an_api_key_ends_its_connections() {
+        let auth = svc().await;
+        let (key, info) = auth.create_api_key("dashboard", Role::Viewer).await.unwrap();
+        let p = auth.api_key_principal(&key).await.unwrap().unwrap();
+        assert!(auth.still_valid(&p).await);
+        let watcher = auth.clone();
+        let p2 = p.clone();
+        let task = tokio::spawn(async move { ends(&watcher, &p2).await });
+        tokio::task::yield_now().await;
+        auth.delete_api_key(info.id).await.unwrap();
+        assert!(task.await.unwrap());
     }
 }

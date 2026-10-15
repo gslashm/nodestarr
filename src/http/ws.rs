@@ -15,6 +15,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::activity::NewActivity;
 use crate::app::App;
+use crate::auth::Principal;
 use crate::docker::logs::{LogLine, LogQuery};
 use crate::error::{AppError, Result};
 use crate::http::Auth;
@@ -76,13 +77,13 @@ pub async fn console(
     .await;
     let container = entry.summary.id.clone();
     Ok(ws.on_upgrade(move |socket| async move {
-        if let Err(err) = console_session(app, container, q, socket).await {
+        if let Err(err) = console_session(app, container, q, p, socket).await {
             tracing::debug!(%err, "console session ended with an error");
         }
     }))
 }
 
-async fn console_session(app: App, container: String, q: ConsoleQuery, socket: WebSocket) -> Result<()> {
+async fn console_session(app: App, container: String, q: ConsoleQuery, p: Principal, socket: WebSocket) -> Result<()> {
     let (mut tx, mut rx) = socket.split();
     let shells = app.settings.get().docker.console_shells.clone();
     let shell = match q.shell.filter(|s| !s.is_empty()) {
@@ -126,8 +127,16 @@ async fn console_session(app: App, container: String, q: ConsoleQuery, socket: W
             .resize_exec(&exec_id, bollard::exec::ResizeExecOptions { height: rows, width: cols })
             .await;
     }
+    let auth = app.auth.clone();
+    let revoked = auth.revoked(p);
+    tokio::pin!(revoked);
     loop {
         tokio::select! {
+            () = &mut revoked => {
+                let _ = tx.send(Message::Text(json!({"type": "error", "message": "Your sign-in ended, so the console was closed."}).to_string().into())).await;
+                let _ = tx.close().await;
+                return Ok(());
+            }
             out = output.next() => match out {
                 Some(Ok(LogOutput::Console { message } | LogOutput::StdOut { message } | LogOutput::StdErr { message })) => {
                     if tx.send(Message::Binary(message)).await.is_err() {
@@ -183,7 +192,7 @@ fn yes() -> bool {
 
 pub async fn logs(
     State(app): State<App>,
-    Auth(_p): Auth,
+    Auth(p): Auth,
     Path(id): Path<String>,
     Query(q): Query<LogsWsQuery>,
     headers: HeaderMap,
@@ -200,18 +209,33 @@ pub async fn logs(
         stderr: true,
     };
     let stream = crate::docker::logs::follow(&app.docker.api, &entry.summary.id, &query);
-    Ok(ws.on_upgrade(move |socket| pump_logs(socket, Box::pin(stream.map(|r| r.map(|lines| (None, lines)))))))
+    let revoked = revoked_future(&app, p);
+    Ok(ws.on_upgrade(move |socket| pump_logs(socket, Box::pin(stream.map(|r| r.map(|lines| (None, lines)))), revoked)))
+}
+
+type Revoked = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+
+/// Resolves when the principal loses its access (see `AuthService::revoked`).
+fn revoked_future(app: &App, p: Principal) -> Revoked {
+    let auth = app.auth.clone();
+    Box::pin(async move { auth.revoked(p).await })
 }
 
 type TaggedStream = std::pin::Pin<Box<dyn futures_util::Stream<Item = std::result::Result<(Option<String>, Vec<LogLine>), String>> + Send>>;
 
-/// Sends log batches to the socket, coalescing bursts into one frame per 100 ms.
-async fn pump_logs(socket: WebSocket, mut stream: TaggedStream) {
+/// Sends log batches to the socket, coalescing bursts into one frame per
+/// 100 ms, until the stream ends, the client leaves or its access ends.
+async fn pump_logs(socket: WebSocket, mut stream: TaggedStream, mut revoked: Revoked) {
     let (mut tx, mut rx) = socket.split();
     let mut pending: Vec<serde_json::Value> = Vec::new();
     let mut flush = tokio::time::interval(Duration::from_millis(100));
     loop {
         tokio::select! {
+            () = &mut revoked => {
+                let _ = tx.send(Message::Text(json!({"error": "your sign-in ended"}).to_string().into())).await;
+                let _ = tx.close().await;
+                return;
+            }
             item = stream.next() => match item {
                 Some(Ok((source, lines))) => {
                     for l in lines {
@@ -262,7 +286,7 @@ async fn send_batch(
 
 pub async fn stack_logs(
     State(app): State<App>,
-    Auth(_p): Auth,
+    Auth(p): Auth,
     Path(name): Path<String>,
     Query(q): Query<LogsWsQuery>,
     headers: HeaderMap,
@@ -290,5 +314,6 @@ pub async fn stack_logs(
         })
         .collect();
     let merged: TaggedStream = Box::pin(futures_util::stream::select_all(streams));
-    Ok(ws.on_upgrade(move |socket| pump_logs(socket, merged)))
+    let revoked = revoked_future(&app, p);
+    Ok(ws.on_upgrade(move |socket| pump_logs(socket, merged, revoked)))
 }

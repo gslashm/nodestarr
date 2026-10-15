@@ -23,6 +23,10 @@ const SECRET_KEYS: &[&str] = &[
     "api_key",
 ];
 
+/// Fields that identify an item in a list (notification providers have an
+/// id; registry credentials are keyed by registry host).
+const ITEM_KEYS: &[&str] = &["id", "registry"];
+
 /// Header maps (generic webhooks) may carry credentials; mask all values.
 const SECRET_MAPS: &[&str] = &["headers"];
 
@@ -83,14 +87,14 @@ pub fn merge_secrets(incoming: &mut Value, current: &Value) {
             }
         }
         (Value::Array(inc), Value::Array(cur)) => {
-            for (idx, item) in inc.iter_mut().enumerate() {
-                let matched = item
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .and_then(|id| cur.iter().find(|c| c.get("id").and_then(Value::as_str) == Some(id)))
-                    .or_else(|| {
-                        if item.get("id").is_none() { cur.get(idx) } else { None }
-                    });
+            for item in inc.iter_mut() {
+                // Items are matched by a stable key, never by position: lists
+                // can be reordered or shortened in the UI, and matching by
+                // index would hand one entry's secret to another.
+                let matched = ITEM_KEYS.iter().find_map(|key| {
+                    let wanted = item.get(*key).and_then(Value::as_str)?;
+                    cur.iter().find(|c| c.get(*key).and_then(Value::as_str) == Some(wanted))
+                });
                 match matched {
                     Some(cur_item) => merge_secrets(item, cur_item),
                     None => clear_placeholders(item),
@@ -133,7 +137,7 @@ mod tests {
     }
 
     #[test]
-    fn merges_by_id_and_position() {
+    fn merges_by_id() {
         let current = json!({
             "token_secret": "real",
             "providers": [
@@ -152,6 +156,22 @@ mod tests {
         assert_eq!(incoming["token_secret"], "real");
         assert_eq!(incoming["providers"][0]["config"]["webhook_url"], "https://b");
         assert_eq!(incoming["providers"][1]["config"]["webhook_url"], "");
+    }
+
+    #[test]
+    fn registries_match_by_host_not_position() {
+        let current = json!({"registries": [
+            {"registry": "ghcr.io", "username": "a", "password": "ghcr-secret"},
+            {"registry": "docker.io", "username": "b", "password": "hub-secret"}
+        ]});
+        // The first entry was removed in the UI; the second moved up.
+        let mut incoming = json!({"registries": [
+            {"registry": "docker.io", "username": "b", "password": SECRET_PLACEHOLDER},
+            {"registry": "quay.io", "username": "c", "password": SECRET_PLACEHOLDER}
+        ]});
+        merge_secrets(&mut incoming, &current);
+        assert_eq!(incoming["registries"][0]["password"], "hub-secret");
+        assert_eq!(incoming["registries"][1]["password"], "");
     }
 
     #[test]

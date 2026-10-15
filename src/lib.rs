@@ -38,4 +38,4 @@ pub mod util;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// User agent for outbound requests.
-pub const USER_AGENT: &str = concat!("Berth/", env!("CARGO_PKG_VERSION"), " (+https://github.com/your-user/berth)");
+pub const USER_AGENT: &str = concat!("Berth/", env!("CARGO_PKG_VERSION"));

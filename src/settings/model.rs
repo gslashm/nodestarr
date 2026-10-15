@@ -35,7 +35,7 @@ pub struct General {
     /// Path prefix when served behind a reverse proxy, e.g. "/berth".
     pub url_base: String,
     /// Host used for quick links to app web UIs (e.g. "192.168.1.50").
-    /// Empty means auto-detect this machine's LAN address.
+    /// Empty uses whatever address the browser opened Berth with.
     pub public_host: String,
     /// Address of Berth itself as reachable by people, used in notification
     /// links (e.g. "http://192.168.1.50:7979"). Optional.
@@ -83,7 +83,7 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             theme: "dark".into(),
-            accent: "#2fb6a6".into(),
+            accent: "#f2c230".into(),
             density: "comfortable".into(),
             icon_url_template: String::new(),
             group_by_stack: true,

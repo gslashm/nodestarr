@@ -72,6 +72,11 @@ pub async fn serve(State(app): State<App>, req: Request) -> Response {
     if path.is_empty() || path == "index.html" {
         return index_html(&app);
     }
+    // Only plain relative paths reach the file system (BERTH_WEB_DIR serves
+    // from disk): no "." or ".." segments and no backslashes.
+    if path.contains('\\') || path.split('/').any(|seg| seg == "." || seg == "..") {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
     let headers = req.headers();
     let (data, encoding) = if accepts(headers, "br") && let Some(d) = load(&app, &format!("{path}.br")) {
         (Some(d), Some("br"))

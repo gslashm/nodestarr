@@ -34,6 +34,8 @@ pub enum Event {
     TaskLog { id: String, lines: Vec<String> },
     Activity(Arc<ActivityEntry>),
     Update { identity: String, info: Arc<UpdateInfo> },
+    /// An update check of all containers started or finished.
+    UpdateCheck { running: bool, last_check: Option<i64> },
     Stats(Arc<Vec<LiveStat>>),
     /// Docker host CPU, memory and load (sent with live stats).
     Host(Arc<HostStats>),

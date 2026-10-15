@@ -95,7 +95,9 @@ async fn action(
     Ok(Json(json!({ "task_id": task })))
 }
 
-async fn files(State(app): State<App>, Path(name): Path<String>) -> Result<Json<Value>> {
+/// Compose files and .env hold secrets, so only admins can read them.
+async fn files(State(app): State<App>, Auth(p): Auth, Path(name): Path<String>) -> Result<Json<Value>> {
+    p.require_admin()?;
     let stack = app.compose.stack_ref(&name)?;
     let files = app.compose.read_files(&stack).await?;
     Ok(Json(json!({ "files": files, "dir": stack.dir })))

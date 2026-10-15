@@ -6,7 +6,6 @@ rust-version = "1.85"
 description = "A lightweight, self-hosted manager for Docker containers and Compose stacks, with Proxmox awareness."
 license = "AGPL-3.0-or-later"
 authors = ["gslashm"]
-repository = "https://github.com/your-user/berth"
 readme = "README.md"
 default-run = "berth"
 

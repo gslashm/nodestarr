@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use axum::extract::{Query, State};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
-use futures_util::Stream;
+use futures_util::{Stream, StreamExt};
 use serde::Deserialize;
 use tokio::sync::broadcast::error::RecvError;
 
@@ -21,7 +21,7 @@ pub struct EventsQuery {
     pub stats: bool,
 }
 
-pub async fn events(State(app): State<App>, Auth(_p): Auth, Query(q): Query<EventsQuery>) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {
+pub async fn events(State(app): State<App>, Auth(p): Auth, Query(q): Query<EventsQuery>) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {
     let rx = app.bus.subscribe();
     let guard = q.stats.then(|| app.monitor.watch());
     let hello = serde_json::json!({ "type": "hello", "data": { "version": crate::VERSION, "time": crate::util::now() } });
@@ -46,5 +46,13 @@ pub async fn events(State(app): State<App>, Auth(_p): Auth, Query(q): Query<Even
             }
         }
     });
+    // The stream ends when this sign-in loses its access, with a last event
+    // telling the browser to show the sign-in page.
+    let (auth, auth2, p2) = (app.auth.clone(), app.auth.clone(), p.clone());
+    let signed_out = futures_util::stream::once(async move {
+        (!auth2.still_valid(&p2).await).then(|| Ok(SseEvent::default().data(r#"{"type":"signed_out"}"#)))
+    })
+    .filter_map(|ev| async move { ev });
+    let stream = stream.take_until(async move { auth.revoked(p).await }).chain(signed_out);
     Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
 }

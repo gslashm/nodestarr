@@ -116,7 +116,7 @@ pub async fn build(boot: BootConfig) -> anyhow::Result<App> {
     let backups = BackupService::new(db.clone(), bus.clone());
     let notifier = Notifier::new(http.clone(), settings.clone(), db.clone());
     let integrations = IntegrationService::new(http.clone(), bus.clone());
-    let proxmox = ProxmoxService::new(settings.clone());
+    let proxmox = ProxmoxService::new(settings.clone(), docker.clone());
     let monitor = MonitorService::new(db.clone(), bus.clone());
     let uptime = UptimeService::new(bus.clone());
     let mqtt = MqttService::new();

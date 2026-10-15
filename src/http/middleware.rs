@@ -153,6 +153,7 @@ async fn resolve(app: &App, headers: &HeaderMap, uri: &Uri, ip: IpAddr, peer: Ip
                         role: Role::Admin,
                         via: AuthVia::External,
                         session_hash: None,
+                        key_id: None,
                     },
                     false,
                 ));
@@ -195,6 +196,7 @@ async fn resolve(app: &App, headers: &HeaderMap, uri: &Uri, ip: IpAddr, peer: Ip
                 role: Role::Admin,
                 via: AuthVia::LocalBypass,
                 session_hash: None,
+                key_id: None,
             },
             false,
         ));
