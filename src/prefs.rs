@@ -4,7 +4,7 @@
 //! Keyed by the container's stable identity so they survive updates and
 //! recreation. The whole table is small, so it is cached in memory.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -82,6 +82,11 @@ pub struct ContainerPrefs {
     pub hidden: bool,
     pub web_url: String,
     pub alerts_muted: bool,
+    /// Dashboard "needs attention" items put away, by kind (crash, health,
+    /// web, app, held, update). The value is the fingerprint of the occurrence
+    /// that was dismissed, so the item comes back when the situation changes;
+    /// "*" ignores that kind for this container for good.
+    pub dismissed: BTreeMap<String, String>,
     pub update: UpdatePrefs,
     pub backup: BackupPrefs,
     pub uptime: UptimePrefs,
@@ -210,6 +215,7 @@ mod tests {
             .update("compose:media/sonarr", |p| {
                 p.update.policy = Some(UpdatePolicy::Auto);
                 p.notes = "TV + anime".into();
+                p.dismissed.insert("app".into(), "*".into());
             })
             .await
             .unwrap();
@@ -218,6 +224,7 @@ mod tests {
         assert_eq!(p.update.policy, Some(UpdatePolicy::Auto));
         assert_eq!(p.update_policy(&Settings::default()), UpdatePolicy::Auto);
         assert_eq!(p.notes, "TV + anime");
+        assert_eq!(p.dismissed.get("app").map(String::as_str), Some("*"));
         // Resetting to defaults deletes the row.
         reloaded.set("compose:media/sonarr", ContainerPrefs::default()).await.unwrap();
         assert!(reloaded.all().is_empty());

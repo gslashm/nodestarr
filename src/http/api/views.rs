@@ -1,7 +1,7 @@
 //! View models combining a container's summary with Nodestarr's own state
 //! (updates, preferences, stats, uptime, app status, last backup).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -24,11 +24,13 @@ pub struct PrefsBrief {
     pub skipped_digest: String,
     pub backup_enabled: bool,
     pub alerts_muted: bool,
+    pub dismissed: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UptimeBrief {
     pub state: String,
+    pub since: i64,
     pub latency_ms: Option<u64>,
     pub uptime_24h: Option<f64>,
 }
@@ -90,10 +92,12 @@ pub fn container_view(app: &App, ctx: &ViewContext, summary: Arc<ContainerSummar
             skipped_digest: prefs.update.skipped_digest.clone(),
             backup_enabled: prefs.backup_enabled(&settings),
             alerts_muted: prefs.alerts_muted,
+            dismissed: prefs.dismissed.clone(),
         },
         stats: ctx.stats.get(&identity).cloned(),
         uptime: ctx.uptime.get(&identity).map(|u| UptimeBrief {
             state: u.state.clone(),
+            since: u.since,
             latency_ms: u.latency_ms,
             uptime_24h: u.uptime_24h,
         }),

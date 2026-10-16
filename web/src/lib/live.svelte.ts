@@ -309,7 +309,7 @@ class Live {
       case 'uptime': {
         this.uptime[ev.data.id] = ev.data;
         const c = ev.data.identity ? this.byIdentity.get(ev.data.identity) : undefined;
-        if (c) c.uptime = { state: ev.data.state, latency_ms: ev.data.latency_ms, uptime_24h: ev.data.uptime_24h };
+        if (c) c.uptime = { state: ev.data.state, since: ev.data.since, latency_ms: ev.data.latency_ms, uptime_24h: ev.data.uptime_24h };
         break;
       }
       case 'app': {

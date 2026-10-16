@@ -55,6 +55,7 @@ pub fn routes() -> Router<App> {
         .route("/containers/{id}/update-history", get(update_history))
         .route("/containers/{id}/skip", post(skip_version))
         .route("/containers/{id}/hold", put(hold))
+        .route("/containers/{id}/dismiss", put(dismiss))
         .route("/containers/{id}/backups", get(backups).post(backup_now))
         .route("/containers/{id}/backup-plan", get(backup_plan))
         .route("/containers/{id}/app/refresh", post(app_refresh))
@@ -765,6 +766,37 @@ async fn hold(State(app): State<App>, Path(id): Path<String>, Json(b): Json<Hold
     app.prefs.update(&e.summary.identity, |p| p.update.held = b.held).await?;
     app.bus.publish(crate::events::Event::Prefs { identity: e.summary.identity.clone() });
     Ok(Json(json!({ "held": b.held })))
+}
+
+/// Kinds of dashboard "needs attention" items that can be put away.
+const ATTENTION_KINDS: &[&str] = &["crash", "health", "web", "app", "held", "update"];
+
+#[derive(Deserialize)]
+struct DismissBody {
+    kind: String,
+    /// The occurrence to hide, "*" to hide every occurrence, or null to show
+    /// the item again.
+    fingerprint: Option<String>,
+}
+
+async fn dismiss(State(app): State<App>, Path(id): Path<String>, Json(b): Json<DismissBody>) -> Result<Json<Value>> {
+    let e = entry(&app, &id)?;
+    if !ATTENTION_KINDS.contains(&b.kind.as_str()) {
+        return Err(AppError::bad_request(format!("unknown kind '{}'", b.kind)));
+    }
+    let saved = app
+        .prefs
+        .update(&e.summary.identity, |p| match b.fingerprint {
+            Some(f) => {
+                p.dismissed.insert(b.kind, f);
+            }
+            None => {
+                p.dismissed.remove(&b.kind);
+            }
+        })
+        .await?;
+    app.bus.publish(crate::events::Event::Prefs { identity: e.summary.identity.clone() });
+    Ok(Json(json!({ "dismissed": saved.dismissed })))
 }
 
 // --- Backups -------------------------------------------------------------------

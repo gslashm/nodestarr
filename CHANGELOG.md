@@ -41,6 +41,12 @@ All notable changes to Nodestarr are listed here. The format follows
   `GET /images/inspect` and `GET /images/tags`. Saving stack files can
   create new files, deploy only some services and rebuild images; new
   stacks can come with extra files.
+- **Dismiss "needs attention" items** on the dashboard: hide one until the
+  situation changes (a new crash, a newer version, a different app
+  problem), or ignore that kind of item for a container for good. Dismissed
+  items are one click away and can be shown again; the Containers page's
+  "Needs attention" filter and the sidebar count leave them out too.
+  API: `PUT /containers/{id}/dismiss`.
 
 ### Changed
 

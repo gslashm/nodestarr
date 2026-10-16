@@ -4,6 +4,9 @@
 -->
 <script lang="ts">
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
+  import BellOff from '@lucide/svelte/icons/bell-off';
+  import Eye from '@lucide/svelte/icons/eye';
+  import EyeOff from '@lucide/svelte/icons/eye-off';
   import CircleAlert from '@lucide/svelte/icons/circle-alert';
   import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
   import Globe from '@lucide/svelte/icons/globe';
@@ -16,6 +19,7 @@
   import AppIcon from '../components/AppIcon.svelte';
   import Button from '../components/Button.svelte';
   import EmptyState from '../components/EmptyState.svelte';
+  import Menu, { type MenuEntry } from '../components/Menu.svelte';
   import Meter from '../components/Meter.svelte';
   import PageHeader from '../components/PageHeader.svelte';
   import Sparkline from '../components/Sparkline.svelte';
@@ -23,6 +27,7 @@
   import ContainerGrid from '../components/ContainerGrid.svelte';
   import { confirmUpdate, runAction } from '../lib/actions';
   import { api } from '../lib/api';
+  import { ALWAYS, type AttentionKind, concerns, dismiss } from '../lib/attention';
   import { bytes, duration, hasUpdate, isUp, STATE_LABEL, stateOf, updateLabel } from '../lib/format';
   import { live } from '../lib/live.svelte';
   import { href } from '../lib/router.svelte';
@@ -47,6 +52,11 @@
   interface Attention {
     key: string;
     c?: ContainerView;
+    kind?: AttentionKind;
+    fingerprint?: string;
+    /** Put away: for good, or just this occurrence. */
+    hidden?: 'once' | 'always';
+    alertId?: number;
     tone: 'bad' | 'warn' | 'update';
     title: string;
     detail: string;
@@ -54,59 +64,123 @@
     link?: string;
   }
 
-  const attention = $derived.by(() => {
+  /** What "Ignore … from <container>" ignores, per kind. */
+  const KIND_NOUN: Record<AttentionKind, string> = {
+    crash: 'crashes',
+    health: 'health problems',
+    web: 'web UI outages',
+    app: 'app problems',
+    held: 'paused updates',
+    update: 'updates',
+  };
+
+  let showHidden = $state(false);
+
+  const attentionAll = $derived.by(() => {
     const out: Attention[] = [];
+    const ups: Attention[] = [];
     for (const c of all) {
       const st = stateOf(c);
       const path = `/containers/${encodeURIComponent(c.name)}`;
-      if (st === 'crashed' || st === 'dead') {
-        out.push({
-          key: `crash:${c.id}`,
+      for (const x of concerns(c)) {
+        const base: Pick<Attention, 'key' | 'c' | 'kind' | 'fingerprint' | 'hidden' | 'tone'> = {
+          key: `${x.kind}:${c.id}`,
           c,
-          tone: 'bad',
-          title: `${c.display_name} ${c.oom_killed ? 'ran out of memory' : `exited with code ${c.exit_code}`}`,
-          detail: c.finished_at ? `Stopped ${duration(Date.now() / 1000 - c.finished_at)} ago` : STATE_LABEL[st],
-          fix: session.isAdmin ? { label: 'Start', run: () => runAction(c, 'start') } : undefined,
-          link: `${path}/logs`,
-        });
-      } else if (st === 'unhealthy' || st === 'restarting') {
-        out.push({
-          key: `health:${c.id}`,
-          c,
-          tone: 'bad',
-          title: st === 'unhealthy' ? `${c.display_name} is unhealthy` : `${c.display_name} keeps restarting`,
-          detail: `Restarted ${c.restart_count} times`,
-          fix: session.isAdmin ? { label: 'Restart', run: () => runAction(c, 'restart') } : undefined,
-          link: `${path}/logs`,
-        });
-      } else if (c.uptime?.state === 'down') {
-        out.push({ key: `web:${c.id}`, c, tone: 'bad', title: `${c.display_name}'s web UI isn't answering`, detail: 'The container runs, but its page fails to load', link: path });
-      }
-      const issues = c.app_status?.health.filter((h) => h.level !== 'notice') ?? [];
-      if (issues.length) {
-        out.push({ key: `app:${c.id}`, c, tone: issues.some((h) => h.level === 'error') ? 'bad' : 'warn', title: `${c.display_name} reports ${issues.length === 1 ? 'a problem' : `${issues.length} problems`}`, detail: issues[0].message, link: path });
-      }
-      if (c.prefs.held) {
-        out.push({ key: `held:${c.id}`, c, tone: 'warn', title: `Automatic updates paused for ${c.display_name}`, detail: 'A recent update was rolled back', link: `${path}/updates` });
+          kind: x.kind,
+          fingerprint: x.fingerprint,
+          hidden: x.hidden ? (c.prefs.dismissed[x.kind] === ALWAYS ? 'always' : 'once') : undefined,
+          tone: x.tone,
+        };
+        switch (x.kind) {
+          case 'crash':
+            out.push({
+              ...base,
+              title: `${c.display_name} ${c.oom_killed ? 'ran out of memory' : `exited with code ${c.exit_code}`}`,
+              detail: c.finished_at ? `Stopped ${duration(Date.now() / 1000 - c.finished_at)} ago` : STATE_LABEL[st],
+              fix: session.isAdmin ? { label: 'Start', run: () => runAction(c, 'start') } : undefined,
+              link: `${path}/logs`,
+            });
+            break;
+          case 'health':
+            out.push({
+              ...base,
+              title: st === 'unhealthy' ? `${c.display_name} is unhealthy` : `${c.display_name} keeps restarting`,
+              detail: `Restarted ${c.restart_count} times`,
+              fix: session.isAdmin ? { label: 'Restart', run: () => runAction(c, 'restart') } : undefined,
+              link: `${path}/logs`,
+            });
+            break;
+          case 'web':
+            out.push({ ...base, title: `${c.display_name}'s web UI isn't answering`, detail: 'The container runs, but its page fails to load', link: path });
+            break;
+          case 'app': {
+            const issues = c.app_status?.health.filter((h) => h.level !== 'notice') ?? [];
+            out.push({ ...base, title: `${c.display_name} reports ${issues.length === 1 ? 'a problem' : `${issues.length} problems`}`, detail: issues[0]?.message ?? '', link: path });
+            break;
+          }
+          case 'held':
+            out.push({ ...base, title: `Automatic updates paused for ${c.display_name}`, detail: 'A recent update was rolled back', link: `${path}/updates` });
+            break;
+          case 'update':
+            ups.push({
+              ...base,
+              title: `${c.display_name} can be updated`,
+              detail: `${c.version ?? ''} ${c.version ? 'to ' : ''}${updateLabel(c.update) ?? ''}`.trim(),
+              fix: session.isAdmin ? { label: 'Update', run: () => confirmUpdate(c) } : undefined,
+              link: `${path}/updates`,
+            });
+            break;
+        }
       }
     }
     for (const a of live.alerts) {
       if (out.some((o) => o.c?.identity === a.target)) continue;
-      out.push({ key: `alert:${a.id}`, tone: a.severity === 'error' ? 'bad' : 'warn', title: a.target_name ?? a.target, detail: a.message, link: '/monitoring/alerts' });
+      out.push({ key: `alert:${a.id}`, alertId: a.id, tone: a.severity === 'error' ? 'bad' : 'warn', title: a.target_name ?? a.target, detail: a.message, link: '/monitoring/alerts' });
     }
-    for (const c of updates.slice(0, 6)) {
-      out.push({
-        key: `upd:${c.id}`,
-        c,
-        tone: 'update',
-        title: `${c.display_name} can be updated`,
-        detail: `${c.version ?? ''} ${c.version ? 'to ' : ''}${updateLabel(c.update) ?? ''}`.trim(),
-        fix: session.isAdmin ? { label: 'Update', run: () => confirmUpdate(c) } : undefined,
-        link: `/containers/${encodeURIComponent(c.name)}/updates`,
-      });
-    }
+    out.push(...ups.filter((u) => !u.hidden).slice(0, 6), ...ups.filter((u) => u.hidden));
     return out;
   });
+
+  const attention = $derived(attentionAll.filter((a) => !a.hidden));
+  const hiddenItems = $derived(attentionAll.filter((a) => a.hidden));
+  const shown = $derived(showHidden ? [...attention.slice(0, 12), ...hiddenItems] : attention.slice(0, 12));
+
+  async function putAway(a: Attention, always: boolean) {
+    try {
+      if (a.alertId !== undefined) {
+        await api.post(`/monitoring/alerts/${a.alertId}/dismiss`);
+        live.alerts = live.alerts.filter((x) => x.id !== a.alertId);
+        ui.toast("Dismissed. It won't come back until the problem clears and happens again.", 'success');
+        return;
+      }
+      if (!a.c || !a.kind || a.fingerprint === undefined) return;
+      const { c, kind } = a;
+      const before = c.prefs.dismissed[kind] ?? null;
+      await dismiss(c, kind, always ? ALWAYS : a.fingerprint);
+      ui.toast(always ? `Ignoring ${KIND_NOUN[kind]} from ${c.display_name}` : 'Dismissed until something changes', 'success', {
+        label: 'Undo',
+        run: () => dismiss(c, kind, before).catch((err) => ui.error(err)),
+      });
+    } catch (err) {
+      ui.error(err);
+    }
+  }
+
+  async function restore(a: Attention) {
+    if (!a.c || !a.kind) return;
+    try {
+      await dismiss(a.c, a.kind, null);
+    } catch (err) {
+      ui.error(err);
+    }
+  }
+
+  function itemMenu(a: Attention): MenuEntry[] {
+    if (a.hidden) return [{ label: 'Show again', icon: Eye, run: () => restore(a) }];
+    const items: MenuEntry[] = [{ label: 'Dismiss', icon: EyeOff, hint: a.alertId === undefined ? 'until it changes' : 'until it recurs', run: () => putAway(a, false) }];
+    if (a.c && a.kind) items.push({ label: `Ignore ${KIND_NOUN[a.kind]} from ${a.c.display_name}`, icon: BellOff, run: () => putAway(a, true) });
+    return items;
+  }
 
   const memUsed = $derived(host ? host.mem_total - host.mem_available : 0);
   const cpuTrend = $derived([...cpuHistory, ...live.hostTrail.map((h) => h.cpu)].slice(-90));
@@ -192,13 +266,22 @@
 
   <div class="columns">
     <section class="panel">
-      <div class="panel-head"><h2>Needs attention</h2></div>
-      {#if attention.length === 0}
-        <p class="calm">All quiet. Every container is running as expected and nothing is waiting for an update.</p>
+      <div class="panel-head">
+        <h2>Needs attention</h2>
+        {#if hiddenItems.length}
+          <button type="button" class="btn small ghost" aria-pressed={showHidden} onclick={() => (showHidden = !showHidden)}>
+            {#if showHidden}<EyeOff size={14} />Hide dismissed{:else}<Eye size={14} />{hiddenItems.length} dismissed{/if}
+          </button>
+        {/if}
+      </div>
+      {#if attention.length === 0 && !showHidden}
+        <p class="calm">
+          {hiddenItems.length ? 'All quiet, apart from what you dismissed.' : 'All quiet. Every container is running as expected and nothing is waiting for an update.'}
+        </p>
       {:else}
         <ul class="attention">
-          {#each attention.slice(0, 12) as a (a.key)}
-            <li class="tone-{a.tone}">
+          {#each shown as a (a.key)}
+            <li class="tone-{a.tone}" class:dimmed={a.hidden}>
               {#if a.c}
                 <AppIcon name={a.c.display_name} slug={a.c.app} icon={a.c.prefs.icon} size={28} />
               {:else}
@@ -206,11 +289,16 @@
               {/if}
               <a class="text" href={href(a.link ?? '/')}>
                 <span class="title">{a.title}</span>
-                <span class="detail ellipsis">{a.detail}</span>
+                <span class="detail ellipsis">
+                  {#if a.hidden}<span class="faint">{a.hidden === 'always' ? `Ignoring ${KIND_NOUN[a.kind!]} · ` : 'Dismissed · '}</span>{/if}{a.detail}
+                </span>
               </a>
               {#if a.tone === 'bad' && a.c?.uptime?.state === 'down'}<Globe size={16} class="text-bad" />{/if}
-              {#if a.fix}
+              {#if a.fix && !a.hidden}
                 <Button small variant={a.tone === 'update' ? '' : 'ghost'} icon={a.tone === 'update' ? ArrowUp : RotateCw} onclick={a.fix.run}>{a.fix.label}</Button>
+              {/if}
+              {#if session.isAdmin}
+                <Menu small label="Dismiss options" items={itemMenu(a)} />
               {/if}
             </li>
           {/each}
@@ -366,6 +454,9 @@
   }
   .attention li:hover {
     background: var(--raised);
+  }
+  .attention li.dimmed {
+    opacity: 0.6;
   }
   .attention li.tone-bad {
     border-left-color: var(--bad);
