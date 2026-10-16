@@ -34,7 +34,7 @@
   type TabProps = { name: string; detail: StackDetail; reload: () => Promise<void> };
   const tabLoaders: Record<string, () => Promise<{ default: Component<TabProps> }>> = {
     overview: () => import('./StackOverview.svelte'),
-    compose: () => import('./StackCompose.svelte'),
+    compose: () => import('./StackEditor.svelte'),
     history: () => import('./StackHistory.svelte'),
   };
 
@@ -85,7 +85,7 @@
 
   const tabList = $derived([
     { key: 'overview', label: 'Services', path: base, badge: detail?.config_error ? '!' : null, tone: 'bad' as const },
-    ...(session.isAdmin && detail?.stack.editable ? [{ key: 'compose', label: 'Compose', path: `${base}/compose` }] : []),
+    ...(session.isAdmin && detail?.stack.editable ? [{ key: 'compose', label: 'Editor', path: `${base}/compose` }] : []),
     ...(members.length ? [{ key: 'logs', label: 'Logs', path: `${base}/logs` }] : []),
     ...(session.isAdmin && detail?.stack.editable ? [{ key: 'history', label: 'History', path: `${base}/history` }] : []),
   ]);

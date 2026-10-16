@@ -76,11 +76,13 @@ container or stack run one at a time.
 | Method and path | What it does |
 |---|---|
 | `GET /stacks` | All stacks with their services and states. |
-| `POST /stacks` | Create one: `{"name": "x", "compose": "...", "env": "...", "deploy": true}`. |
+| `POST /stacks` | Create one: `{"name": "x", "compose": "...", "env": "...", "files": [{"path": "app/Dockerfile", "content": "..."}], "deploy": true}` (`files` are optional extra files, relative to the new folder). |
 | `GET /stacks/{name}` | Details and the parsed services. |
 | `DELETE /stacks/{name}` | Take it down and remove it: `?remove_files=1&remove_volumes=1`. |
 | `POST /stacks/{name}/actions/{action}` | `up`, `down`, `start`, `stop`, `restart`, `pull`, `update` (pull and recreate). Body: `{"services": ["sonarr"]}` to limit it. |
-| `GET`, `PUT /stacks/{name}/files` | Read the compose files and `.env` (admin); save `{"files": [{"path": ..., "content": ...}], "deploy": true}`. |
+| `GET`, `PUT /stacks/{name}/files` | Read the compose files and `.env` (admin); save `{"files": [{"path": ..., "content": ...}], "deploy": true, "services": ["sonarr"], "build": false}`. Paths can be any file in the stack's folder or a stacks folder, including new ones; `services` limits the deploy, `build` rebuilds images. |
+| `GET /stacks/{name}/file?path=...` | Any text file of the stack (admin): `{"path", "name", "content", "exists"}`. The path is relative to the stack's folder (or absolute inside a stacks folder); missing files come back empty. |
+| `GET /stacks/{name}/tree` | The files and folders in the stack's folder, a few levels deep (admin). |
 | `POST /stacks/{name}/validate`, `POST /stacks/{name}/diff` | Check or compare edited files before saving. |
 | `GET /stacks/{name}/history?path=...` | Saved versions of a file. |
 | `POST /stacks/{name}/backup` | Back up every container of the stack. |
@@ -125,6 +127,13 @@ container or stack run one at a time.
 /settings/{section}`, `GET /settings/export`, `POST /settings/import`, `GET
 /system/df`, `POST /system/prune`, `GET /images`, `GET /volumes`, `GET
 /networks`, `GET /system/logs`.
+
+`GET /images/inspect?image=lscr.io/linuxserver/sonarr:latest` (admin) tells
+what an image sets up by itself (environment, exposed ports, volumes, user,
+working folder, command, health check, version), from this machine when the
+image is here and from its registry otherwise, without pulling it. `GET
+/images/tags?image=...` (admin) lists an image's tags, channels (`latest`,
+`develop`) first.
 
 ## Live events
 

@@ -92,7 +92,7 @@
     { key: 'backups', label: 'Backups', path: `${base}/backups` },
     ...(session.isAdmin ? [{ key: 'files', label: 'Files', path: `${base}/files` }] : []),
     { key: 'settings', label: 'Settings', path: `${base}/settings` },
-    ...(session.isAdmin && detail?.can_edit_spec ? [{ key: 'edit', label: 'Edit', path: `${base}/edit` }] : []),
+    ...(session.isAdmin && (detail?.can_edit_spec || (c?.stack && c.service && !c.is_self)) ? [{ key: 'edit', label: 'Edit', path: `${base}/edit` }] : []),
   ]);
 
   const subtitle = $derived.by(() => {

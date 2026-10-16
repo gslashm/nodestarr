@@ -21,6 +21,7 @@ use crate::docker::images::ImageMeta;
 use crate::docker::model::{self, ContainerSummary, SummaryInput};
 use crate::events::{Event, EventBus};
 use crate::settings::SettingsStore;
+use crate::util::ring::Ring;
 
 /// Placeholder the UI replaces with the host the browser used, when no
 /// public host is configured.
@@ -81,6 +82,11 @@ struct Inner {
     lifecycle: broadcast::Sender<Lifecycle>,
     /// Containers with a refresh already scheduled (debounces event bursts).
     pending: Mutex<HashSet<String>>,
+    /// Recently destroyed containers. Ids are never reused, so an inspect
+    /// that was in flight when the container went away must not add it back
+    /// (it would linger as a stopped twin of its replacement until the next
+    /// resync).
+    gone: Mutex<Ring<String>>,
 }
 
 impl DockerService {
@@ -103,6 +109,7 @@ impl DockerService {
                 info: RwLock::new(DockerInfo::default()),
                 lifecycle,
                 pending: Mutex::new(HashSet::new()),
+                gone: Mutex::new(Ring::new(256)),
             }),
         }
     }
@@ -216,7 +223,7 @@ impl DockerService {
             Ok(inspect) => {
                 self.upsert(inspect).await;
             }
-            Err(err) if crate::error::is_not_found(&err) => self.remove(id),
+            Err(err) if crate::error::is_not_found(&err) => self.remove(id, true),
             Err(err) => tracing::debug!(%err, id, "inspect failed"),
         }
     }
@@ -236,6 +243,9 @@ impl DockerService {
         let entry = Arc::new(Entry { summary: Arc::new(summary), inspect: Arc::new(inspect) });
         {
             let mut map = self.inner.containers.write();
+            if self.inner.gone.lock().iter().any(|g| *g == id) {
+                return None;
+            }
             changed = map.get(&id).is_none_or(|old| old.summary != entry.summary);
             map.insert(id, entry.clone());
         }
@@ -245,9 +255,14 @@ impl DockerService {
         Some(entry)
     }
 
-    fn remove(&self, id: &str) {
+    /// Drops a container. `destroyed` when Docker says it no longer exists,
+    /// so a refresh that raced the removal can't bring it back.
+    fn remove(&self, id: &str, destroyed: bool) {
         let removed = {
             let mut map = self.inner.containers.write();
+            if destroyed {
+                self.inner.gone.lock().push(id.to_string());
+            }
             match map.remove(id) {
                 Some(e) => Some(e),
                 None => {
@@ -279,7 +294,7 @@ impl DockerService {
             .await;
         let stale: Vec<String> = self.inner.containers.read().keys().filter(|k| !seen.contains(*k)).cloned().collect();
         for id in stale {
-            self.remove(&id);
+            self.remove(&id, false);
         }
         self.inner.synced.store(true, Ordering::Relaxed);
         Ok(())
@@ -399,7 +414,7 @@ impl DockerService {
                     ts: ev.time.unwrap_or_else(crate::util::now),
                 });
                 if action == "destroy" {
-                    self.remove(&id);
+                    self.remove(&id, true);
                 } else {
                     self.schedule_refresh(id);
                 }

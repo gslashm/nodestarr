@@ -137,6 +137,11 @@
     height: 100dvh;
   }
   main {
+    /* Containing block for unanchored absolute elements (hidden toggle
+       inputs, .sr-only labels): without it they are placed against the
+       document, make it taller than the viewport, and wheel scrolling over
+       the sidebar scrolls the whole shell away. */
+    position: relative;
     height: 100vh;
     height: 100dvh;
     overflow-y: auto;

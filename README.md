@@ -29,9 +29,15 @@ Svelte UI built in) that idles at about 20 MB of memory and almost no CPU.
   merged logs for a whole stack.
 - A console per container (a real terminal in the browser) and one-off
   commands.
-- Compose editor with validation, a diff before saving, deploy, and a
-  history of every version. Create stacks from a template or convert a
-  `docker run` command.
+- A stack editor: each service as a form (image and tags, ports, folders,
+  networks, health checks, resources and more) next to its YAML; one list
+  of each container's environment, from the compose file, env files, `.env`
+  and the image, showing where every value comes from; the stack's `.env`
+  as variables; and Dockerfiles as instruction cards. Edits keep the
+  files' comments and layout, and every change can be reviewed, checked
+  and deployed, with a history of every version.
+- New stacks from a gallery of common apps, a `docker run` command or a
+  container you started by hand.
 - Create and edit standalone containers with a full form (ports, volumes,
   environment, limits, devices, GPUs, health checks), or import a
   `docker run` command.
@@ -110,6 +116,8 @@ volumes, reverse proxies, running without Docker, and updating.
 - [Installation](docs/installation.md)
 - [Configuration](docs/configuration.md): environment variables, settings,
   labels and command line tools
+- [Stack editor](docs/stack-editor.md): services as forms, environment
+  variables, `.env`, Dockerfiles and new stacks
 - [Updates](docs/updates.md)
 - [Backups and restore](docs/backups.md)
 - [Monitoring, alerts and notifications](docs/monitoring.md)

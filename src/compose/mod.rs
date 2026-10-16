@@ -107,6 +107,28 @@ pub struct FileEdit {
     pub content: String,
 }
 
+/// Any file of a stack folder, for the stack editor (Dockerfiles, env files...).
+#[derive(Debug, Clone, Serialize)]
+pub struct EditorFile {
+    pub path: String,
+    /// Relative to the stack folder (or absolute when outside it).
+    pub name: String,
+    pub content: String,
+    pub exists: bool,
+    /// Why it can't be edited here (too large, not text).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// One entry of a stack folder listing.
+#[derive(Debug, Clone, Serialize)]
+pub struct TreeEntry {
+    /// Relative to the stack folder.
+    pub path: String,
+    pub dir: bool,
+    pub size: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileChange {
     pub path: String,
@@ -498,9 +520,29 @@ impl ComposeService {
     }
 
     /// Validates edited files by running `docker compose config` on copies.
+    ///
+    /// Compose files and `.env` are swapped for edited copies. Other files
+    /// only matter when compose has to find them (a new env file), so the
+    /// ones that don't exist yet are created for the check and removed after.
     pub async fn validate(&self, stack: &StackRef, edits: &[FileEdit]) -> Result<std::result::Result<(), String>> {
         let tmp = self.inner.data_dir.join("tmp").join(format!("validate-{}", crate::util::short_id()));
         tokio::fs::create_dir_all(&tmp).await?;
+        let mut created: Vec<PathBuf> = Vec::new();
+        for edit in edits.iter().filter(|e| !Self::is_stack_file(stack, &e.path)) {
+            let path = PathBuf::from(&edit.path);
+            if tokio::fs::try_exists(&path).await.unwrap_or(true) {
+                continue;
+            }
+            match create_parents(&path) {
+                Ok(dirs) => created.extend(dirs),
+                Err(e) => {
+                    tracing::debug!(error = %e, path = %path.display(), "could not create folders for validation")
+                }
+            }
+            if tokio::fs::write(&path, &edit.content).await.is_ok() {
+                created.push(path);
+            }
+        }
         let result = async {
             let mut files = stack.files.clone();
             let mut env_file = stack.env_file.clone();
@@ -527,6 +569,14 @@ impl ComposeService {
         }
         .await;
         let _ = tokio::fs::remove_dir_all(&tmp).await;
+        // Files first, then the folders made for them (deepest first).
+        for path in created.iter().rev() {
+            if path.is_dir() {
+                let _ = tokio::fs::remove_dir(path).await;
+            } else {
+                let _ = tokio::fs::remove_file(path).await;
+            }
+        }
         result
     }
 
@@ -552,9 +602,102 @@ impl ComposeService {
         Ok(out)
     }
 
-    /// Checks that a write target belongs to the stack.
+    /// The stack's compose files and its `.env`.
     pub fn is_stack_file(stack: &StackRef, path: &str) -> bool {
         stack.files.iter().any(|f| f == path) || Path::new(path) == stack.env_path()
+    }
+
+    /// Resolves a path from the stack editor (relative to the stack folder,
+    /// or absolute) to a file it may read and write: inside the stack's
+    /// folder, or inside a configured stacks folder (for env files several
+    /// stacks share). Symlinks can't lead outside.
+    pub fn resolve_file(&self, stack: &StackRef, path: &str) -> Result<PathBuf> {
+        if Self::is_stack_file(stack, path) {
+            return Ok(PathBuf::from(path));
+        }
+        let raw = Path::new(path);
+        let joined = if raw.is_absolute() { raw.to_path_buf() } else { Path::new(&stack.dir).join(raw) };
+        let normal = crate::util::fsx::normalize(&joined)
+            .ok_or_else(|| AppError::forbidden(format!("{path} is outside the stack folder")))?;
+        let mut roots = vec![PathBuf::from(&stack.dir)];
+        roots.extend(self.inner.settings.get().docker.stacks_dirs.iter().map(PathBuf::from));
+        for root in roots {
+            let Ok(rel) = normal.strip_prefix(&root) else { continue };
+            if rel.as_os_str().is_empty() {
+                continue;
+            }
+            if let Ok(resolved) = crate::util::fsx::confine(&root, &rel.to_string_lossy()) {
+                return Ok(resolved);
+            }
+        }
+        Err(AppError::forbidden(format!("{} is outside the stack folder", normal.display())))
+    }
+
+    /// Reads any text file of the stack for the editor. Missing files come
+    /// back empty (saving creates them).
+    pub async fn read_file(&self, stack: &StackRef, path: &str) -> Result<EditorFile> {
+        let resolved = self.resolve_file(stack, path)?;
+        let path_str = resolved.to_string_lossy().into_owned();
+        let name = display_name(&stack.dir, &path_str);
+        let mut file = EditorFile { path: path_str, name, content: String::new(), exists: false, error: None };
+        match tokio::fs::metadata(&resolved).await {
+            Ok(meta) if meta.is_dir() => return Err(AppError::bad_request(format!("{} is a folder", file.name))),
+            Ok(meta) if meta.len() > crate::files::MAX_EDIT_BYTES => {
+                file.exists = true;
+                file.error = Some("This file is too large to edit here (over 2 MB).".into());
+            }
+            Ok(_) => {
+                let bytes = tokio::fs::read(&resolved).await?;
+                file.exists = true;
+                if crate::util::fsx::looks_binary(&bytes) {
+                    file.error = Some("This isn't a text file.".into());
+                } else {
+                    file.content = String::from_utf8_lossy(&bytes).into_owned();
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+        Ok(file)
+    }
+
+    /// Lists the stack folder for the editor's file picker: a few levels
+    /// deep, without version control, dependency or trash folders, and
+    /// without following symlinks.
+    pub fn tree(stack: &StackRef) -> (Vec<TreeEntry>, bool) {
+        const MAX_ENTRIES: usize = 400;
+        const MAX_DEPTH: usize = 3;
+        const PER_DIR: usize = 150;
+        const SKIP: &[&str] = &[".git", "node_modules", ".trash", "__pycache__", ".venv", ".cache"];
+        let root = PathBuf::from(&stack.dir);
+        let mut out = Vec::new();
+        let mut queue = std::collections::VecDeque::from([(root.clone(), 0usize)]);
+        while let Some((dir, depth)) = queue.pop_front() {
+            let Ok(read) = std::fs::read_dir(&dir) else { continue };
+            let mut items: Vec<_> = read.flatten().take(PER_DIR).collect();
+            items.sort_by_key(|e| e.file_name());
+            for e in items {
+                if out.len() >= MAX_ENTRIES {
+                    return (out, true);
+                }
+                let Ok(kind) = e.file_type() else { continue };
+                let name = e.file_name().to_string_lossy().into_owned();
+                let path = e.path();
+                let rel = path.strip_prefix(&root).map(|p| p.to_string_lossy().into_owned()).unwrap_or(name.clone());
+                if kind.is_dir() {
+                    if SKIP.contains(&name.as_str()) {
+                        continue;
+                    }
+                    out.push(TreeEntry { path: rel, dir: true, size: 0 });
+                    if depth + 1 < MAX_DEPTH {
+                        queue.push_back((path, depth + 1));
+                    }
+                } else if kind.is_file() {
+                    out.push(TreeEntry { path: rel, dir: false, size: e.metadata().map(|m| m.len()).unwrap_or(0) });
+                }
+            }
+        }
+        (out, false)
     }
 
     /// Computes the file edits that point a service at a new tag.
@@ -608,7 +751,15 @@ impl ComposeService {
     }
 
     /// Creates a new stack folder with the given files (not deployed yet).
-    pub async fn create_stack(&self, name: &str, compose: &str, env: Option<&str>) -> Result<StackRef> {
+    /// `extra` files (a Dockerfile, env files, app configs) have paths
+    /// relative to the new folder.
+    pub async fn create_stack(
+        &self,
+        name: &str,
+        compose: &str,
+        env: Option<&str>,
+        extra: &[FileEdit],
+    ) -> Result<StackRef> {
         if !valid_stack_name(name) {
             return Err(AppError::bad_request(
                 "stack names use lowercase letters, digits, '-' and '_' and start with a letter or digit",
@@ -630,11 +781,35 @@ impl ComposeService {
         if dir.exists() {
             return Err(AppError::conflict(format!("{} already exists", dir.display())));
         }
+        let mut targets = Vec::new();
+        for f in extra {
+            let target = crate::util::fsx::normalize(&dir.join(&f.path))
+                .filter(|p| p.starts_with(&dir) && *p != dir)
+                .ok_or_else(|| AppError::bad_request(format!("{} is outside the stack folder", f.path)))?;
+            if target == dir.join("compose.yaml") || target == dir.join(".env") {
+                return Err(AppError::bad_request(format!("{} is written from the compose and .env fields", f.path)));
+            }
+            targets.push((target, &f.content));
+        }
         tokio::fs::create_dir_all(&dir).await?;
         let compose_path = dir.join("compose.yaml");
-        tokio::fs::write(&compose_path, compose).await?;
-        if let Some(env) = env.filter(|e| !e.trim().is_empty()) {
-            tokio::fs::write(dir.join(".env"), env).await?;
+        let written = async {
+            tokio::fs::write(&compose_path, compose).await?;
+            if let Some(env) = env.filter(|e| !e.trim().is_empty()) {
+                tokio::fs::write(dir.join(".env"), env).await?;
+            }
+            for (target, content) in &targets {
+                if let Some(parent) = target.parent() {
+                    tokio::fs::create_dir_all(parent).await?;
+                }
+                tokio::fs::write(target, content).await?;
+            }
+            Ok::<_, std::io::Error>(())
+        }
+        .await;
+        if let Err(e) = written {
+            let _ = tokio::fs::remove_dir_all(&dir).await;
+            return Err(e.into());
         }
         let stack = StackRef {
             name: name.to_string(),
@@ -673,6 +848,24 @@ impl ComposeService {
 
 fn display_name(dir: &str, path: &str) -> String {
     Path::new(path).strip_prefix(dir).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| path.to_string())
+}
+
+/// Creates the missing folders above `path`; returns them, outermost first.
+pub fn create_parents(path: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut missing = Vec::new();
+    let mut cur = path.parent();
+    while let Some(p) = cur {
+        if p.as_os_str().is_empty() || p.exists() {
+            break;
+        }
+        missing.push(p.to_path_buf());
+        cur = p.parent();
+    }
+    missing.reverse();
+    for d in &missing {
+        std::fs::create_dir(d)?;
+    }
+    Ok(missing)
 }
 
 fn redact_args(args: &[String]) -> String {
@@ -735,6 +928,38 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files[0].ends_with("docker-compose.yml"));
         assert!(files[1].ends_with("docker-compose.override.yml"));
+    }
+
+    #[test]
+    fn creates_missing_parents() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("app/conf/x.env");
+        let made = create_parents(&file).unwrap();
+        assert_eq!(made, vec![dir.path().join("app"), dir.path().join("app/conf")]);
+        assert!(dir.path().join("app/conf").is_dir());
+        assert!(create_parents(&file).unwrap().is_empty());
+    }
+
+    #[test]
+    fn tree_lists_the_stack_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("compose.yaml"), "services: {}").unwrap();
+        std::fs::create_dir_all(dir.path().join("app/.git")).unwrap();
+        std::fs::write(dir.path().join("app/Dockerfile"), "FROM alpine").unwrap();
+        std::fs::create_dir_all(dir.path().join("node_modules/x")).unwrap();
+        let stack = StackRef {
+            name: "t".into(),
+            dir: dir.path().to_string_lossy().into_owned(),
+            files: vec![],
+            env_file: None,
+        };
+        let (entries, truncated) = ComposeService::tree(&stack);
+        let paths: Vec<_> = entries.iter().map(|e| (e.path.replace('\\', "/"), e.dir)).collect();
+        assert!(!truncated);
+        assert_eq!(
+            paths,
+            vec![("app".to_string(), true), ("compose.yaml".to_string(), false), ("app/Dockerfile".to_string(), false)]
+        );
     }
 
     #[test]

@@ -44,6 +44,7 @@ type ServerEvent =
 
 const HIDE_GRACE_MS = 60_000;
 const TRAIL = 40;
+const REMOVED_KEEP = 200;
 
 function sortKey(c: ContainerView): string {
   // Stacks first (alphabetical), standalone containers last.
@@ -90,6 +91,9 @@ class Live {
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
   private taskLogListeners = new Map<string, Set<(lines: string[]) => void>>();
   private started = false;
+  /** Recently removed container ids. Ids are never reused, so a snapshot
+   * fetched just before a removal must not bring one back. */
+  private removed = new Set<string>();
 
   /** Loads the snapshot and opens the event stream. */
   async start(): Promise<void> {
@@ -119,7 +123,7 @@ class Live {
         api.get<{ checks: UptimeStatus[] }>('/uptime'),
       ]);
       const next: Record<string, ContainerView> = {};
-      for (const c of list.containers) next[c.id] = c;
+      for (const c of list.containers) if (!this.removed.has(c.id)) next[c.id] = c;
       this.containers = next;
       this.dockerConnected = list.docker_connected;
       this.checkingUpdates = list.checking_updates;
@@ -258,6 +262,11 @@ class Live {
         this.mergeContainer(ev.data);
         break;
       case 'container_removed':
+        this.removed.add(ev.data.id);
+        for (const id of this.removed) {
+          if (this.removed.size <= REMOVED_KEEP) break;
+          this.removed.delete(id);
+        }
         if (this.containers[ev.data.id]) delete this.containers[ev.data.id];
         break;
       case 'stacks_changed':
@@ -327,7 +336,7 @@ class Live {
   }
 
   private mergeContainer(s: ContainerSummary): void {
-    if (isInternal(s.name)) return;
+    if (isInternal(s.name) || this.removed.has(s.id)) return;
     const existing = this.containers[s.id];
     if (existing) {
       Object.assign(existing, s);
@@ -336,6 +345,9 @@ class Live {
     // A recreated container keeps its identity; carry its view over.
     const previous = this.byIdentity.get(s.identity);
     if (previous) {
+      // Late events from the container being replaced (stopping, then
+      // removed): its successor already has the view.
+      if (s.created < previous.created) return;
       const moved: ContainerView = { ...previous, ...s };
       delete this.containers[previous.id];
       this.containers[s.id] = moved;

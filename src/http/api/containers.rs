@@ -645,13 +645,7 @@ async fn tags(State(app): State<App>, Path(id): Path<String>, Query(q): Query<Ta
     let r = ImageRef::parse(&e.summary.image).ok_or_else(|| AppError::bad_request("image reference is not valid"))?;
     let tags = app.registry.tags(&r, q.refresh).await?;
     let current = r.tag_or_latest().to_string();
-    let (mut channels, mut versions): (Vec<&crate::registry::client::TagInfo>, Vec<&crate::registry::client::TagInfo>) =
-        tags.iter().partition(|t| crate::registry::version::is_channel_tag(&t.name));
-    channels.retain(|t| !t.name.starts_with("sha256") && !t.name.starts_with("sha-") && t.name.len() < 40);
-    // Version tags of the same line as the current tag first.
-    if let Some(cur) = crate::registry::version::Version::parse(&current) {
-        versions.sort_by_key(|t| crate::registry::version::Version::parse(&t.name).is_none_or(|v| !v.comparable(&cur)));
-    }
+    let (channels, versions) = split_tags(&tags, &current);
     let info = app.updates.get(&e.summary.identity);
     Ok(Json(json!({
         "current": current,
@@ -661,6 +655,21 @@ async fn tags(State(app): State<App>, Path(id): Path<String>, Query(q): Query<Ta
         "update": info,
         "is_compose": e.summary.stack.is_some(),
     })))
+}
+
+/// Splits tags into channels ("latest", "develop") and versions, with
+/// versions of the same line as `current` first.
+pub fn split_tags<'a>(
+    tags: &'a [crate::registry::client::TagInfo],
+    current: &str,
+) -> (Vec<&'a crate::registry::client::TagInfo>, Vec<&'a crate::registry::client::TagInfo>) {
+    let (mut channels, mut versions): (Vec<_>, Vec<_>) =
+        tags.iter().partition(|t| crate::registry::version::is_channel_tag(&t.name));
+    channels.retain(|t| !t.name.starts_with("sha256") && !t.name.starts_with("sha-") && t.name.len() < 40);
+    if let Some(cur) = crate::registry::version::Version::parse(current) {
+        versions.sort_by_key(|t| crate::registry::version::Version::parse(&t.name).is_none_or(|v| !v.comparable(&cur)));
+    }
+    (channels, versions)
 }
 
 #[derive(Deserialize)]
