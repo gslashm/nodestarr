@@ -672,6 +672,16 @@ export interface PveNode {
   ksm_shared: number;
 }
 
+/** A cluster member, from Proxmox's cluster resources. */
+export interface PveNodeSummary {
+  node: string;
+  online: boolean;
+  cpu: number;
+  cpus: number;
+  mem: number;
+  maxmem: number;
+}
+
 export interface PveGuest {
   vmid: number;
   name: string;
@@ -704,6 +714,7 @@ export interface PveStorage {
 
 export interface PveOverview {
   node: PveNode;
+  nodes: PveNodeSummary[];
   guests: PveGuest[];
   storages: PveStorage[];
   fetched_at: number;

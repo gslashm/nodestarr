@@ -5,7 +5,7 @@ on without the real thing. Python 3.10 or newer, standard library only.
 
 | Tool | What it is |
 |---|---|
-| `pve-mock.py` | A Proxmox VE API with one node, an LXC, a VM and a template, storages, snapshots, vzdump backups, tasks with logs, disks, package updates and history data. HTTPS with a fresh self-signed certificate on port 8006 (needs `openssl`). |
+| `pve-mock.py` | A Proxmox VE API with one node (and a second cluster member with a guest of its own), a few LXCs, a VM and a template, storages, snapshots, vzdump backups, tasks with logs, disks, package updates and history data. HTTPS with a fresh self-signed certificate on port 8006 (needs `openssl`). |
 | `webhook-sink.py` | Prints every request it receives, pretty-printing JSON. Port 9099. |
 
 ```sh

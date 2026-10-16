@@ -56,6 +56,11 @@ All notable changes to Nodestarr are listed here. The format follows
   it waits. Confirming an update warns about breaking changes. Home
   Assistant shows the type as the update's release summary, and
   `nodestarr_updates_available{type=...}` counts updates by type.
+- **Proxmox usage by guest**: donut charts on the Proxmox page show how
+  each node's CPU, memory, disk and network split across its guests,
+  with what the node uses itself and what is free. Pointing at a guest
+  highlights it in all four; in a cluster, switch between nodes.
+  `GET /proxmox/status` lists the cluster's nodes (`overview.nodes`).
 - **Automatic updates by type**: choose which types install on their own
   (by default rebuilds, patch and minor versions and updates of unknown
   size), let security fixes install regardless of their size (except major

@@ -71,8 +71,12 @@ no longer matches and the connection fails until you test and save again.
 
 **Proxmox** in the sidebar:
 
-- **Guests**: CPU, memory and root disk of the node, every LXC and VM with
-  its state, usage and uptime, and per guest: start, shut down, reboot,
+- **Guests**: CPU, memory and root disk of the node; how its CPU, memory,
+  disk and network split across its guests, as donut charts (the busiest
+  guests each get a slice, the rest share one; CPU and memory also show
+  what the node uses itself and what is free, and in a cluster you can
+  switch between nodes); every LXC and VM with its state, usage and
+  uptime, and per guest: start, shut down, reboot,
   force stop, suspend and resume (VMs), snapshots, "Back up now" (vzdump
   with mode, notes and protection) and history charts.
 - **Backups**: the vzdump backups on each storage, with size, notes and

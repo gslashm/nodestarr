@@ -114,7 +114,7 @@ container or stack run one at a time.
 
 ### Proxmox
 
-`GET /proxmox/status` (node, guests, storage), `POST
+`GET /proxmox/status` (node, the cluster's nodes, guests, storage), `POST
 /proxmox/guests/{vmid}/actions/{action}` (`start`, `shutdown`, `reboot`,
 `stop`, `suspend`, `resume`; for Nodestarr's own guest send
 `{"confirm_self": true}`), `GET`/`POST /proxmox/guests/{vmid}/snapshots`,

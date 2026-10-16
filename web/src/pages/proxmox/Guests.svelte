@@ -1,6 +1,7 @@
 <!--
-  The Proxmox node at a glance and its guests (containers and VMs), with
-  power actions, snapshots, vzdump backups and history charts per guest.
+  The Proxmox node at a glance, how its resources split across guests, and
+  its guests (containers and VMs), with power actions, snapshots, vzdump
+  backups and history charts per guest.
 -->
 <script lang="ts">
   import Archive from '@lucide/svelte/icons/archive';
@@ -21,6 +22,7 @@
   import { ui } from '../../lib/ui.svelte';
   import GuestBackup from './GuestBackup.svelte';
   import GuestSnapshots from './GuestSnapshots.svelte';
+  import GuestUsage from './GuestUsage.svelte';
   import RrdCharts from './RrdCharts.svelte';
 
   let { overview }: { overview: PveOverview; selfVmid: number | null; reload: () => Promise<void> } = $props();
@@ -120,6 +122,8 @@
     <p class="sub ellipsis" title={n.cpu_model}>{n.cpu_model}</p>
   </section>
 </div>
+
+<GuestUsage {overview} />
 
 <div class="bar">
   <h2>Guests</h2>
