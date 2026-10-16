@@ -70,6 +70,7 @@ container or stack run one at a time.
 | `GET /containers/{id}/releases` | Release notes. |
 | `POST /containers/{id}/rollback` | Roll back an update: `{"history_id": 12}` (the last one when left out). |
 | `POST /containers/{id}/skip`, `PUT /containers/{id}/hold` | Skip the current build; hold or release automatic updates (`{"held": true}`). |
+| `PUT /containers/{id}/dismiss` | Hide a dashboard "needs attention" item: `{"kind": "crash", "fingerprint": "..."}`. Kinds are `crash`, `health`, `web`, `app`, `held` and `update`; a fingerprint of `"*"` hides every occurrence of that kind, `null` shows it again. |
 
 ### Stacks
 

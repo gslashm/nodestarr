@@ -30,6 +30,7 @@
   import ContainerGrid from '../components/ContainerGrid.svelte';
   import { backupNow, confirmUpdate, containerMenu, runAction, stackAction, startUpdate, webUrl } from '../lib/actions';
   import { api } from '../lib/api';
+  import { hasProblem } from '../lib/attention';
   import { clock } from '../lib/clock.svelte';
   import { bytes, duration, hasUpdate, imageTag, isUp, plural, shortImage, stateOf, updateLabel } from '../lib/format';
   import { live } from '../lib/live.svelte';
@@ -69,10 +70,7 @@
     }
   }
 
-  function needsAttention(c: ContainerView): boolean {
-    const s = stateOf(c);
-    return s === 'unhealthy' || s === 'crashed' || s === 'restarting' || s === 'dead' || c.uptime?.state === 'down' || !!c.app_status?.health.some((h) => h.level === 'error');
-  }
+  const needsAttention = hasProblem;
 
   const counts = $derived({
     all: live.list.length,

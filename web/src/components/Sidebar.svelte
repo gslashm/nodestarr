@@ -19,7 +19,8 @@
   import Settings from '@lucide/svelte/icons/settings';
   import Sun from '@lucide/svelte/icons/sun';
   import User from '@lucide/svelte/icons/user';
-  import { hasUpdate, stateOf } from '../lib/format';
+  import { concerns } from '../lib/attention';
+  import { hasUpdate } from '../lib/format';
   import { live } from '../lib/live.svelte';
   import { href, router } from '../lib/router.svelte';
   import { session } from '../lib/session.svelte';
@@ -30,12 +31,7 @@
   import TaskTray from './TaskTray.svelte';
 
   const updates = $derived(live.list.filter((c) => hasUpdate(c.update) && c.policy !== 'ignore').length);
-  const failing = $derived(
-    live.list.filter((c) => {
-      const s = stateOf(c);
-      return s === 'unhealthy' || s === 'crashed' || s === 'restarting';
-    }).length,
-  );
+  const failing = $derived(live.list.filter((c) => concerns(c).some((x) => !x.hidden && (x.kind === 'crash' || x.kind === 'health'))).length);
   const alerts = $derived(live.alerts.length);
   const proxmox = $derived(!!session.settings?.proxmox.enabled);
 

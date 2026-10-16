@@ -136,10 +136,13 @@ export interface PrefsBrief {
   skipped_digest: string;
   backup_enabled: boolean;
   alerts_muted: boolean;
+  /** Dismissed "needs attention" items: kind to fingerprint, "*" for always. */
+  dismissed: Record<string, string>;
 }
 
 export interface UptimeBrief {
   state: string;
+  since: number;
   latency_ms: number | null;
   uptime_24h: number | null;
 }
@@ -878,6 +881,7 @@ export interface ContainerPrefs {
   hidden: boolean;
   web_url: string;
   alerts_muted: boolean;
+  dismissed: Record<string, string>;
   update: {
     policy: UpdatePolicy | null;
     auto_scope: TagScope | null;
