@@ -29,7 +29,7 @@ Each container device has:
 |---|---|---|
 | Status | sensor | `running`, `exited`, `paused`, ... with the health, version and usage as attributes. |
 | Version | sensor | The app version Nodestarr detected. |
-| Image | update | Shows the installed and latest version, so container updates appear in Home Assistant's Updates panel. |
+| Image | update | Shows the installed and latest version, so container updates appear in Home Assistant's Updates panel, with the update's type as its release summary ("Minor version, security fixes") and a link to its release notes. |
 | Running | switch | Starts and stops the container. Only with controls on (below). |
 | Restart | button | Only with controls on. |
 | CPU, Memory | sensors | Only with the CPU and memory sensors on. |

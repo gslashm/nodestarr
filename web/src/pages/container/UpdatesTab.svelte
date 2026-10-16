@@ -1,6 +1,8 @@
 <!--
-  Updates for one container: current state and actions, switching to another
-  tag (with a preview of the exact file change), release notes and history.
+  Updates for one container: current state, the update's type and what its
+  release notes say, what automatic updates will do, actions, switching to
+  another tag (with a preview of the exact file change), release notes and
+  history.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -9,21 +11,26 @@
   import Hand from '@lucide/svelte/icons/hand';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Search from '@lucide/svelte/icons/search';
+  import ShieldAlert from '@lucide/svelte/icons/shield-alert';
   import SkipForward from '@lucide/svelte/icons/skip-forward';
+  import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import Undo2 from '@lucide/svelte/icons/undo-2';
   import Button from '../../components/Button.svelte';
   import DiffView from '../../components/DiffView.svelte';
   import Spinner from '../../components/Spinner.svelte';
   import TimeAgo from '../../components/TimeAgo.svelte';
   import UpdateHistory from '../../components/UpdateHistory.svelte';
+  import UpdateTypeChips from '../../components/UpdateTypeChips.svelte';
   import { checkNow, confirmUpdate, startUpdate } from '../../lib/actions';
   import { api, errorMessage, qs, seg } from '../../lib/api';
-  import { dateTime, hasUpdate, imageTag, shortDigest, updateLabel } from '../../lib/format';
+  import { clock } from '../../lib/clock.svelte';
+  import { dateTime, hasUpdate, imageTag, plural, shortDigest, updateLabel } from '../../lib/format';
   import { renderMarkdown } from '../../lib/markdown';
   import { href } from '../../lib/router.svelte';
   import { session } from '../../lib/session.svelte';
-  import type { ContainerDetail, ContainerView, HistoryEntry, Release, TagInfo, TagScope, UpdateInfo } from '../../lib/types';
+  import type { ContainerDetail, ContainerView, HistoryEntry, Release, TagInfo, UpdateInfo } from '../../lib/types';
   import { ui } from '../../lib/ui.svelte';
+  import { autoPlan, changeOf, describeChange, rulesSummary } from '../../lib/updates';
 
   let { c }: { c: ContainerView; detail: ContainerDetail | null; reload: () => void } = $props();
 
@@ -42,13 +49,6 @@
     files: { path: string; diff: string }[];
   }
 
-  const SCOPE_TEXT: Record<TagScope, string> = {
-    digest: 'new builds of the same tag',
-    patch: 'patch versions',
-    minor: 'minor and patch versions',
-    major: 'every new version',
-  };
-
   let tags = $state<TagsResponse | null>(null);
   let tagsError = $state('');
   let tagsLoading = $state(false);
@@ -66,6 +66,9 @@
   const u = $derived(c.update);
   const admin = $derived(session.isAdmin);
   const currentTag = $derived(imageTag(c.image));
+  const ch = $derived(c.policy === 'ignore' ? null : changeOf(u));
+  const scan = $derived(ch?.notes ?? null);
+  const plan = $derived(autoPlan(c, clock.now));
 
   async function loadTags(refresh = false) {
     tagsLoading = true;
@@ -174,8 +177,14 @@
   function releaseMark(r: Release): string {
     const t = norm(r.tag);
     if (t && t === norm(c.version)) return 'Installed';
-    if (t && (t === norm(u?.latest_version) || t === norm(u?.newer_tag?.tag))) return 'Available';
+    if (t && (t === norm(u?.latest_version) || t === norm(u?.newer_tag?.tag) || r.url === scan?.url)) return 'Available';
+    if (scan?.releases.includes(r.tag)) return 'In this update';
     return '';
+  }
+
+  /** What the update's scan found in one release. */
+  function found(r: Release): Set<string> {
+    return new Set(scan?.findings.filter((f) => f.release === r.tag).map((f) => f.kind) ?? []);
   }
 
 </script>
@@ -189,7 +198,7 @@
             <span class="big text-update"><ArrowUp size={20} /> Update available</span>
             <span class="what">
               {#if u.newer_tag}
-                New tag <strong>{u.newer_tag.tag}</strong> ({u.newer_tag.scope} update)
+                New tag <strong>{u.newer_tag.tag}</strong>
               {:else}
                 New build of <strong>{currentTag}</strong>{u.latest_version ? `: ${u.latest_version}` : ''}
               {/if}
@@ -217,7 +226,32 @@
             <span class="big muted">Not checked yet</span>
             <span class="what">Check now to compare with the registry.</span>
           {/if}
+          {#if ch}
+            <div class="kind">
+              <UpdateTypeChips change={ch} />
+              <span class="muted">{describeChange(ch, currentTag)}</span>
+            </div>
+          {/if}
         </div>
+
+        {#if scan}
+          <div class="scan">
+            {#each scan.findings as f, i (i)}
+              <p class="finding {f.kind}">
+                {#if f.kind === 'breaking'}<TriangleAlert size={15} />{:else}<ShieldAlert size={15} />{/if}
+                <span><strong>{f.kind === 'breaking' ? 'Breaking change' : 'Security fix'}</strong> <span class="faint">in {f.release}:</span> {f.text}</span>
+              </p>
+            {/each}
+            <p class="faint small">
+              {#if !scan.releases.length}
+                No release on {scan.repo} matches this version, so Nodestarr couldn't check it for security fixes or breaking changes.
+              {:else}
+                {scan.findings.length ? 'From' : 'Nothing about security fixes or breaking changes in'} the release notes of {plural(scan.releases.length, 'release')} on {scan.repo}{scan.partial ? ' (the newest GitHub lists; older ones since your version weren’t read)' : ''}.
+              {/if}
+              {#if scan.url}<a href={scan.url} target="_blank" rel="noopener">Release page <ExternalLink size={12} /></a>{/if}
+            </p>
+          </div>
+        {/if}
 
         {#if admin}
           <div class="actions">
@@ -247,10 +281,21 @@
           {#if u?.source}<dt>Source</dt><dd><a href={u.source} target="_blank" rel="noopener">{u.source.replace(/^https?:\/\//, '')} <ExternalLink size={12} /></a></dd>{/if}
           <dt>Policy</dt>
           <dd>
-            {#if c.policy === 'auto'}Installs {SCOPE_TEXT[c.auto_scope]} automatically{:else if c.policy === 'notify'}Tells you about updates; installs nothing on its own{:else}Ignored{/if}
+            {#if c.policy === 'auto'}Updates automatically{:else if c.policy === 'notify'}Tells you about updates; installs nothing on its own{:else}Ignored{/if}
             {#if c.prefs.held}<span class="chip warn-chip">On hold</span>{/if}
             <a href={href(`/containers/${encodeURIComponent(c.name)}/settings`)} class="faint">Change</a>
+            {#if c.policy === 'auto'}<span class="faint small rules">Installs on its own: {rulesSummary(c.auto_install)}</span>{/if}
           </dd>
+          {#if plan}
+            <dt>This update</dt>
+            <dd>
+              {#if plan.install}
+                <span><span class="text-ok">Installs on its own</span>{plan.after ? ` after ${dateTime(plan.after)}` : ' at the next automatic update run'}{plan.tag ? `, switching to ${plan.tag}` : ''}.</span>
+              {:else}
+                <span>Waits for you: {plan.reason.charAt(0).toLowerCase() + plan.reason.slice(1)}.</span>
+              {/if}
+            </dd>
+          {/if}
           {#if c.prefs.skipped_digest}
             <dt>Skipped</dt>
             <dd>
@@ -373,10 +418,13 @@
       {:else}
         {#each notes.releases.slice(0, 12) as r, i (r.tag)}
           {@const mark = releaseMark(r)}
-          <details open={i === 0 || mark === 'Available'}>
+          {@const kinds = found(r)}
+          <details open={i === 0 || mark === 'Available' || kinds.size > 0}>
             <summary>
               <span class="rel-name">{r.name || r.tag}</span>
-              {#if mark}<span class="chip mark {mark === 'Available' ? 'avail' : ''}">{mark}</span>{/if}
+              {#if mark}<span class="chip mark {mark === 'Available' ? 'avail' : mark === 'In this update' ? 'incl' : ''}">{mark}</span>{/if}
+              {#if kinds.has('security')}<span class="chip t-security"><ShieldAlert size={12} />Security</span>{/if}
+              {#if kinds.has('breaking')}<span class="chip t-breaking"><TriangleAlert size={12} />Breaking</span>{/if}
               {#if r.prerelease}<span class="chip">pre-release</span>{/if}
               <span class="grow"></span>
               {#if r.published_at}<span class="faint small num">{dateTime(Date.parse(r.published_at) / 1000)}</span>{/if}
@@ -415,6 +463,43 @@
   }
   .what {
     color: var(--text-2);
+  }
+  .kind {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin-top: 6px;
+  }
+  .scan {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--raised);
+  }
+  .scan p {
+    margin: 0;
+  }
+  .finding {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .finding :global(svg) {
+    flex: none;
+    margin-top: 3px;
+  }
+  .finding.breaking :global(svg) {
+    color: var(--bad);
+  }
+  .finding.security :global(svg) {
+    color: var(--warn);
+  }
+  .facts .rules {
+    flex-basis: 100%;
   }
   .actions {
     display: flex;
@@ -583,6 +668,9 @@
   }
   .mark.avail {
     color: var(--update);
+  }
+  .mark.incl {
+    color: var(--text-2);
   }
   .body {
     margin: 4px 0 8px 16px;

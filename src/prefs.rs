@@ -13,13 +13,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Db;
 use crate::error::Result;
-use crate::settings::{BackupStrategy, Settings, TagScope, UpdatePolicy};
+use crate::settings::{AutoInstall, BackupStrategy, Settings, TagScope, UpdatePolicy};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct UpdatePrefs {
     /// None inherits the global default.
     pub policy: Option<UpdatePolicy>,
+    /// Which updates install automatically; None inherits the global default.
+    pub auto_install: Option<AutoInstall>,
+    /// Before update types (see [`AutoInstall::from_scope`]). Read from older
+    /// preferences by [`ContainerPrefs::upgrade`], never written.
+    #[serde(skip_serializing)]
     pub auto_scope: Option<TagScope>,
     /// "Skip this version": auto-update ignores this remote digest.
     pub skipped_digest: String,
@@ -98,8 +103,16 @@ impl ContainerPrefs {
         self.update.policy.unwrap_or(settings.updates.default_policy)
     }
 
-    pub fn auto_scope(&self, settings: &Settings) -> TagScope {
-        self.update.auto_scope.unwrap_or(settings.updates.default_auto_scope)
+    pub fn auto_install(&self, settings: &Settings) -> AutoInstall {
+        self.update.auto_install.unwrap_or(settings.updates.auto_install)
+    }
+
+    /// Carries choices stored by older versions over to the fields that
+    /// replaced them.
+    pub fn upgrade(&mut self) {
+        if let Some(scope) = self.update.auto_scope.take() {
+            self.update.auto_install = Some(AutoInstall::from_scope(scope));
+        }
     }
 
     pub fn min_age_hours(&self, settings: &Settings) -> u32 {
@@ -133,7 +146,8 @@ impl PrefsStore {
         let mut map = HashMap::new();
         for (identity, value) in rows {
             match serde_json::from_str::<ContainerPrefs>(&value) {
-                Ok(p) => {
+                Ok(mut p) => {
+                    p.upgrade();
                     map.insert(identity, Arc::new(p));
                 }
                 Err(err) => tracing::warn!(%identity, %err, "ignoring unreadable container preferences"),
@@ -151,7 +165,8 @@ impl PrefsStore {
         self.cache.read().clone()
     }
 
-    pub async fn set(&self, identity: &str, prefs: ContainerPrefs) -> Result<Arc<ContainerPrefs>> {
+    pub async fn set(&self, identity: &str, mut prefs: ContainerPrefs) -> Result<Arc<ContainerPrefs>> {
+        prefs.upgrade();
         let identity_owned = identity.to_string();
         if prefs == ContainerPrefs::default() {
             self.db
@@ -228,5 +243,18 @@ mod tests {
         // Resetting to defaults deletes the row.
         reloaded.set("compose:media/sonarr", ContainerPrefs::default()).await.unwrap();
         assert!(reloaded.all().is_empty());
+    }
+
+    #[tokio::test]
+    async fn older_auto_update_scope_carries_over() {
+        let db = Db::open_in_memory().unwrap();
+        let store = PrefsStore::load(db.clone()).await.unwrap();
+        let old: ContainerPrefs = serde_json::from_str(r#"{"update": {"auto_scope": "minor"}}"#).unwrap();
+        store.set("standalone:pg", old).await.unwrap();
+        let p = PrefsStore::load(db).await.unwrap().get("standalone:pg");
+        let rules = p.update.auto_install.expect("carried over");
+        assert!(rules.minor && rules.switch_tags && !rules.major);
+        assert_eq!(p.update.auto_scope, None);
+        assert_eq!(p.auto_install(&Settings::default()), rules);
     }
 }

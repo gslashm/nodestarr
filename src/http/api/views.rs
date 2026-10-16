@@ -10,7 +10,7 @@ use crate::app::App;
 use crate::docker::model::ContainerSummary;
 use crate::integrations::AppStatus;
 use crate::monitor::stats::LiveStat;
-use crate::settings::{TagScope, UpdatePolicy};
+use crate::settings::{AutoInstall, UpdatePolicy};
 use crate::updates::UpdateInfo;
 
 #[derive(Debug, Clone, Serialize)]
@@ -41,7 +41,10 @@ pub struct ContainerView {
     pub summary: Arc<ContainerSummary>,
     pub display_name: String,
     pub policy: UpdatePolicy,
-    pub auto_scope: TagScope,
+    /// Which updates install automatically (its own choice or the default).
+    pub auto_install: AutoInstall,
+    /// Hours an update must be out before it installs automatically.
+    pub min_age_hours: u32,
     pub update: Option<Arc<UpdateInfo>>,
     pub prefs: PrefsBrief,
     pub stats: Option<LiveStat>,
@@ -80,7 +83,8 @@ pub fn container_view(app: &App, ctx: &ViewContext, summary: Arc<ContainerSummar
     ContainerView {
         display_name,
         policy: prefs.update_policy(&settings),
-        auto_scope: prefs.auto_scope(&settings),
+        auto_install: prefs.auto_install(&settings),
+        min_age_hours: prefs.min_age_hours(&settings),
         update: ctx.updates.get(&identity).cloned(),
         prefs: PrefsBrief {
             tags: prefs.tags.clone(),

@@ -6,6 +6,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import AppIcon from '../../components/AppIcon.svelte';
+  import AutoInstallEditor from '../../components/AutoInstallEditor.svelte';
   import Button from '../../components/Button.svelte';
   import Field from '../../components/Field.svelte';
   import ListEditor from '../../components/ListEditor.svelte';
@@ -17,7 +18,8 @@
   import { shortDigest } from '../../lib/format';
   import { href } from '../../lib/router.svelte';
   import { session } from '../../lib/session.svelte';
-  import type { BackupPlan, ContainerDetail, ContainerPrefs, ContainerView, TagScope, UpdatePolicy } from '../../lib/types';
+  import type { BackupPlan, ContainerDetail, ContainerPrefs, ContainerView, UpdatePolicy } from '../../lib/types';
+  import { rulesSummary } from '../../lib/updates';
   import { ui } from '../../lib/ui.svelte';
 
   let { c, reload }: { c: ContainerView; detail: ContainerDetail | null; reload: () => void } = $props();
@@ -35,12 +37,6 @@
   const dirty = $derived(!!form && JSON.stringify(form) !== saved);
 
   const POLICY: Record<UpdatePolicy, string> = { notify: 'Tell me', auto: 'Install automatically', ignore: "Don't check" };
-  const SCOPE: Record<TagScope, string> = {
-    digest: 'New builds of the same tag',
-    patch: 'Patch versions (1.2.3 → 1.2.4)',
-    minor: 'Minor versions (1.2 → 1.3)',
-    major: 'Any new version (1 → 2)',
-  };
   const STRATEGY: Record<string, string> = {
     auto: 'Automatic (pause apps with databases)',
     pause: 'Pause while copying',
@@ -187,11 +183,16 @@
             </select>
           </Field>
           {#if (form.update.policy ?? s?.updates.default_policy) === 'auto'}
-            <Field label="Install automatically" id="p-scope" hint="Bigger version jumps are only reported, never installed on their own.">
-              <select id="p-scope" class="input" bind:value={form.update.auto_scope}>
-                <option value={null}>Default ({SCOPE[s?.updates.default_auto_scope ?? 'digest']})</option>
-                {#each Object.entries(SCOPE) as [k, label] (k)}<option value={k}>{label}</option>{/each}
-              </select>
+            <Field label="Install on their own" hint="Updates of other types wait for you on the Updates page.">
+              <Toggle
+                checked={form.update.auto_install === null}
+                label="Use the default"
+                hint={s ? rulesSummary(s.updates.auto_install) : ''}
+                onchange={(useDefault) => form && (form.update.auto_install = useDefault ? null : { ...(s?.updates.auto_install ?? c.auto_install) })}
+              />
+              {#if form.update.auto_install}
+                <div class="own-rules"><AutoInstallEditor bind:value={form.update.auto_install} /></div>
+              {/if}
             </Field>
             <Field label="Wait before installing" id="p-age" hint="Hours a release must be out before it's installed automatically. Empty uses the default.">
               <input
@@ -391,6 +392,11 @@
     align-items: center;
     gap: 10px;
     padding-top: 6px;
+  }
+  .own-rules {
+    margin-top: 6px;
+    padding: 10px 0 2px 14px;
+    border-left: 2px solid var(--line-strong);
   }
   .small {
     font-size: var(--fs-sm);

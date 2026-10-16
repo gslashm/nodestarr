@@ -35,7 +35,10 @@ impl SettingsStore {
         let stored: Option<serde_json::Value> = db.get_json("settings", SETTINGS_KEY.to_string()).await?;
         let settings = match stored {
             Some(value) => match serde_json::from_value::<Settings>(value) {
-                Ok(s) => s,
+                Ok(mut s) => {
+                    s.upgrade();
+                    s
+                }
                 Err(err) => {
                     // Never brick the app over a settings document; fall back to
                     // defaults but keep the stored copy untouched for inspection.
@@ -71,6 +74,8 @@ impl SettingsStore {
         let _guard = self.write_lock.lock().await;
         let mut next = (*self.get()).clone();
         f(&mut next)?;
+        // Documents from an older Nodestarr (an import, a stale browser tab).
+        next.upgrade();
         next.validate().map_err(AppError::BadRequest)?;
         self.db.put_json("settings", SETTINGS_KEY.to_string(), &next).await?;
         let next = Arc::new(next);

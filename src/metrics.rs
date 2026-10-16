@@ -3,6 +3,7 @@
 use std::fmt::Write as _;
 
 use crate::app::App;
+use crate::updates::classify::Bump;
 
 fn esc(v: &str) -> String {
     v.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
@@ -75,6 +76,38 @@ pub async fn render(app: &App) -> String {
             o.sample("nodestarr_container_network_receive_bytes_per_second", &labels, s.net_rx);
             o.sample("nodestarr_container_network_transmit_bytes_per_second", &labels, s.net_tx);
         }
+    }
+
+    o.help(
+        "nodestarr_updates_available",
+        "gauge",
+        "Available updates by type; one with security fixes or breaking changes also counts as those",
+    );
+    let mut by_type =
+        [("major", 0), ("minor", 0), ("patch", 0), ("rebuild", 0), ("unknown", 0), ("security", 0), ("breaking", 0)];
+    let mut count = |t: &str| {
+        if let Some((_, n)) = by_type.iter_mut().find(|(k, _)| *k == t) {
+            *n += 1;
+        }
+    };
+    for u in containers.iter().filter_map(|c| updates.get(&c.identity)).filter(|u| u.has_update()) {
+        let change = u.change.clone().unwrap_or_default();
+        count(match change.bump {
+            Bump::Major => "major",
+            Bump::Minor => "minor",
+            Bump::Patch => "patch",
+            Bump::Rebuild => "rebuild",
+            Bump::Unknown => "unknown",
+        });
+        if change.security {
+            count("security");
+        }
+        if change.breaking {
+            count("breaking");
+        }
+    }
+    for (t, n) in by_type {
+        o.sample("nodestarr_updates_available", &[("type", t)], f64::from(n));
     }
 
     o.help("nodestarr_uptime_check_up", "gauge", "1 when the check is answering");

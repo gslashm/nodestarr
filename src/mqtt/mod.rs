@@ -69,6 +69,11 @@ fn object_id(identity: &str) -> String {
     crate::util::slug(identity)
 }
 
+fn upper_first(s: &str) -> String {
+    let mut chars = s.chars();
+    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+}
+
 fn state_topic(s: &MqttSettings, id: &str) -> String {
     format!("{}/{id}/state", s.base_topic)
 }
@@ -316,11 +321,17 @@ async fn publish_states(app: &App, client: &AsyncClient, s: &MqttSettings) {
                 .unwrap_or_else(|| format!("{installed} (new build)")),
             _ => installed.clone(),
         };
+        let change = info.and_then(|i| i.offered().cloned());
+        // Home Assistant shows these under the update (at most 255 characters).
+        let summary = change.as_ref().map(|c| crate::util::truncate(&upper_first(&c.summary()), 255));
+        let url = change.as_ref().and_then(|c| c.notes.as_ref()).and_then(|n| n.url.clone());
         let upd = json!({
             "installed_version": installed,
             "latest_version": latest,
             "title": crate::updates::check::display_name(app, &e),
             "in_progress": app.tasks.is_busy(&sm.identity),
+            "release_summary": summary,
+            "release_url": url,
         });
         publish_json(client, update_topic(s, &id), &upd, true).await;
     }
