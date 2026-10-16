@@ -1,7 +1,9 @@
 <!--
-  Edit a standalone container's settings. Applying recreates the container
-  with the new settings (data in volumes and folders is kept); if the new
-  one doesn't stay up, the old one is put back.
+  Edit a container's settings. A stack's container is edited as its service
+  in the stack's compose files (saving can recreate just this service). A
+  standalone container is recreated with the new settings (data in volumes
+  and folders is kept); if the new one doesn't stay up, the old one is put
+  back.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -13,7 +15,9 @@
   import EmptyState from '../../components/EmptyState.svelte';
   import SpecForm from '../../components/SpecForm.svelte';
   import Spinner from '../../components/Spinner.svelte';
+  import StudioView from '../../components/studio/Studio.svelte';
   import { api, errorMessage, seg } from '../../lib/api';
+  import { Studio } from '../../lib/compose/studio.svelte';
   import { href } from '../../lib/router.svelte';
   import { session } from '../../lib/session.svelte';
   import type { ContainerDetail, ContainerSpec, ContainerView } from '../../lib/types';
@@ -29,7 +33,15 @@
 
   const dirty = $derived(!!spec && JSON.stringify(spec) !== original);
 
+  // A stack's container: edit its service in the stack's files.
+  // svelte-ignore state_referenced_locally
+  const studio = c.stack && c.service && !c.is_self ? new Studio(c.stack) : null;
+
   onMount(async () => {
+    if (studio) {
+      await studio.load();
+      return;
+    }
     if (c.stack || c.is_self) return;
     try {
       const r = await api.get<{ spec: ContainerSpec; compose: string }>(`/containers/${seg(c.id)}/spec`);
@@ -76,10 +88,26 @@
   }
 </script>
 
-{#if c.stack}
+{#if studio && session.isAdmin}
+  {#if studio.loadError}
+    <EmptyState icon={Layers} title="Managed by the {c.stack} stack">
+      {studio.loadError}
+      {#snippet actions()}<a class="btn" href={href(`/stacks/${encodeURIComponent(c.stack ?? '')}`)}>Open the stack</a>{/snippet}
+    </EmptyState>
+  {:else if !studio.loaded}
+    <p class="faint"><Spinner size={13} /> Loading the {c.stack} stack…</p>
+  {:else}
+    <p class="muted intro-stack">
+      {c.display_name} is the <span class="mono">{c.service}</span> service of the
+      <a href={href(`/stacks/${encodeURIComponent(c.stack ?? '')}`)}>{c.stack}</a> stack; changes go into its compose files.
+      <a href={href(`/stacks/${encodeURIComponent(c.stack ?? '')}/compose?service=${encodeURIComponent(c.service ?? '')}`)}>Open the whole stack in the editor</a>
+    </p>
+    <StudioView {studio} mode="service" service={c.service ?? ''} />
+  {/if}
+{:else if c.stack}
   <EmptyState icon={Layers} title="Managed by the {c.stack} stack">
     Change its settings in the stack's compose file, then deploy the stack.
-    {#snippet actions()}<a class="btn primary" href={href(`/stacks/${encodeURIComponent(c.stack ?? '')}/compose`)}>Open the compose file</a>{/snippet}
+    {#snippet actions()}<a class="btn primary" href={href(`/stacks/${encodeURIComponent(c.stack ?? '')}/compose`)}>Open the stack editor</a>{/snippet}
   </EmptyState>
 {:else if c.is_self}
   <EmptyState icon={Layers} title="Nodestarr can't edit its own container">Change Nodestarr's settings where you deployed it (its compose file or run command).</EmptyState>
@@ -136,6 +164,9 @@
   }
   .intro p {
     margin: 0;
+  }
+  .intro-stack {
+    margin: 0 0 14px;
   }
   .savebar {
     position: sticky;

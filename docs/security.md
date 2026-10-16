@@ -97,6 +97,9 @@ your network has guests or devices you don't fully trust.
   Settings exports leave them out unless you ask for them.
 - Release notes and app messages are rendered from Markdown with all HTML
   escaped and only `http(s)` links.
+- The stack editor reads and writes files only inside a stack's own folder
+  and the stacks folders set in Settings > Docker (symlinks can't lead
+  outside them), and only for admins.
 - The database is readable only by its owner (it holds password hashes and
   API key hashes).
 

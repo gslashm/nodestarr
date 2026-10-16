@@ -83,6 +83,43 @@ pub struct RemoteImage {
     pub source: Option<String>,
     #[serde(skip)]
     pub labels: HashMap<String, String>,
+    #[serde(skip)]
+    pub defaults: ImageDefaults,
+}
+
+/// What an image sets up by itself, so the stack editor can suggest ports
+/// to publish and folders to keep, and show its environment.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ImageDefaults {
+    /// `KEY=value` entries.
+    pub env: Vec<String>,
+    /// Like "8989/tcp".
+    pub ports: Vec<String>,
+    pub volumes: Vec<String>,
+    pub workdir: Option<String>,
+    pub user: Option<String>,
+    pub cmd: Option<Vec<String>>,
+    pub entrypoint: Option<Vec<String>>,
+    pub healthcheck: Option<Vec<String>>,
+}
+
+impl ImageDefaults {
+    pub fn from_config(c: &bollard::models::ImageConfig) -> Self {
+        let mut ports = c.exposed_ports.clone().unwrap_or_default();
+        ports.sort();
+        let mut volumes = c.volumes.clone().unwrap_or_default();
+        volumes.sort();
+        Self {
+            env: c.env.clone().unwrap_or_default(),
+            ports,
+            volumes,
+            workdir: c.working_dir.clone().filter(|s| !s.is_empty()),
+            user: c.user.clone().filter(|s| !s.is_empty()),
+            cmd: c.cmd.clone(),
+            entrypoint: c.entrypoint.clone(),
+            healthcheck: c.healthcheck.as_ref().and_then(|h| h.test.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -154,6 +191,48 @@ struct ConfigBlob {
 struct ConfigInner {
     #[serde(rename = "Labels")]
     labels: Option<HashMap<String, String>>,
+    #[serde(rename = "Env")]
+    env: Option<Vec<String>>,
+    #[serde(rename = "ExposedPorts")]
+    exposed_ports: Option<HashMap<String, serde_json::Value>>,
+    #[serde(rename = "Volumes")]
+    volumes: Option<HashMap<String, serde_json::Value>>,
+    #[serde(rename = "WorkingDir")]
+    working_dir: Option<String>,
+    #[serde(rename = "User")]
+    user: Option<String>,
+    #[serde(rename = "Cmd")]
+    cmd: Option<Vec<String>>,
+    #[serde(rename = "Entrypoint")]
+    entrypoint: Option<Vec<String>>,
+    #[serde(rename = "Healthcheck")]
+    healthcheck: Option<HealthDoc>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HealthDoc {
+    #[serde(rename = "Test")]
+    test: Option<Vec<String>>,
+}
+
+impl ConfigInner {
+    fn defaults(self) -> ImageDefaults {
+        let sorted = |m: Option<HashMap<String, serde_json::Value>>| {
+            let mut v: Vec<String> = m.unwrap_or_default().into_keys().collect();
+            v.sort();
+            v
+        };
+        ImageDefaults {
+            env: self.env.unwrap_or_default(),
+            ports: sorted(self.exposed_ports),
+            volumes: sorted(self.volumes),
+            workdir: self.working_dir.filter(|s| !s.is_empty()),
+            user: self.user.filter(|s| !s.is_empty()),
+            cmd: self.cmd,
+            entrypoint: self.entrypoint,
+            healthcheck: self.healthcheck.and_then(|h| h.test),
+        }
+    }
 }
 
 struct Challenge {
@@ -401,7 +480,10 @@ impl RegistryClient {
             let blob: ConfigBlob =
                 resp.json().await.map_err(|e| RegistryError::Protocol(format!("image config: {e}")))?;
             remote.created = blob.created.as_deref().and_then(crate::util::parse_rfc3339);
-            remote.labels = blob.config.and_then(|c| c.labels).unwrap_or_default();
+            if let Some(mut config) = blob.config {
+                remote.labels = config.labels.take().unwrap_or_default();
+                remote.defaults = config.defaults();
+            }
             remote.version = version_from_labels(&remote.labels);
             remote.source = ["org.opencontainers.image.source", "org.opencontainers.image.url"]
                 .iter()

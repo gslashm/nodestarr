@@ -33,7 +33,8 @@
   .toasts {
     position: fixed;
     right: 16px;
-    bottom: 16px;
+    /* Pages with a sticky save bar lift toasts above it. */
+    bottom: calc(16px + var(--toast-lift, 0px));
     z-index: 60;
     display: flex;
     flex-direction: column;

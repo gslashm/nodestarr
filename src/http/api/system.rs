@@ -68,6 +68,8 @@ pub fn routes() -> Router<App> {
         .route("/activity", get(activity))
         .route("/apps", get(apps))
         .route("/images", get(images))
+        .route("/images/inspect", get(image_inspect))
+        .route("/images/tags", get(image_tags))
         .route("/images/{id}", delete(remove_image))
         .route("/volumes", get(volumes).post(create_volume))
         .route("/volumes/{name}", delete(remove_volume))
@@ -579,6 +581,68 @@ async fn images(State(app): State<App>) -> Result<Json<Value>> {
     let rows = resources::images(&app).await?;
     let total: i64 = rows.iter().map(|r| r.size).sum();
     Ok(Json(json!({ "images": rows, "total_size": total })))
+}
+
+#[derive(Deserialize)]
+struct ImageQuery {
+    image: String,
+}
+
+fn image_ref(raw: &str) -> Result<crate::registry::ImageRef> {
+    crate::registry::ImageRef::parse(raw.trim())
+        .ok_or_else(|| AppError::bad_request(format!("'{}' is not a valid image reference", raw.trim())))
+}
+
+/// What an image sets up by itself (environment, ports, folders, user...),
+/// read from this machine when the image is here and from its registry
+/// otherwise, without pulling it. The stack editor suggests settings from it.
+///
+/// Admin only, like the editor: it contacts whatever registry the reference
+/// names.
+async fn image_inspect(State(app): State<App>, Auth(p): Auth, Query(q): Query<ImageQuery>) -> Result<Json<Value>> {
+    p.require_admin()?;
+    let r = image_ref(&q.image)?;
+    let label = |labels: &HashMap<String, String>, key: &str| labels.get(key).cloned();
+    if let Some(meta) = app.docker.inspect_image_fresh(q.image.trim()).await {
+        let defaults =
+            meta.config.as_ref().map(crate::registry::client::ImageDefaults::from_config).unwrap_or_default();
+        return Ok(Json(json!({
+            "image": r.familiar(),
+            "source": "local",
+            "defaults": defaults,
+            "version": crate::registry::client::version_from_labels(&meta.labels),
+            "created": meta.created,
+            "url": meta.source_url(),
+            "title": label(&meta.labels, "org.opencontainers.image.title"),
+            "description": label(&meta.labels, "org.opencontainers.image.description"),
+        })));
+    }
+    let remote = app.registry.remote_image(&r, &crate::registry::client::Platform::default()).await?;
+    Ok(Json(json!({
+        "image": r.familiar(),
+        "source": "registry",
+        "defaults": remote.defaults,
+        "version": remote.version,
+        "created": remote.created,
+        "url": remote.source,
+        "title": label(&remote.labels, "org.opencontainers.image.title"),
+        "description": label(&remote.labels, "org.opencontainers.image.description"),
+    })))
+}
+
+/// Tags of any image, for picking a version in the stack editor (admin only).
+async fn image_tags(State(app): State<App>, Auth(p): Auth, Query(q): Query<ImageQuery>) -> Result<Json<Value>> {
+    p.require_admin()?;
+    let r = image_ref(&q.image)?;
+    let tags = app.registry.tags(&r, false).await?;
+    let current = r.tag_or_latest().to_string();
+    let (channels, versions) = crate::http::api::containers::split_tags(&tags, &current);
+    Ok(Json(json!({
+        "current": current,
+        "channels": channels.into_iter().take(60).collect::<Vec<_>>(),
+        "versions": versions.into_iter().take(300).collect::<Vec<_>>(),
+        "total": tags.len(),
+    })))
 }
 
 #[derive(Deserialize)]

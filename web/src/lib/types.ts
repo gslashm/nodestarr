@@ -336,6 +336,56 @@ export interface StackFile {
   exists: boolean;
 }
 
+/** Any file of a stack folder, opened by the stack editor. */
+export interface StackFileContent {
+  path: string;
+  name: string;
+  content: string;
+  exists: boolean;
+  /** Why it can't be edited here (too large, not text). */
+  error?: string;
+}
+
+export interface StackTreeEntry {
+  /** Relative to the stack folder. */
+  path: string;
+  dir: boolean;
+  size: number;
+}
+
+/** What an image sets up by itself. */
+export interface ImageDefaults {
+  /** `KEY=value` entries. */
+  env: string[];
+  /** Like "8989/tcp". */
+  ports: string[];
+  volumes: string[];
+  workdir: string | null;
+  user: string | null;
+  cmd: string[] | null;
+  entrypoint: string[] | null;
+  healthcheck: string[] | null;
+}
+
+export interface ImageInspect {
+  image: string;
+  /** Read from this machine, or from the registry without pulling. */
+  source: 'local' | 'registry';
+  defaults: ImageDefaults;
+  version: string | null;
+  created: number | null;
+  url: string | null;
+  title: string | null;
+  description: string | null;
+}
+
+export interface ImageTags {
+  current: string;
+  channels: TagInfo[];
+  versions: TagInfo[];
+  total: number;
+}
+
 export interface FileVersion {
   id: number;
   path: string;

@@ -28,8 +28,11 @@ function splitLines(s: string): string[] {
 }
 
 export function diffLines(before: string, after: string): DiffLine[] {
-  const a = splitLines(before);
-  const b = splitLines(after);
+  return diffSeq(splitLines(before), splitLines(after));
+}
+
+/** Line diff of two already-split texts. */
+export function diffSeq(a: string[], b: string[]): DiffLine[] {
   let start = 0;
   while (start < a.length && start < b.length && a[start] === b[start]) start++;
   let endA = a.length;

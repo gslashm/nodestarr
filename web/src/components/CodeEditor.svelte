@@ -38,6 +38,8 @@
         return StreamLanguage.define((await import('@codemirror/legacy-modes/mode/toml')).toml);
       case 'shell':
         return StreamLanguage.define((await import('@codemirror/legacy-modes/mode/shell')).shell);
+      case 'dockerfile':
+        return StreamLanguage.define((await import('@codemirror/legacy-modes/mode/dockerfile')).dockerFile);
       case 'python':
         return StreamLanguage.define((await import('@codemirror/legacy-modes/mode/python')).python);
       case 'javascript':

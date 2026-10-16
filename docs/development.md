@@ -23,7 +23,7 @@ Dockerfile, compose.yaml
 | `settings`, `prefs` | Settings (one JSON document, sections, secret masking) and per-container settings. |
 | `db` | SQLite with one connection in WAL mode, migrations, snapshots. |
 | `docker` | The container inventory (follows Docker's event stream), actions, recreation, specs and `docker run` parsing, logs, exec, stats, the app catalog (`apps`), images, volumes and networks. |
-| `compose` | Stacks: discovery, files, validation, editing image tags (also through `.env`), running the Compose CLI. |
+| `compose` | Stacks: discovery, files (and the stack editor's confined access to a stack's folder), validation, editing image tags (also through `.env`), running the Compose CLI. |
 | `registry` | A small OCI distribution client (digests, tags, image configs) and version parsing. |
 | `updates` | Checks, automatic updates, applying with verification and rollback, release notes. |
 | `backups` | Plans, archives (tar with zstd or gzip), database dumps, retention, hooks, restore. |
@@ -50,9 +50,18 @@ same thing never overlap.
 web/src/
   App.svelte          shell, routes
   lib/                api client, live store (event stream), session, router, formatting, helpers
+  lib/compose/        the stack editor's model: YAML edits that keep the file's layout, .env files,
+                      interpolation, environments, Dockerfiles, checks and templates
   components/         shared building blocks (tables, dialogs, editors, charts, logs, terminal)
+  components/studio/  the stack editor (service forms, environment, variables, Dockerfiles)
   pages/              one folder per area: container/, stack/, monitoring/, proxmox/, settings/, system/
 ```
+
+The stack editor works on text: a visual edit parses the current file,
+changes the parsed document and writes it back. Serializing a document
+normalizes layout, so the result is merged line by line into the original
+(`lib/compose/merge3.ts`) and kept only if it parses to exactly the same
+data as the edit; otherwise the plainly serialized file is used.
 
 Pages and heavy components (CodeMirror, xterm.js, uPlot) load on demand.
 The design system is described in [web/DESIGN.md](../web/DESIGN.md).

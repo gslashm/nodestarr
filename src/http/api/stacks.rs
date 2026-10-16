@@ -26,6 +26,8 @@ pub fn routes() -> Router<App> {
         .route("/stacks/{name}", get(detail).delete(remove))
         .route("/stacks/{name}/actions/{action}", post(action))
         .route("/stacks/{name}/files", get(files).put(save_files))
+        .route("/stacks/{name}/file", get(file))
+        .route("/stacks/{name}/tree", get(tree))
         .route("/stacks/{name}/validate", post(validate))
         .route("/stacks/{name}/diff", post(diff))
         .route("/stacks/{name}/history", get(history))
@@ -104,20 +106,61 @@ async fn files(State(app): State<App>, Auth(p): Auth, Path(name): Path<String>) 
 }
 
 #[derive(Deserialize)]
+struct FileQuery {
+    path: String,
+}
+
+/// Any text file of the stack (env files, Dockerfiles...), for the editor.
+async fn file(
+    State(app): State<App>,
+    Auth(p): Auth,
+    Path(name): Path<String>,
+    Query(q): Query<FileQuery>,
+) -> Result<Json<Value>> {
+    p.require_admin()?;
+    let stack = app.compose.stack_ref(&name)?;
+    Ok(Json(serde_json::to_value(app.compose.read_file(&stack, &q.path).await?)?))
+}
+
+/// The files in the stack folder, for opening ones compose doesn't mention.
+async fn tree(State(app): State<App>, Auth(p): Auth, Path(name): Path<String>) -> Result<Json<Value>> {
+    p.require_admin()?;
+    let stack = app.compose.stack_ref(&name)?;
+    let dir = stack.dir.clone();
+    let (entries, truncated) = tokio::task::spawn_blocking(move || ComposeService::tree(&stack))
+        .await
+        .map_err(|e| AppError::Other(e.into()))?;
+    Ok(Json(json!({ "dir": dir, "entries": entries, "truncated": truncated })))
+}
+
+#[derive(Deserialize)]
 struct EditBody {
     files: Vec<FileEdit>,
     #[serde(default)]
     deploy: bool,
+    /// Deploy only these services.
+    #[serde(default)]
+    services: Vec<String>,
+    /// Rebuild images while deploying (a Dockerfile changed).
+    #[serde(default)]
+    build: bool,
+}
+
+/// Points each edit at the file it may change (see `resolve_file`).
+fn resolve_edits(app: &App, stack: &crate::compose::StackRef, files: Vec<FileEdit>) -> Result<Vec<FileEdit>> {
+    files
+        .into_iter()
+        .map(|f| {
+            let path = app.compose.resolve_file(stack, &f.path)?;
+            Ok(FileEdit { path: path.to_string_lossy().into_owned(), content: f.content })
+        })
+        .collect()
 }
 
 async fn validate(State(app): State<App>, Path(name): Path<String>, Json(b): Json<EditBody>) -> Result<Json<Value>> {
     let stack = app.compose.stack_ref(&name)?;
-    for f in &b.files {
-        if !ComposeService::is_stack_file(&stack, &f.path) {
-            return Err(AppError::forbidden(format!("{} is not part of this stack", f.path)));
-        }
-    }
-    match app.compose.validate(&stack, &b.files).await? {
+    let files = resolve_edits(&app, &stack, b.files)?;
+    match app.compose.validate(&stack, &files).await? {
         Ok(()) => Ok(Json(json!({ "ok": true }))),
         Err(msg) => Ok(Json(json!({ "ok": false, "message": msg }))),
     }
@@ -126,10 +169,7 @@ async fn validate(State(app): State<App>, Path(name): Path<String>, Json(b): Jso
 async fn diff(State(app): State<App>, Path(name): Path<String>, Json(b): Json<EditBody>) -> Result<Json<Value>> {
     let stack = app.compose.stack_ref(&name)?;
     let mut out = Vec::new();
-    for f in &b.files {
-        if !ComposeService::is_stack_file(&stack, &f.path) {
-            return Err(AppError::forbidden(format!("{} is not part of this stack", f.path)));
-        }
+    for f in resolve_edits(&app, &stack, b.files)? {
         let before = tokio::fs::read_to_string(&f.path).await.unwrap_or_default();
         if before != f.content {
             let label = FsPath::new(&f.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -146,17 +186,15 @@ async fn save_files(
     Json(b): Json<EditBody>,
 ) -> Result<Json<Value>> {
     let stack = app.compose.stack_ref(&name)?;
-    for f in &b.files {
-        if !ComposeService::is_stack_file(&stack, &f.path) {
-            return Err(AppError::forbidden(format!("{} is not part of this stack", f.path)));
-        }
-    }
-    if let Err(msg) = app.compose.validate(&stack, &b.files).await? {
+    let files = resolve_edits(&app, &stack, b.files)?;
+    if let Err(msg) = app.compose.validate(&stack, &files).await? {
         return Err(AppError::BadRequest(format!("the compose files are not valid: {msg}")));
     }
     let actor = p.actor();
     let mut saved = Vec::new();
-    for f in &b.files {
+    for f in &files {
+        // New files may go in new folders (a service's build context, say).
+        crate::compose::create_parents(FsPath::new(&f.path))?;
         if crate::files::write_with_history(
             &app.db,
             FsPath::new(&f.path),
@@ -194,7 +232,8 @@ async fn save_files(
         .await;
     }
     let task = if b.deploy {
-        Some(crate::ops::stack_action(&app, &name, StackAction::Up, StackActionOptions::default(), &actor)?)
+        let opts = StackActionOptions { services: b.services, build: b.build, ..Default::default() };
+        Some(crate::ops::stack_action(&app, &name, StackAction::Up, opts, &actor)?)
     } else {
         None
     };
@@ -212,10 +251,8 @@ async fn history(
     Query(q): Query<HistoryQuery>,
 ) -> Result<Json<Value>> {
     let stack = app.compose.stack_ref(&name)?;
-    if !ComposeService::is_stack_file(&stack, &q.path) {
-        return Err(AppError::forbidden("not a file of this stack"));
-    }
-    Ok(Json(serde_json::to_value(crate::files::list_versions(&app.db, &q.path).await?)?))
+    let path = app.compose.resolve_file(&stack, &q.path)?;
+    Ok(Json(serde_json::to_value(crate::files::list_versions(&app.db, &path.to_string_lossy()).await?)?))
 }
 
 #[derive(Deserialize)]
@@ -224,12 +261,15 @@ struct CreateBody {
     compose: String,
     #[serde(default)]
     env: Option<String>,
+    /// More files for the new folder, with paths relative to it.
+    #[serde(default)]
+    files: Vec<FileEdit>,
     #[serde(default)]
     deploy: bool,
 }
 
 async fn create(State(app): State<App>, Auth(p): Auth, Json(b): Json<CreateBody>) -> Result<Json<Value>> {
-    let stack = app.compose.create_stack(&b.name, &b.compose, b.env.as_deref()).await?;
+    let stack = app.compose.create_stack(&b.name, &b.compose, b.env.as_deref(), &b.files).await?;
     let actor = p.actor();
     app.note(
         NewActivity::new("stack.created", Severity::Success, format!("Stack {} created in {}", stack.name, stack.dir))

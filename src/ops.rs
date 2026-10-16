@@ -171,6 +171,9 @@ pub struct StackActionOptions {
     /// `up --remove-orphans`.
     #[serde(default)]
     pub remove_orphans: bool,
+    /// `up --build`: rebuild images of services built from a Dockerfile.
+    #[serde(default)]
+    pub build: bool,
 }
 
 pub fn stack_action(
@@ -225,6 +228,9 @@ pub fn stack_action(
                 let mut args = vec!["up", "-d"];
                 if opts.remove_orphans {
                     args.push("--remove-orphans");
+                }
+                if opts.build {
+                    args.push("--build");
                 }
                 app2.compose.exec(&stack, &run(args), Some(&ctx)).await?;
             }
