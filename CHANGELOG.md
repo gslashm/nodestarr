@@ -4,6 +4,15 @@ All notable changes to Nodestarr are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- A container replaced during an update or rollback could linger on the
+  dashboard as a stopped duplicate of its replacement.
+- On long pages (such as Settings > Updates), scrolling over the sidebar
+  scrolled the whole page out of view.
+
 ## [0.1.0] - 2026-10-15
 
 The first release.
