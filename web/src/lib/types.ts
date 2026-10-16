@@ -4,6 +4,8 @@
 export type Severity = 'info' | 'success' | 'warning' | 'error';
 export type UpdatePolicy = 'ignore' | 'notify' | 'auto';
 export type TagScope = 'digest' | 'patch' | 'minor' | 'major';
+/** How far an update moves the version. */
+export type Bump = 'major' | 'minor' | 'patch' | 'rebuild' | 'unknown';
 export type Role = 'admin' | 'viewer';
 
 export interface PortInfo {
@@ -75,6 +77,54 @@ export interface NewerTag {
   first_seen: number | null;
 }
 
+export interface NotesFinding {
+  kind: 'security' | 'breaking';
+  /** Tag of the release it was found in. */
+  release: string;
+  /** The line of the release notes that says so. */
+  text: string;
+}
+
+/** What an update's release notes said. */
+export interface NotesScan {
+  repo: string;
+  /** Tags of the releases that were read, newest first. */
+  releases: string[];
+  /** Older releases in between weren't read (GitHub only gives the newest). */
+  partial: boolean;
+  findings: NotesFinding[];
+  /** The new version's release page. */
+  url: string | null;
+}
+
+/** What one update changes: its type. */
+export interface Change {
+  bump: Bump;
+  /** The bump comes from the tag alone, so it's the most the update can be. */
+  estimated: boolean;
+  from_version: string | null;
+  to_version: string | null;
+  prerelease: boolean;
+  security: boolean;
+  breaking: boolean;
+  notes: NotesScan | null;
+}
+
+/** Which updates automatic updates install, by type. */
+export interface AutoInstall {
+  rebuild: boolean;
+  patch: boolean;
+  minor: boolean;
+  major: boolean;
+  unknown: boolean;
+  /** Security fixes, even when their version change isn't ticked (never major versions). */
+  security: boolean;
+  /** Updates whose release notes mention breaking changes. */
+  breaking: boolean;
+  /** Switch a version tag to a newer one. */
+  switch_tags: boolean;
+}
+
 export interface UpdateInfo {
   status: UpdateStatus;
   image: string;
@@ -87,6 +137,10 @@ export interface UpdateInfo {
   newer_tag: NewerTag | null;
   error: string | null;
   source: string | null;
+  /** The offered update's type (the newer tag when there is one, else the new build). */
+  change: Change | null;
+  /** With a newer tag offered: what the new build of the current tag is. */
+  build_change: Change | null;
 }
 
 export interface LiveStat {
@@ -151,7 +205,10 @@ export interface UptimeBrief {
 export interface ContainerView extends ContainerSummary {
   display_name: string;
   policy: UpdatePolicy;
-  auto_scope: TagScope;
+  /** Which updates install automatically (its own choice or the default). */
+  auto_install: AutoInstall;
+  /** Hours an update must be out before it installs automatically. */
+  min_age_hours: number;
   update: UpdateInfo | null;
   prefs: PrefsBrief;
   stats: LiveStat | null;
@@ -782,7 +839,7 @@ export interface Settings {
   updates: {
     check_cron: string;
     default_policy: UpdatePolicy;
-    default_auto_scope: TagScope;
+    auto_install: AutoInstall;
     auto_cron: string;
     min_age_hours: number;
     notify_scope: TagScope;
@@ -884,7 +941,7 @@ export interface ContainerPrefs {
   dismissed: Record<string, string>;
   update: {
     policy: UpdatePolicy | null;
-    auto_scope: TagScope | null;
+    auto_install: AutoInstall | null;
     skipped_digest: string;
     held: boolean;
     min_age_hours: number | null;

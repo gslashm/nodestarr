@@ -72,11 +72,51 @@ pub struct Release {
 pub struct ReleaseNotes {
     pub repo: String,
     pub releases: Vec<Release>,
+    /// Whether these are all of the repository's releases (GitHub only
+    /// returns the newest [`PER_PAGE`]).
+    #[serde(skip)]
+    pub complete: bool,
 }
+
+/// Releases read per repository: enough to cover the releases between a
+/// version and the one an update brings for most apps.
+const PER_PAGE: usize = 30;
 
 fn cache() -> &'static Mutex<HashMap<String, (Instant, ReleaseNotes)>> {
     static C: OnceLock<Mutex<HashMap<String, (Instant, ReleaseNotes)>>> = OnceLock::new();
     C.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Recent answers worth not asking again for a while: repositories without
+/// releases, and GitHub's rate limit (which each update check would hit
+/// again). Keyed by repository and whether a token was used.
+#[derive(Clone, Copy)]
+enum Failure {
+    NotFound,
+    RateLimited,
+}
+
+fn failures() -> &'static Mutex<HashMap<String, (Instant, Failure)>> {
+    static F: OnceLock<Mutex<HashMap<String, (Instant, Failure)>>> = OnceLock::new();
+    F.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+impl Failure {
+    fn lasts(self) -> Duration {
+        match self {
+            Failure::NotFound => Duration::from_secs(3600),
+            Failure::RateLimited => Duration::from_secs(900),
+        }
+    }
+
+    fn error(self, repo: &str) -> AppError {
+        match self {
+            Failure::NotFound => AppError::not_found(format!("releases for {repo}")),
+            Failure::RateLimited => {
+                AppError::upstream("GitHub rate limit reached; add a GitHub token in Settings > Updates")
+            }
+        }
+    }
 }
 
 /// Extracts "owner/repo" from a GitHub URL.
@@ -120,25 +160,36 @@ pub async fn fetch(app: &App, repo: &str) -> Result<ReleaseNotes> {
         body: Option<String>,
     }
     let token = app.settings.get().updates.github_token.clone();
+    let failure_key = format!("{repo}#{}", !token.is_empty());
+    if let Some((at, failure)) = failures().lock().get(&failure_key).copied()
+        && at.elapsed() < failure.lasts()
+    {
+        return Err(failure.error(repo));
+    }
     let mut req = app
         .http
-        .get(format!("https://api.github.com/repos/{repo}/releases?per_page=15"))
+        .get(format!("https://api.github.com/repos/{repo}/releases?per_page={PER_PAGE}"))
         .header("Accept", "application/vnd.github+json");
     if !token.is_empty() {
         req = req.bearer_auth(token);
     }
     let resp = req.send().await?;
-    match resp.status().as_u16() {
-        200 => {}
-        404 => return Err(AppError::not_found(format!("releases for {repo}"))),
-        403 | 429 => {
-            return Err(AppError::upstream("GitHub rate limit reached; add a GitHub token in Settings > Updates"));
-        }
+    let failure = match resp.status().as_u16() {
+        200 => None,
+        404 => Some(Failure::NotFound),
+        403 | 429 => Some(Failure::RateLimited),
         s => return Err(AppError::upstream(format!("GitHub returned HTTP {s}"))),
+    };
+    if let Some(f) = failure {
+        let mut map = failures().lock();
+        map.retain(|_, (at, kind)| at.elapsed() < kind.lasts());
+        map.insert(failure_key, (Instant::now(), f));
+        return Err(f.error(repo));
     }
     let items: Vec<Gh> = resp.json().await?;
     let notes = ReleaseNotes {
         repo: repo.to_string(),
+        complete: items.len() < PER_PAGE,
         releases: items
             .into_iter()
             .filter(|r| !r.draft)

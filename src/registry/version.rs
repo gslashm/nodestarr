@@ -164,7 +164,7 @@ impl Version {
 }
 
 /// Compares strings treating digit runs as numbers ("rc10" > "rc9").
-fn natural_cmp(a: &str, b: &str) -> Ordering {
+pub(crate) fn natural_cmp(a: &str, b: &str) -> Ordering {
     let mut ai = a.chars().peekable();
     let mut bi = b.chars().peekable();
     loop {

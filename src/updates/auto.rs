@@ -6,10 +6,11 @@ use crate::activity::{Actor, NewActivity};
 use crate::app::App;
 use crate::notify::Notification;
 use crate::registry::ImageRef;
-use crate::settings::{Severity, TagScope, UpdatePolicy};
+use crate::settings::{AutoInstall, Severity, UpdatePolicy};
 use crate::tasks::TaskSpec;
 use crate::updates::apply::{Trigger, UpdateRequest};
 use crate::updates::check::{check_one, display_name};
+use crate::updates::classify::{self, Change};
 use crate::updates::{UpdateInfo, UpdateStatus};
 
 /// Why a container was or wasn't auto-updated.
@@ -19,10 +20,13 @@ pub enum Decision {
     Skip(String),
 }
 
-/// Decides whether one container should be auto-updated right now.
+/// Decides whether one container should be auto-updated right now: the
+/// newer tag when one is offered and allowed, otherwise the new build of
+/// its tag when that is allowed. The UI mirrors this (`autoPlan` in
+/// `web/src/lib/updates.ts`) to say what will happen to each update.
 pub fn decide(
     policy: UpdatePolicy,
-    scope: TagScope,
+    rules: &AutoInstall,
     held: bool,
     skipped_digest: &str,
     min_age_hours: u32,
@@ -38,19 +42,27 @@ pub fn decide(
     if !info.has_update() {
         return Decision::Skip("no update".into());
     }
-    // A newer version tag within the allowed scope takes precedence.
-    if let Some(newer) = &info.newer_tag
-        && scope != TagScope::Digest
-        && newer.scope <= scope
-    {
-        if let Some(wait) = too_new(newer.first_seen, min_age_hours, now) {
-            return Decision::Skip(wait);
+    let mut blocked = None;
+    if let Some(newer) = &info.newer_tag {
+        // State saved before update types has no change; the tag scope says as much.
+        let change = info.change.clone().unwrap_or_else(|| Change { bump: newer.scope.into(), ..Default::default() });
+        match classify::blocked_by(rules, &change, true) {
+            None => {
+                if let Some(wait) = too_new(newer.first_seen, min_age_hours, now) {
+                    return Decision::Skip(wait);
+                }
+                return Decision::Update(UpdateRequest { tag: Some(newer.tag.clone()), skip_backup: false });
+            }
+            Some(why) => blocked = Some(why),
         }
-        return Decision::Update(UpdateRequest { tag: Some(newer.tag.clone()), skip_backup: false });
     }
     let digest_update = info.digest_changed() || info.status == UpdateStatus::PendingRecreate;
     if !digest_update {
-        return Decision::Skip("only a newer tag outside the allowed scope".into());
+        return Decision::Skip(blocked.unwrap_or_else(|| "no new build of the current tag".into()));
+    }
+    let build = if info.newer_tag.is_some() { info.build_change.clone() } else { info.change.clone() };
+    if let Some(why) = classify::blocked_by(rules, &build.unwrap_or_default(), false) {
+        return Decision::Skip(blocked.unwrap_or(why));
     }
     if !skipped_digest.is_empty() && info.latest_digest.as_deref() == Some(skipped_digest) {
         return Decision::Skip("this version was skipped (it failed before or was rolled back)".into());
@@ -94,7 +106,7 @@ pub async fn run(app: &App) {
         app.updates.set(&s.identity, info.clone()).await;
         let decision = decide(
             UpdatePolicy::Auto,
-            prefs.auto_scope(&settings),
+            &prefs.auto_install(&settings),
             prefs.update.held,
             &prefs.update.skipped_digest,
             prefs.min_age_hours(&settings),
@@ -172,7 +184,9 @@ pub fn bumpable(image: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::TagScope;
     use crate::updates::NewerTag;
+    use crate::updates::classify::Bump;
 
     fn info(status: UpdateStatus, current: &str, latest: &str, first_seen: i64) -> UpdateInfo {
         UpdateInfo {
@@ -184,43 +198,101 @@ mod tests {
         }
     }
 
+    fn change(bump: Bump) -> Change {
+        Change { bump, ..Default::default() }
+    }
+
+    fn skip_reason(d: Decision) -> String {
+        match d {
+            Decision::Skip(why) => why,
+            other => panic!("expected a skip, got {other:?}"),
+        }
+    }
+
+    const TAGS: AutoInstall = AutoInstall {
+        rebuild: true,
+        patch: true,
+        minor: true,
+        major: false,
+        unknown: true,
+        security: true,
+        breaking: false,
+        switch_tags: true,
+    };
+
     #[test]
     fn decisions() {
         let now = 1_000_000;
+        let rules = AutoInstall::default();
         let avail = info(UpdateStatus::Available, "a", "b", now - 10 * 3600);
         assert_eq!(
-            decide(UpdatePolicy::Notify, TagScope::Digest, false, "", 0, &avail, now),
+            decide(UpdatePolicy::Notify, &rules, false, "", 0, &avail, now),
             Decision::Skip("policy is not auto".into())
         );
-        assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Digest, false, "", 6, &avail, now), Decision::Update(_)));
-        assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Digest, false, "", 24, &avail, now), Decision::Skip(_)));
-        assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Digest, false, "b", 0, &avail, now), Decision::Skip(_)));
-        assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Digest, true, "", 0, &avail, now), Decision::Skip(_)));
+        assert!(matches!(decide(UpdatePolicy::Auto, &rules, false, "", 6, &avail, now), Decision::Update(_)));
+        assert!(matches!(decide(UpdatePolicy::Auto, &rules, false, "", 24, &avail, now), Decision::Skip(_)));
+        assert!(matches!(decide(UpdatePolicy::Auto, &rules, false, "b", 0, &avail, now), Decision::Skip(_)));
+        assert!(matches!(decide(UpdatePolicy::Auto, &rules, true, "", 0, &avail, now), Decision::Skip(_)));
         let up = info(UpdateStatus::UpToDate, "a", "a", now);
-        assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Digest, false, "", 0, &up, now), Decision::Skip(_)));
+        assert!(matches!(decide(UpdatePolicy::Auto, &rules, false, "", 0, &up, now), Decision::Skip(_)));
     }
 
     #[test]
-    fn tag_bumps_respect_scope() {
+    fn new_builds_follow_their_type() {
+        let now = 1_000_000;
+        let rules = AutoInstall::default();
+        let mut i = info(UpdateStatus::Available, "a", "b", now - 10 * 3600);
+        i.change = Some(change(Bump::Major));
+        assert!(skip_reason(decide(UpdatePolicy::Auto, &rules, false, "", 0, &i, now)).contains("major"));
+        i.change = Some(Change { bump: Bump::Minor, breaking: true, ..Default::default() });
+        assert!(skip_reason(decide(UpdatePolicy::Auto, &rules, false, "", 0, &i, now)).contains("breaking"));
+        let only_patches = AutoInstall { minor: false, ..rules };
+        i.change = Some(Change { bump: Bump::Minor, security: true, ..Default::default() });
+        assert!(matches!(decide(UpdatePolicy::Auto, &only_patches, false, "", 0, &i, now), Decision::Update(_)));
+        let no_security = AutoInstall { security: false, ..only_patches };
+        assert!(matches!(decide(UpdatePolicy::Auto, &no_security, false, "", 0, &i, now), Decision::Skip(_)));
+    }
+
+    #[test]
+    fn tag_switches_follow_their_type() {
         let now = 1_000_000;
         let mut i = info(UpdateStatus::Available, "a", "a", now);
         i.newer_tag = Some(NewerTag { tag: "8.5.0".into(), scope: TagScope::Minor, first_seen: Some(now - 10 * 3600) });
-        assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Patch, false, "", 0, &i, now), Decision::Skip(_)));
-        match decide(UpdatePolicy::Auto, TagScope::Minor, false, "", 6, &i, now) {
+        i.change = Some(change(Bump::Minor));
+        // Tags stay as they are unless switching is on.
+        assert!(
+            skip_reason(decide(UpdatePolicy::Auto, &AutoInstall::default(), false, "", 0, &i, now)).contains("tag")
+        );
+        let patches = AutoInstall { minor: false, ..TAGS };
+        assert!(skip_reason(decide(UpdatePolicy::Auto, &patches, false, "", 0, &i, now)).contains("minor"));
+        match decide(UpdatePolicy::Auto, &TAGS, false, "", 6, &i, now) {
             Decision::Update(req) => assert_eq!(req.tag.as_deref(), Some("8.5.0")),
             other => panic!("unexpected {other:?}"),
         }
     }
 
     #[test]
-    fn tag_bumps_wait_for_the_minimum_age() {
+    fn a_blocked_tag_switch_falls_back_to_a_new_build() {
+        let now = 1_000_000;
+        let mut i = info(UpdateStatus::Available, "a", "b", now - 10 * 3600);
+        i.newer_tag = Some(NewerTag { tag: "9.0.0".into(), scope: TagScope::Major, first_seen: Some(now) });
+        i.change = Some(change(Bump::Major));
+        i.build_change = Some(change(Bump::Rebuild));
+        assert_eq!(
+            decide(UpdatePolicy::Auto, &TAGS, false, "", 0, &i, now),
+            Decision::Update(UpdateRequest::default())
+        );
+        // When the build isn't allowed either, the reason is the offered update's.
+        let strict = AutoInstall { rebuild: false, ..TAGS };
+        assert!(skip_reason(decide(UpdatePolicy::Auto, &strict, false, "", 0, &i, now)).contains("major"));
+    }
+
+    #[test]
+    fn tag_switches_wait_for_the_minimum_age() {
         let now = 1_000_000;
         let mut i = info(UpdateStatus::Available, "a", "a", now);
         i.newer_tag = Some(NewerTag { tag: "8.5.0".into(), scope: TagScope::Minor, first_seen: Some(now - 3600) });
-        match decide(UpdatePolicy::Auto, TagScope::Minor, false, "", 6, &i, now) {
-            Decision::Skip(why) => assert!(why.contains("6h old"), "{why}"),
-            other => panic!("unexpected {other:?}"),
-        }
-        assert!(matches!(decide(UpdatePolicy::Auto, TagScope::Minor, false, "", 1, &i, now), Decision::Update(_)));
+        assert!(skip_reason(decide(UpdatePolicy::Auto, &TAGS, false, "", 6, &i, now)).contains("6h old"));
+        assert!(matches!(decide(UpdatePolicy::Auto, &TAGS, false, "", 1, &i, now), Decision::Update(_)));
     }
 }

@@ -17,14 +17,15 @@ click Check now, Nodestarr asks each image's registry two questions:
 2. **Is there a newer version tag?** For tags that look like versions
    (`5.28.0.10274`, `v2.1.0`, `16-alpine`), it lists the repository's tags
    and finds the newest one of the same kind. Settings > Updates > Report
-   newer versions up to decides how far to look (patch, minor or major), and
+   new tags decides how far to look (patch, minor or major), and
    pre-releases (alpha, beta, rc, nightly) are skipped unless you turn them
    on.
 
 When a new build exists, Nodestarr reads its version from the image labels
 (the OCI version label, LinuxServer's build version, or the app's version
 variable), so you see "5.0.0.2700" instead of a digest. Release notes come
-from the app's GitHub releases.
+from the app's GitHub releases, and decide together with the versions what
+type of update it is (see [Update types](#update-types)).
 
 Registries: Docker Hub, GitHub (ghcr.io), LinuxServer (lscr.io), Quay,
 Google, and any registry that speaks the standard API. Add credentials for
@@ -44,6 +45,51 @@ A container shows one of these states:
 | Pinned | The image is pinned by digest (`image@sha256:...`) and never changes. |
 | Not checked | Its policy is Ignore. |
 
+## Update types
+
+Every update gets a type, shown as chips on the Updates page, the
+container's Updates tab and the dashboard. The Updates page can show one
+type at a time (the filter is in the address, so `/updates?type=security`
+can be bookmarked) and sorts by type by default, most important first.
+
+How far the version moves:
+
+| Type | Meaning |
+|---|---|
+| Major | The first number changes (1.x to 2.0). |
+| Minor | The second number changes (1.2 to 1.3). |
+| Patch | A later number changes (1.2.3 to 1.2.4, or Sonarr's 4.0.9.2244 to 4.0.10.2544). |
+| Rebuild | The same version in a new image: a refreshed base image, or a packaging revision such as LinuxServer's `ls250` to `ls251`. |
+| Unknown | The image doesn't say which version it is, so the size can't be told. |
+
+Only the numbers count, so `v1.2` and `1.3-alpine` compare fine.
+Year-based versions (Home Assistant's 2024.12 to 2025.1) are never major:
+a change of year or month is minor. For a new build of a tag like `latest`,
+the running version and the new one are read from the image labels or,
+for official images such as nginx or postgres, from their version variable
+(`NGINX_VERSION`). When neither says, the tag still limits the change: a
+new build of `16` is at most minor, of `16.4` at most a patch. Such
+estimates are shown as "≤ Minor" with a dashed outline.
+
+What the release notes say, on top of the size:
+
+| Type | Meaning |
+|---|---|
+| Security | The release notes mention security fixes: a CVE or GitHub advisory id, a "Security" section, "security fix", a fixed vulnerability, or a named attack such as XSS or SQL injection. |
+| Breaking | The release notes mention breaking changes: "breaking change", a "Breaking changes" section, "backwards incompatible", "action required", "manual intervention", or a conventional-commit `feat!:`. "No breaking changes" and "Breaking changes: none" don't count. |
+
+Nodestarr reads every release after the version you run, up to the one the
+update brings, so a breaking change two releases back still counts. The
+line that gave it away is shown on the Updates page and the container's
+Updates tab, with the release it's in. Release notes come from GitHub (the
+30 newest releases of the app's repository); when they don't reach back to
+your version, the Updates tab says so. Images without a known GitHub
+repository get a size but no security or breaking marks.
+
+This is read from free text, so it can be wrong. It errs towards calling an
+update breaking, which only holds automatic updates back, and is strict
+about security, which can let them install.
+
 ## Policies
 
 Each container has an update policy (Settings > Updates sets the default for
@@ -54,15 +100,26 @@ containers you haven't configured):
 - **Automatic**: install during the automatic update window (04:00 by
   default, Settings > Updates > Automatic updates).
 
-Automatic updates have two more limits:
+Automatic updates have more limits:
 
-- **How far they may go.** For containers on a version tag, choose new
-  builds only (the default, so `5.28` never becomes `5.29` by itself), patch,
-  minor or major versions.
+- **Which types install.** Settings > Updates > Install on their own, or
+  per container in its settings. By default rebuilds, patch and minor
+  versions and updates of unknown size install; major versions wait for
+  you. Security fixes can install even when their size isn't ticked
+  (never major versions). Updates whose release notes mention breaking
+  changes wait for you, unless you tick Breaking.
+- **Whether tags change.** For containers on a version tag, Switch to
+  newer tags lets automatic updates move `5.28` to `5.29` when that
+  version's type is ticked. It's off by default, so only new builds of the
+  tag you run are installed. When a newer tag isn't allowed but the
+  current tag has a new build, that build is installed instead.
 - **How old an update must be.** Updates are only installed once they have
   been out for at least 6 hours (configurable, also per container), so a
   broken release has time to be pulled or fixed. Clicking Update ignores
   this.
+
+The Updates page says for each update whether it installs on its own and
+when, or why it waits for you.
 
 You can also **hold** a container (Container > Updates > Hold), which pauses
 automatic updates for it until you release it, and **skip** a build, which

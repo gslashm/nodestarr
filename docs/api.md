@@ -58,7 +58,7 @@ container or stack run one at a time.
 
 | Method and path | What it does |
 |---|---|
-| `GET /updates` | Update status of every container, the schedule and the last check. |
+| `GET /updates` | Update status of every container, the schedule and the last check. Each available update has a `change`: its type (`bump` is `major`, `minor`, `patch`, `rebuild` or `unknown`; `security`, `breaking` and `prerelease` flags) and what its release notes said (`notes.findings`). Containers also carry `auto_install`, the update types they install on their own. |
 | `POST /updates/check` | Check every container now. |
 | `POST /containers/{id}/check` | Check one container now. |
 | `POST /containers/{id}/update` | Update one container: `{"tag": "develop", "skip_backup": false}` (both optional). |

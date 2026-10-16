@@ -342,22 +342,8 @@ pub fn detect_version(
                 return (Some(v.clone()), Some("label".into()));
             }
         }
-        let repo = crate::registry::reference::ImageRef::parse(image_ref)
-            .map(|r| r.repo_basename().to_ascii_uppercase().replace('-', "_"))
-            .unwrap_or_default();
-        let mut env_candidates: Vec<String> = Vec::new();
-        if !repo.is_empty() {
-            env_candidates.push(format!("{repo}_VERSION"));
-        }
-        if let Some(app) = app {
-            for k in app.version_env {
-                env_candidates.push(k.to_string());
-            }
-        }
-        for key in env_candidates {
-            if let Some(v) = meta.env.get(&key).filter(|v| plausible_version(v)) {
-                return (Some(v.clone()), Some("env".into()));
-            }
+        if let Some(v) = version_from_env(image_ref, &meta.env, app) {
+            return (Some(v), Some("env".into()));
         }
     }
     if let Some(r) = crate::registry::reference::ImageRef::parse(image_ref)
@@ -367,6 +353,22 @@ pub fn detect_version(
         return (Some(tag.to_string()), Some("tag".into()));
     }
     (None, None)
+}
+
+/// A `<APP>_VERSION` variable baked into an image (official images set one,
+/// like `NGINX_VERSION`), or the app's own version variable. Also read from
+/// a registry's image config, so a new build's version compares with this.
+pub fn version_from_env(
+    image_ref: &str,
+    env: &std::collections::HashMap<String, String>,
+    app: Option<&AppInfo>,
+) -> Option<String> {
+    let repo = crate::registry::reference::ImageRef::parse(image_ref)
+        .map(|r| r.repo_basename().to_ascii_uppercase().replace('-', "_"))
+        .unwrap_or_default();
+    let own = (!repo.is_empty()).then(|| format!("{repo}_VERSION"));
+    let app_keys = app.map(|a| a.version_env).unwrap_or_default().iter().map(|k| k.to_string());
+    own.into_iter().chain(app_keys).find_map(|key| env.get(&key).filter(|v| plausible_version(v)).cloned())
 }
 
 fn plausible_version(v: &str) -> bool {

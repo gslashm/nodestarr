@@ -2,6 +2,7 @@
 <script lang="ts">
   import Plus from '@lucide/svelte/icons/plus';
   import X from '@lucide/svelte/icons/x';
+  import AutoInstallEditor from '../../components/AutoInstallEditor.svelte';
   import CronInput from '../../components/CronInput.svelte';
   import Field from '../../components/Field.svelte';
   import Group from '../../components/Group.svelte';
@@ -23,7 +24,7 @@
       <Field label="Check for updates" id="u-check" hint="Only image digests and tags are compared; nothing is downloaded.">
         <CronInput id="u-check" kind="check" bind:value={u.check_cron} />
       </Field>
-      <Field label="Report new versions" id="u-notify-scope" hint="When the tag is a version (like 4.1.2), how far newer tags may go to count as an update.">
+      <Field label="Report new tags" id="u-notify-scope" hint="When the tag is a version (like 4.1.2), how far newer tags may go to count as an update. New builds of the tag itself are always reported.">
         <select id="u-notify-scope" class="input" bind:value={u.notify_scope}>
           {#each SCOPES as s (s.value)}<option value={s.value}>{s.label}</option>{/each}
         </select>
@@ -44,10 +45,8 @@
           <option value="ignore">Don't check</option>
         </select>
       </Field>
-      <Field label="Install on their own" id="u-scope" hint="For containers set to update automatically. Bigger jumps are only reported.">
-        <select id="u-scope" class="input" bind:value={u.default_auto_scope}>
-          {#each SCOPES as s (s.value)}<option value={s.value}>{s.label}</option>{/each}
-        </select>
+      <Field label="Install on their own" hint="For containers set to update automatically; each can choose its own in its settings. Updates of other types wait for you on the Updates page.">
+        <AutoInstallEditor bind:value={u.auto_install} />
       </Field>
       <Field label="When" id="u-auto" hint="Automatic updates run at this time, one container after another.">
         <CronInput id="u-auto" bind:value={u.auto_cron} />

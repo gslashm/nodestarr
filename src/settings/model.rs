@@ -196,7 +196,8 @@ pub enum UpdatePolicy {
     Auto,
 }
 
-/// How far automatic updates may move a version-pinned tag.
+/// How far a version-pinned tag may move: for reporting newer tags, and
+/// before update types, for automatic updates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TagScope {
@@ -206,6 +207,61 @@ pub enum TagScope {
     Patch,
     Minor,
     Major,
+}
+
+/// Which updates automatic updates install, by type. An update installs
+/// when its version change is ticked (or it fixes a security issue and
+/// `security` is on, unless it is a major version), its release notes don't
+/// mention breaking changes (unless `breaking` is on), and it doesn't change
+/// the tag (unless `switch_tags` is on).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AutoInstall {
+    /// The same version in a new image.
+    pub rebuild: bool,
+    pub patch: bool,
+    pub minor: bool,
+    pub major: bool,
+    /// Updates Nodestarr can't size (the image doesn't say its version).
+    pub unknown: bool,
+    /// Security fixes, even when their version change isn't ticked.
+    pub security: bool,
+    /// Updates whose release notes mention breaking changes.
+    pub breaking: bool,
+    /// Switch a version tag to a newer one (16.4 to 16.5). Off installs only
+    /// new builds of the tag a container runs.
+    pub switch_tags: bool,
+}
+
+impl Default for AutoInstall {
+    fn default() -> Self {
+        Self {
+            rebuild: true,
+            patch: true,
+            minor: true,
+            major: false,
+            unknown: true,
+            security: true,
+            breaking: false,
+            switch_tags: false,
+        }
+    }
+}
+
+impl AutoInstall {
+    /// The choice from before update types: how far automatic updates could
+    /// move a pinned tag. "New builds only" kept tags as they were; the others
+    /// moved them up to that scope, and now also limit new builds of tags
+    /// like `latest` to it.
+    pub fn from_scope(scope: TagScope) -> Self {
+        let base = Self::default();
+        match scope {
+            TagScope::Digest => base,
+            TagScope::Patch => Self { minor: false, switch_tags: true, ..base },
+            TagScope::Minor => Self { switch_tags: true, ..base },
+            TagScope::Major => Self { major: true, switch_tags: true, ..base },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -223,8 +279,12 @@ pub struct Updates {
     /// When to check registries for updates.
     pub check_cron: String,
     pub default_policy: UpdatePolicy,
-    /// Default scope for automatic version bumps of pinned tags.
-    pub default_auto_scope: TagScope,
+    /// Which updates automatic updates install (containers can choose their own).
+    pub auto_install: AutoInstall,
+    /// Before update types: how far automatic updates could move a pinned
+    /// tag. Read from older settings by [`Settings::upgrade`], never written.
+    #[serde(skip_serializing)]
+    pub default_auto_scope: Option<TagScope>,
     /// When automatic updates are applied.
     pub auto_cron: String,
     /// Only auto-apply updates that have been available this long. Manual
@@ -259,7 +319,8 @@ impl Default for Updates {
         Self {
             check_cron: "17 */6 * * *".into(),
             default_policy: UpdatePolicy::Notify,
-            default_auto_scope: TagScope::Digest,
+            auto_install: AutoInstall::default(),
+            default_auto_scope: None,
             auto_cron: "0 4 * * *".into(),
             min_age_hours: 6,
             notify_scope: TagScope::Major,
@@ -866,6 +927,14 @@ fn validate_hhmm(s: &str) -> Result<(), String> {
 }
 
 impl Settings {
+    /// Carries choices stored by older versions over to the fields that
+    /// replaced them. Runs after every load and before every save.
+    pub fn upgrade(&mut self) {
+        if let Some(scope) = self.updates.default_auto_scope.take() {
+            self.updates.auto_install = AutoInstall::from_scope(scope);
+        }
+    }
+
     /// Checks the whole document; returns a user-facing message on the first problem.
     pub fn validate(&self) -> Result<(), String> {
         let g = &self.general;
@@ -1047,6 +1116,24 @@ mod tests {
         let partial: Settings = serde_json::from_str(r#"{"updates": {"min_age_hours": 0}}"#).unwrap();
         assert_eq!(partial.updates.min_age_hours, 0);
         assert_eq!(partial.updates.keep_rollback_images, 2);
+    }
+
+    #[test]
+    fn auto_update_scope_carries_over() {
+        let mut s: Settings = serde_json::from_str(r#"{"updates": {"default_auto_scope": "patch"}}"#).unwrap();
+        s.upgrade();
+        let a = s.updates.auto_install;
+        assert!(a.patch && a.rebuild && a.switch_tags && !a.minor && !a.major);
+        assert!(s.updates.default_auto_scope.is_none());
+        // Never written back, so it can't override later choices.
+        let json = serde_json::to_value(&s).unwrap();
+        assert!(json["updates"].get("default_auto_scope").is_none());
+        assert_eq!(json["updates"]["auto_install"]["switch_tags"].as_bool(), Some(true));
+        // "New builds only" keeps tags where they are.
+        assert!(!AutoInstall::from_scope(TagScope::Digest).switch_tags);
+        let mut fresh = Settings::default();
+        fresh.upgrade();
+        assert_eq!(fresh.updates.auto_install, AutoInstall::default());
     }
 
     #[test]

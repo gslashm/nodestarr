@@ -1,10 +1,15 @@
 <!--
-  Updates across all containers: what's available (with bulk updating),
-  every container's update state and policy, the schedule, and history.
+  Updates across all containers: what's available, by type (breaking,
+  security, major, minor, patch, rebuild) with filters, sorting, bulk
+  updating and what automatic updates will do with each; every container's
+  update state and policy; the schedule; and history.
 -->
 <script lang="ts">
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import ChevronUp from '@lucide/svelte/icons/chevron-up';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
+  import ListFilter from '@lucide/svelte/icons/list-filter';
   import History from '@lucide/svelte/icons/history';
   import Play from '@lucide/svelte/icons/play';
   import Search from '@lucide/svelte/icons/search';
@@ -18,14 +23,17 @@
   import Tabs from '../components/Tabs.svelte';
   import TimeAgo from '../components/TimeAgo.svelte';
   import UpdateHistory from '../components/UpdateHistory.svelte';
+  import UpdateTypeChips from '../components/UpdateTypeChips.svelte';
   import { confirmUpdate } from '../lib/actions';
   import { api, errorMessage, seg } from '../lib/api';
+  import { clock } from '../lib/clock.svelte';
   import { ago, dateTime, hasUpdate, imageTag, plural, shortImage, updateLabel } from '../lib/format';
   import { live } from '../lib/live.svelte';
-  import { href } from '../lib/router.svelte';
+  import { href, router } from '../lib/router.svelte';
   import { session } from '../lib/session.svelte';
-  import type { ContainerView, HistoryEntry, TagScope } from '../lib/types';
+  import type { Change, ContainerView, HistoryEntry } from '../lib/types';
   import { ui } from '../lib/ui.svelte';
+  import { TYPE, UPDATE_TYPES, autoPlan, changeOf, countTypes, rulesSummary, typeRank, typesOf, type UpdateType } from '../lib/updates';
 
   let { params }: { params: Record<string, string> } = $props();
 
@@ -38,6 +46,13 @@
   let selected = $state<Set<string>>(new Set());
   let applying = $state(false);
   let showAllFailed = $state(false);
+
+  type SortKey = 'type' | 'name' | 'published';
+  const TYPE_KEYS = new Set<string>(UPDATE_TYPES.map((t) => t.key));
+  const initialType = router.query.get('type') ?? '';
+  let typeFilter = $state<UpdateType | 'all'>(TYPE_KEYS.has(initialType) ? (initialType as UpdateType) : 'all');
+  let sort = $state<SortKey>('type');
+  let desc = $state(false);
 
   async function loadOverview() {
     try {
@@ -72,9 +87,22 @@
     if (tab === 'history') void loadHistory();
   });
 
-  const SCOPE: Record<TagScope, string> = { digest: 'new build', patch: 'patch', minor: 'minor', major: 'major' };
-
   const available = $derived(live.list.filter((c) => hasUpdate(c.update) && c.policy !== 'ignore' && !c.prefs.hidden));
+  const counts = $derived(countTypes(available.map((c) => changeOf(c.update))));
+  const filtered = $derived(typeFilter === 'all' ? available : available.filter((c) => typesOf(changeOf(c.update)).includes(typeFilter as UpdateType)));
+  const shown = $derived.by(() => {
+    const dir = desc ? -1 : 1;
+    const key = (c: ContainerView): number | string => {
+      if (sort === 'name') return c.display_name.toLowerCase();
+      if (sort === 'published') return c.update?.latest_created ?? 0;
+      return typeRank(changeOf(c.update));
+    };
+    return [...filtered].sort((a, b) => {
+      const ka = key(a);
+      const kb = key(b);
+      return (ka < kb ? -1 : ka > kb ? 1 : 0) * dir || a.display_name.localeCompare(b.display_name);
+    });
+  });
   const failed = $derived(live.list.filter((c) => c.update?.status === 'error' && !c.prefs.hidden));
   const next = $derived(Object.fromEntries(schedule.map((s) => [s.job, s.next])) as Record<string, number | null>);
 
@@ -91,12 +119,35 @@
     selected = s;
   }
 
-  const selectable = $derived(available.filter((c) => !c.is_self && !c.busy));
+  const selectable = $derived(shown.filter((c) => !c.is_self && !c.busy));
   const allSelected = $derived(selectable.length > 0 && selectable.every((c) => selected.has(c.id)));
 
   function toggleAll() {
     selected = allSelected ? new Set() : new Set(selectable.filter((c) => !c.prefs.held).map((c) => c.id));
   }
+
+  function setFilter(t: UpdateType | 'all') {
+    typeFilter = t;
+    selected = new Set();
+    router.setQuery({ type: t === 'all' ? null : t });
+  }
+
+  function setSort(k: SortKey) {
+    if (sort === k) desc = !desc;
+    else {
+      sort = k;
+      desc = k === 'published';
+    }
+  }
+
+  /** The release notes line behind a breaking or security mark. */
+  function evidence(ch: Change | null): string {
+    const f = ch?.notes?.findings.find((x) => x.kind === 'breaking') ?? ch?.notes?.findings[0];
+    return f ? `“${f.text}”` : '';
+  }
+
+  /** The next automatic update run: a time, null when they're off, undefined until the schedule loads. */
+  const nextAuto = $derived(schedule.length ? (next['auto-update'] ?? null) : undefined);
 
   async function checkAll() {
     try {
@@ -123,9 +174,17 @@
     const targets = available.filter((c) => selected.has(c.id));
     if (!targets.length) return;
     const backup = session.settings?.updates.backup_before_update;
+    const breaking = targets.filter((c) => changeOf(c.update)?.breaking).map((c) => c.display_name);
     const r = await ui.ask({
       title: `Update ${plural(targets.length, 'container')}?`,
-      message: `${targets.map((c) => `${c.display_name} (${updateLabel(c.update)})`).join(', ')}.${backup ? ' Each is backed up first.' : ''} They update one after another; any that fail to start are rolled back.`,
+      message: [
+        `${targets.map((c) => `${c.display_name} (${updateLabel(c.update)})`).join(', ')}.`,
+        breaking.length ? `The release notes of ${breaking.join(', ')} mention breaking changes; read them first.` : '',
+        backup ? 'Each is backed up first.' : '',
+        'They update one after another; any that fail to start are rolled back.',
+      ]
+        .filter(Boolean)
+        .join(' '),
       confirmLabel: 'Update',
       options: backup ? [{ key: 'skip', label: 'Skip the pre-update backups' }] : [],
     });
@@ -158,7 +217,7 @@
   function policyText(c: ContainerView): string {
     if (c.policy === 'ignore') return 'Ignored';
     if (c.policy === 'notify') return 'Tell me';
-    return `Automatic (${SCOPE[c.auto_scope]})`;
+    return 'Automatic';
   }
 
   function statusText(c: ContainerView): { text: string; tone: string } {
@@ -182,7 +241,10 @@
   }
 </script>
 
-<PageHeader title="Updates" subtitle={`${available.length ? plural(available.length, 'update') + ' available' : 'Everything is up to date'}${lastCheck ? `, checked ${ago(lastCheck)}` : ''}`}>
+<PageHeader
+  title="Updates"
+  subtitle={`${available.length ? plural(available.length, 'update') + ' available' : 'Everything is up to date'}${counts.security ? `, ${counts.security} with security fixes` : ''}${lastCheck ? `, checked ${ago(lastCheck)}` : ''}`}
+>
   {#snippet actions()}
     {#if session.isAdmin}
       <Button variant="ghost" icon={Search} busy={live.checkingUpdates} onclick={checkAll}>Check now</Button>
@@ -224,6 +286,17 @@
         {/snippet}
       </EmptyState>
     {:else}
+      <div class="filters" role="tablist" aria-label="Show updates of type">
+        <ListFilter size={15} class="faint" />
+        <button type="button" role="tab" aria-selected={typeFilter === 'all'} class:active={typeFilter === 'all'} onclick={() => setFilter('all')}>
+          All <span class="num count">{available.length}</span>
+        </button>
+        {#each UPDATE_TYPES.filter((t) => counts[t.key] > 0 || typeFilter === t.key) as t (t.key)}
+          <button type="button" role="tab" aria-selected={typeFilter === t.key} class:active={typeFilter === t.key} class="tone-{t.tone}" title={t.hint} onclick={() => setFilter(t.key)}>
+            {t.label} <span class="num count">{counts[t.key]}</span>
+          </button>
+        {/each}
+      </div>
       {#if session.isAdmin && selected.size}
         <div class="bulk">
           <span><strong>{selected.size}</strong> selected</span>
@@ -231,62 +304,93 @@
           <button type="button" class="btn small ghost" onclick={() => (selected = new Set())}>Clear</button>
         </div>
       {/if}
-      <section class="panel">
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                {#if session.isAdmin}<th class="shrink"><input type="checkbox" checked={allSelected} onchange={toggleAll} aria-label="Select all" /></th>{/if}
-                <th>Container</th>
-                <th>Running</th>
-                <th>Available</th>
-                <th class="hide-md">Published</th>
-                <th class="hide-md">Policy</th>
-                <th class="shrink"><span class="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each available as c (c.id)}
-                {@const u = c.update!}
+      {#if shown.length === 0}
+        <EmptyState icon={CircleCheck} title="No {TYPE[typeFilter as UpdateType]?.label.toLowerCase() ?? ''} updates">
+          None of the available updates is of this type.
+          {#snippet actions()}<button type="button" class="btn" onclick={() => setFilter('all')}>Show all updates</button>{/snippet}
+        </EmptyState>
+      {:else}
+        <section class="panel">
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
                 <tr>
-                  {#if session.isAdmin}
-                    <td class="shrink"><input type="checkbox" checked={selected.has(c.id)} onchange={() => toggle(c.id)} disabled={c.is_self || c.busy} aria-label="Select {c.display_name}" /></td>
-                  {/if}
-                  <td>
-                    <a class="who" href={href(`/containers/${encodeURIComponent(c.name)}/updates`)}>
-                      <AppIcon name={c.display_name} slug={c.app} icon={c.prefs.icon} size={26} />
-                      <span class="names">
-                        <span class="name">{c.display_name}</span>
-                        <span class="faint small ellipsis">{c.stack ?? shortImage(c.image)}</span>
-                      </span>
-                    </a>
-                  </td>
-                  <td class="ver">{c.version ?? imageTag(c.image)}</td>
-                  <td>
-                    <span class="ver text-update">{updateLabel(u)}</span>
-                    <span class="faint small">{u.newer_tag ? `${SCOPE[u.newer_tag.scope]} version` : 'new build'}</span>
-                  </td>
-                  <td class="hide-md">{#if u.latest_created}<TimeAgo ts={u.latest_created} />{:else}<span class="faint">–</span>{/if}</td>
-                  <td class="hide-md">
-                    {policyText(c)}
-                    {#if c.prefs.held}<span class="chip held">On hold</span>{/if}
-                  </td>
-                  <td class="shrink">
-                    {#if session.isAdmin}
-                      <div class="row-actions">
-                        {#if u.status === 'available' && !u.newer_tag && u.latest_digest}
-                          <button type="button" class="btn small ghost" onclick={() => skip(c)} title="Don't offer this build again">Skip</button>
-                        {/if}
-                        <Button small icon={ArrowUp} onclick={() => confirmUpdate(c)} disabled={c.busy || c.is_self} busy={c.busy}>Update</Button>
-                      </div>
-                    {/if}
-                  </td>
+                  {#if session.isAdmin}<th class="shrink"><input type="checkbox" checked={allSelected} onchange={toggleAll} aria-label="Select all" /></th>{/if}
+                  <th><button type="button" class="sort" onclick={() => setSort('name')}>Container {#if sort === 'name'}{#if desc}<ChevronDown size={13} />{:else}<ChevronUp size={13} />{/if}{/if}</button></th>
+                  <th>Running</th>
+                  <th>Available</th>
+                  <th><button type="button" class="sort" onclick={() => setSort('type')}>Type {#if sort === 'type'}{#if desc}<ChevronDown size={13} />{:else}<ChevronUp size={13} />{/if}{/if}</button></th>
+                  <th class="hide-md"><button type="button" class="sort" onclick={() => setSort('published')}>Published {#if sort === 'published'}{#if desc}<ChevronDown size={13} />{:else}<ChevronUp size={13} />{/if}{/if}</button></th>
+                  <th class="hide-md">Automatic updates</th>
+                  <th class="shrink"><span class="sr-only">Actions</span></th>
                 </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {#each shown as c (c.id)}
+                  {@const u = c.update!}
+                  {@const ch = changeOf(u)}
+                  {@const plan = autoPlan(c, clock.now)}
+                  {@const why = ch?.breaking || ch?.security ? evidence(ch) : ''}
+                  <tr>
+                    {#if session.isAdmin}
+                      <td class="shrink"><input type="checkbox" checked={selected.has(c.id)} onchange={() => toggle(c.id)} disabled={c.is_self || c.busy} aria-label="Select {c.display_name}" /></td>
+                    {/if}
+                    <td>
+                      <a class="who" href={href(`/containers/${encodeURIComponent(c.name)}/updates`)}>
+                        <AppIcon name={c.display_name} slug={c.app} icon={c.prefs.icon} size={26} />
+                        <span class="names">
+                          <span class="name">{c.display_name}</span>
+                          <span class="faint small ellipsis">{c.stack ?? shortImage(c.image)}</span>
+                        </span>
+                      </a>
+                    </td>
+                    <td class="ver">{c.version ?? imageTag(c.image)}</td>
+                    <td>
+                      <span class="ver text-update">{updateLabel(u)}</span>
+                      <span class="faint small">{u.newer_tag ? 'newer tag' : 'new build'}</span>
+                    </td>
+                    <td class="type">
+                      <UpdateTypeChips change={ch} />
+                      {#if why}<span class="faint small ellipsis why" title={why}>{why}</span>{/if}
+                    </td>
+                    <td class="hide-md">{#if u.latest_created}<TimeAgo ts={u.latest_created} />{:else}<span class="faint">–</span>{/if}</td>
+                    <td class="hide-md auto">
+                      {#if c.prefs.held}
+                        <span class="text-warn">On hold</span>
+                        <span class="faint small">Nothing installs on its own</span>
+                      {:else if !plan}
+                        <span class="faint">{policyText(c)}</span>
+                        <span class="faint small">You decide</span>
+                      {:else if plan.install && nextAuto === null}
+                        <span>Would install</span>
+                        <span class="faint small">Automatic updates are off</span>
+                      {:else if plan.install}
+                        <span class="text-ok">Installs on its own</span>
+                        <span class="faint small" title={rulesSummary(c.auto_install)}>
+                          {plan.after ? `After ${dateTime(plan.after)}` : nextAuto ? dateTime(nextAuto) : 'At the next run'}{plan.tag ? `, as ${plan.tag}` : ''}
+                        </span>
+                      {:else}
+                        <span>Waits for you</span>
+                        <span class="faint small" title={rulesSummary(c.auto_install)}>{plan.reason}</span>
+                      {/if}
+                    </td>
+                    <td class="shrink">
+                      {#if session.isAdmin}
+                        <div class="row-actions">
+                          {#if u.status === 'available' && !u.newer_tag && u.latest_digest}
+                            <button type="button" class="btn small ghost" onclick={() => skip(c)} title="Don't offer this build again">Skip</button>
+                          {/if}
+                          <Button small icon={ArrowUp} onclick={() => confirmUpdate(c)} disabled={c.busy || c.is_self} busy={c.busy}>Update</Button>
+                        </div>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {/if}
       {#if available.some((c) => c.is_self)}
         <p class="faint small note">Nodestarr updates itself from Settings > System.</p>
       {/if}
@@ -330,8 +434,11 @@
                 <td><a href={href(`/containers/${encodeURIComponent(c.name)}/updates`)}>{c.display_name}</a></td>
                 <td class="mono small ellipsis image" title={c.image}>{shortImage(c.image)}</td>
                 <td class="ver">{c.version ?? '–'}</td>
-                <td class={st.tone} title={c.update?.error ?? ''}>{st.text}</td>
-                <td class="hide-md">{policyText(c)}{#if c.prefs.held} <span class="chip held">On hold</span>{/if}</td>
+                <td title={c.update?.error ?? ''}>
+                  <span class={st.tone}>{st.text}</span>
+                  {#if hasUpdate(c.update) && c.policy !== 'ignore'}<UpdateTypeChips change={changeOf(c.update)} />{/if}
+                </td>
+                <td class="hide-md"><span title={c.policy === 'auto' ? rulesSummary(c.auto_install) : ''}>{policyText(c)}</span>{#if c.prefs.held} <span class="chip held">On hold</span>{/if}</td>
                 <td class="hide-md">{#if c.update?.checked_at}<TimeAgo ts={c.update.checked_at} />{:else}<span class="faint">never</span>{/if}</td>
               </tr>
             {/each}
@@ -361,6 +468,77 @@
     gap: 6px 22px;
     margin-bottom: 16px;
     font-size: var(--fs-sm);
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .filters :global(svg) {
+    margin-right: 4px;
+  }
+  .filters button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 16px;
+    background: none;
+    color: var(--text-2);
+    font: 500 var(--fs-md) / 1 var(--font-ui);
+    cursor: pointer;
+  }
+  .filters button:hover {
+    color: var(--text);
+    background: var(--raised);
+  }
+  .filters button.active {
+    border-color: var(--line-strong);
+    background: var(--panel);
+    color: var(--text);
+  }
+  .count {
+    color: var(--text-3);
+    font-size: var(--fs-sm);
+  }
+  .tone-bad .count {
+    color: var(--bad);
+  }
+  .tone-warn .count {
+    color: var(--warn);
+  }
+  .tone-update .count {
+    color: var(--update);
+  }
+  .sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .sort:hover {
+    color: var(--text);
+  }
+  .type,
+  .auto {
+    min-width: 0;
+  }
+  .why {
+    display: block;
+    max-width: 280px;
+    margin-top: 3px;
+  }
+  .auto .small {
+    display: block;
   }
   .bulk {
     display: flex;

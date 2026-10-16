@@ -47,10 +47,41 @@ All notable changes to Nodestarr are listed here. The format follows
   items are one click away and can be shown again; the Containers page's
   "Needs attention" filter and the sidebar count leave them out too.
   API: `PUT /containers/{id}/dismiss`.
+- **Update types**: every update is a major, minor or patch version, a
+  rebuild of the same version, or of unknown size, and is marked when its
+  release notes mention security fixes or breaking changes, with the line
+  that says so. Nodestarr reads every release between the running version
+  and the new one. The Updates page filters and sorts by type and says for
+  each update whether automatic updates will install it, and when, or why
+  it waits. Confirming an update warns about breaking changes. Home
+  Assistant shows the type as the update's release summary, and
+  `nodestarr_updates_available{type=...}` counts updates by type.
+- **Automatic updates by type**: choose which types install on their own
+  (by default rebuilds, patch and minor versions and updates of unknown
+  size), let security fixes install regardless of their size (except major
+  versions), and hold back updates whose release notes mention breaking
+  changes. Each container can have its own choice.
+- New builds of official images (nginx, postgres, ...) show their version,
+  read from the image's version variable.
 
 ### Changed
 
 - The stack page's Compose tab is now the Editor, at the same address.
+- Automatic updates no longer take "how far a version tag may move":
+  Settings > Updates > Install on their own lists update types instead,
+  with a separate switch for changing tags. Existing choices carry over:
+  "new builds only" keeps tags as they are, and "patch", "minor" or "major"
+  switch tags up to that size. Two things are now held back that weren't:
+  updates whose release notes mention breaking changes, and, unless "major"
+  was chosen, major versions arriving as a new build of a tag like
+  `latest` ("patch" also holds back minor ones).
+- Release notes cover the 30 newest releases (was 15), and GitHub's rate
+  limit is remembered for a few minutes instead of being asked again by
+  every check.
+- API: containers have `auto_install` and `min_age_hours` instead of
+  `auto_scope`; the settings field `updates.default_auto_scope` is now
+  `updates.auto_install`, and a container's `update.auto_scope` is
+  `update.auto_install`. Older settings files still import.
 
 ### Fixed
 

@@ -29,6 +29,7 @@
   import { api } from '../lib/api';
   import { ALWAYS, type AttentionKind, concerns, dismiss } from '../lib/attention';
   import { bytes, duration, hasUpdate, isUp, STATE_LABEL, stateOf, updateLabel } from '../lib/format';
+  import { TYPE, changeOf, typesOf } from '../lib/updates';
   import { live } from '../lib/live.svelte';
   import { href } from '../lib/router.svelte';
   import { session } from '../lib/session.svelte';
@@ -121,15 +122,17 @@
           case 'held':
             out.push({ ...base, title: `Automatic updates paused for ${c.display_name}`, detail: 'A recent update was rolled back', link: `${path}/updates` });
             break;
-          case 'update':
+          case 'update': {
+            const types = typesOf(changeOf(c.update)).map((t) => TYPE[t].label.toLowerCase());
             ups.push({
               ...base,
               title: `${c.display_name} can be updated`,
-              detail: `${c.version ?? ''} ${c.version ? 'to ' : ''}${updateLabel(c.update) ?? ''}`.trim(),
+              detail: `${c.version ?? ''} ${c.version ? 'to ' : ''}${updateLabel(c.update) ?? ''}${types.length ? ` (${types.join(', ')})` : ''}`.trim(),
               fix: session.isAdmin ? { label: 'Update', run: () => confirmUpdate(c) } : undefined,
               link: `${path}/updates`,
             });
             break;
+          }
         }
       }
     }

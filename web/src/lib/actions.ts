@@ -21,6 +21,7 @@ import { href } from './router.svelte';
 import { session } from './session.svelte';
 import type { ContainerView, UpdateInfo } from './types';
 import { ui } from './ui.svelte';
+import { changeOf } from './updates';
 
 export type ContainerAction = 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 'kill' | 'recreate' | 'remove';
 
@@ -98,15 +99,24 @@ export async function startUpdate(c: ContainerView, tag?: string, skipBackup = f
 export async function confirmUpdate(c: ContainerView): Promise<void> {
   const u = c.update;
   const newerTag = u?.newer_tag?.tag;
+  const ch = changeOf(u);
   const backup = session.settings?.updates.backup_before_update && c.prefs.backup_enabled;
+  const size = ch && ch.bump !== 'unknown' && !ch.estimated ? ` (${ch.bump === 'rebuild' ? 'a rebuild of the same version' : `a ${ch.bump} version`})` : '';
   const what = newerTag
-    ? `Switches the image tag from ${imageTag(c.image)} to ${newerTag} (${u?.newer_tag?.scope} update).`
+    ? `Switches the image tag from ${imageTag(c.image)} to ${newerTag}${size}.`
     : u?.latest_version
-      ? `Pulls the new build of ${imageTag(c.image)} (${u.latest_version}).`
+      ? `Pulls the new build of ${imageTag(c.image)}: ${u.latest_version}${size}.`
       : `Pulls the new build of ${imageTag(c.image)}.`;
+  const breaking = ch?.notes?.findings.find((f) => f.kind === 'breaking');
   const r = await ui.ask({
     title: `Update ${c.display_name}?`,
-    message: [what, backup ? 'A backup is taken first.' : '', 'If the new version fails to start, Nodestarr rolls back automatically.']
+    message: [
+      what,
+      breaking ? `Its release notes mention breaking changes (${breaking.release}: “${breaking.text}”); read them before updating.` : ch?.breaking ? 'Its release notes mention breaking changes; read them before updating.' : '',
+      ch?.security ? 'It includes security fixes.' : '',
+      backup ? 'A backup is taken first.' : '',
+      'If the new version fails to start, Nodestarr rolls back automatically.',
+    ]
       .filter(Boolean)
       .join(' '),
     confirmLabel: 'Update',

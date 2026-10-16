@@ -5,11 +5,16 @@
 //!   version-pinned tags newer version tags are looked up too.
 //! * [`apply`] performs one-click updates and tag/branch switches with a
 //!   pre-update backup, health verification and automatic rollback.
+//! * [`classify`] gives each update a type (major, minor, patch, rebuild,
+//!   with security fixes or breaking changes from [`notes`]) that the UI
+//!   sorts and filters by and automatic updates follow.
 //! * [`auto`] applies updates on a schedule according to each container's policy.
 
 pub mod apply;
 pub mod auto;
 pub mod check;
+pub mod classify;
+pub mod notes;
 pub mod releases;
 
 use std::collections::HashMap;
@@ -23,6 +28,7 @@ use crate::db::Db;
 use crate::error::Result;
 use crate::events::{Event, EventBus};
 use crate::settings::TagScope;
+use crate::updates::classify::Change;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -72,6 +78,15 @@ pub struct UpdateInfo {
     pub error: Option<String>,
     /// Source repository (for release notes).
     pub source: Option<String>,
+    /// What the offered update is (the newer tag when there is one,
+    /// otherwise the new build of the current tag).
+    #[serde(default)]
+    pub change: Option<Change>,
+    /// When a newer tag is offered and the current tag also has a new build:
+    /// what that build is. Automatic updates fall back to it when they may
+    /// not switch to the newer tag.
+    #[serde(default)]
+    pub build_change: Option<Change>,
 }
 
 impl UpdateInfo {
@@ -82,6 +97,11 @@ impl UpdateInfo {
 
     pub fn has_update(&self) -> bool {
         matches!(self.status, UpdateStatus::Available | UpdateStatus::PendingRecreate)
+    }
+
+    /// The offered update's type, while there is one.
+    pub fn offered(&self) -> Option<&Change> {
+        self.change.as_ref().filter(|_| self.has_update())
     }
 }
 

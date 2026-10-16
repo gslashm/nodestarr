@@ -149,6 +149,7 @@ scrape_configs:
 | `nodestarr_container_restarts` | `name`, `stack`, `image` | Restart count. |
 | `nodestarr_container_uptime_seconds` | `name`, `stack`, `image` | Seconds since start. |
 | `nodestarr_container_update_available` | `name`, `stack`, `image` | 1 when an update is available. |
+| `nodestarr_updates_available` | `type` | Available updates of each type: `major`, `minor`, `patch`, `rebuild`, `unknown`, and also `security` and `breaking` (an update counts once for its size and once for each of those). |
 | `nodestarr_container_cpu_percent` | `name`, `stack`, `image` | CPU, 100 = one core. |
 | `nodestarr_container_memory_bytes` | `name`, `stack`, `image` | Memory without page cache. |
 | `nodestarr_container_network_receive_bytes_per_second` | `name`, `stack`, `image` | |
