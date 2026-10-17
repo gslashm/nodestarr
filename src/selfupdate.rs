@@ -106,8 +106,15 @@ pub async fn run_helper(boot: &BootConfig, container: &str, image: &str) -> anyh
     let log = |l: String| println!("{l}");
     let rec = recreate::replace(&api, container, body, Some(30), &log).await?;
     let cancel = tokio_util::sync::CancellationToken::new();
-    match actions::wait_until_stable(&api, &rec.new_id, Duration::from_secs(10), Duration::from_secs(120), &cancel)
-        .await
+    match actions::wait_until_stable(
+        &api,
+        &rec.new_id,
+        Duration::from_secs(10),
+        Duration::from_secs(120),
+        &cancel,
+        None,
+    )
+    .await
     {
         Ok(actions::Stability::Stable) => {
             println!("new Nodestarr container is up; removing the old one");

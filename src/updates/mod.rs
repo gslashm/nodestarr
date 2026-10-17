@@ -117,6 +117,9 @@ pub struct HistoryEntry {
     pub from_version: Option<String>,
     pub to_version: Option<String>,
     pub rollback_tag: Option<String>,
+    /// applied | failed | rolled_back | reverted (undone by a manual
+    /// rollback) | left_running (still migrating its data when verification
+    /// gave up, so not rolled back).
     pub status: String,
     pub trigger: Option<String>,
     pub task_id: Option<String>,
@@ -258,7 +261,7 @@ impl UpdateService {
                         to_ref: r.get(5)?,
                         from_version: r.get(6)?,
                         to_version: r.get(7)?,
-                        can_rollback: rollback_tag.is_some() && status == "applied",
+                        can_rollback: rollback_tag.is_some() && matches!(status.as_str(), "applied" | "left_running"),
                         rollback_tag,
                         status,
                         trigger: r.get(10)?,

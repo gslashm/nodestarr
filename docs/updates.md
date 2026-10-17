@@ -145,10 +145,34 @@ Plex while someone is streaming, using Plex's or Tautulli's API.
    (`network_mode: container:...`, like apps behind Gluetun) are recreated
    too.
 5. **Verifies** that the new container keeps running for 15 seconds and, if
-   it has a health check, becomes healthy, within 3 minutes.
+   it has a health check, becomes healthy, within 3 minutes. When it has a
+   web UI check (Monitoring), the web UI has to answer too.
 6. **Rolls back** when verification fails: the previous image and compose
    file come back, the container is recreated from them, you get a
    notification with the reason, and automatic updates skip that build.
+
+### Database migrations
+
+A new version often migrates its database when it first starts, and it
+can't pass its health check or answer until that's done. Rolling back
+halfway through would be worse than waiting, because the previous version
+usually can't read data a newer one has migrated. So while it verifies,
+Nodestarr reads the new container's output, and when it shows a migration
+(lines like "Running migrations", "Applying migration 0042" or "Upgrading
+database schema"):
+
+- it waits up to an hour (Settings > Updates > Wait for migrations) instead
+  of 3 minutes, and says so in the task log;
+- a health check that reports unhealthy in the meantime doesn't count as a
+  failure; Docker keeps checking, so it turns healthy once the app is up;
+- if the container is still not ready after that, it's **left running**
+  rather than rolled back: the update history shows "Left running" and you
+  get a notification asking you to check its logs. If it doesn't recover,
+  restore the pre-update backup, or use **Roll back** in the history when
+  you know the old version can still read the data.
+
+A container that exits or keeps restarting during a migration is still
+rolled back right away.
 7. **Cleans up**: only the newest 2 rollback images are kept per container,
    and dangling images are removed.
 

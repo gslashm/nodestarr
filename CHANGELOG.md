@@ -121,6 +121,14 @@ All notable changes to Nodestarr are listed here. The format follows
   dashboard as a stopped duplicate of its replacement.
 - On long pages (such as Settings > Updates), scrolling over the sidebar
   scrolled the whole page out of view.
+- An update that migrates the container's database no longer gets rolled
+  back halfway through because its health check or web UI wasn't ready
+  within "Give up after". When the container's output shows a migration,
+  Nodestarr waits up to an hour (Settings > Updates > Wait for migrations)
+  and ignores an unhealthy health check in the meantime. If it's still not
+  ready by then, it's left running instead of rolled back, since the old
+  version may not be able to read migrated data; the history shows "Left
+  running", and Roll back stays available there.
 
 ## [0.1.0] - 2026-10-15
 

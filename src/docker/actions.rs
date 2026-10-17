@@ -9,6 +9,7 @@ use bollard::query_parameters::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::docker::migration::MigrationWatch;
 use crate::error::{AppError, Result, is_not_modified};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,13 +172,16 @@ pub enum Stability {
 
 /// Waits until a container has been running for `settle` without restarting,
 /// and, if it defines a health check, reports healthy. Used after updates to
-/// decide whether to roll back.
+/// decide whether to roll back. While `migration` sees the container
+/// migrating its data, it gets that watch's longer limit and an unhealthy
+/// health check isn't a failure.
 pub async fn wait_until_stable(
     api: &Docker,
     id: &str,
     settle: Duration,
     timeout: Duration,
     cancel: &tokio_util::sync::CancellationToken,
+    migration: Option<&MigrationWatch>,
 ) -> Result<Stability> {
     let started = tokio::time::Instant::now();
     let initial = run_state(api, id).await?;
@@ -202,7 +206,10 @@ pub async fn wait_until_stable(
                 last_output(api, id).await
             )));
         }
-        if s.health.as_deref() == Some("unhealthy") {
+        // Health checks usually fail until a migration is done; Docker keeps
+        // running them, so it turns healthy once the app answers.
+        let migrating = migration.is_some_and(MigrationWatch::is_migrating);
+        if s.health.as_deref() == Some("unhealthy") && !migrating {
             return Ok(Stability::Failed("health check reports unhealthy".into()));
         }
         let since = *running_since.get_or_insert_with(tokio::time::Instant::now);
@@ -210,9 +217,11 @@ pub async fn wait_until_stable(
         if healthy_enough && since.elapsed() >= settle {
             return Ok(Stability::Stable);
         }
-        if started.elapsed() >= timeout {
+        let limit = migration.map_or(timeout, |m| m.limit(timeout, started.elapsed()));
+        if started.elapsed() >= limit {
             return Ok(Stability::TimedOut(match s.health.as_deref() {
                 Some("starting") => "health check still starting".into(),
+                Some("unhealthy") => "health check reports unhealthy".into(),
                 _ => "did not settle in time".into(),
             }));
         }

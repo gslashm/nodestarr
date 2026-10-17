@@ -1268,6 +1268,7 @@ export interface Settings {
     ignore_prereleases: boolean;
     settle_secs: number;
     verify_timeout_secs: number;
+    migration_timeout_mins: number;
     rollback_on_failure: boolean;
     backup_before_update: boolean;
     keep_rollback_images: number;

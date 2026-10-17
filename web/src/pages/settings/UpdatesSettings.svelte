@@ -69,6 +69,9 @@
       <Field label="Give up after" id="u-verify" hint="Seconds to wait for a health check to pass.">
         <input id="u-verify" class="input num short" type="number" min="10" bind:value={u.verify_timeout_secs} />
       </Field>
+      <Field label="Wait for migrations" id="u-migrate" hint="Minutes to wait instead when the container's output shows it's migrating its database. If it's still migrating then, it's left running rather than rolled back, since the previous version may not be able to read migrated data.">
+        <input id="u-migrate" class="input num short" type="number" min="0" bind:value={u.migration_timeout_mins} />
+      </Field>
       <Field label="Keep old images" id="u-keep" hint="Previous images kept per container, for rolling back later.">
         <input id="u-keep" class="input num short" type="number" min="0" bind:value={u.keep_rollback_images} />
       </Field>
