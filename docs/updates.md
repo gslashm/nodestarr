@@ -122,8 +122,12 @@ The Updates page says for each update whether it installs on its own and
 when, or why it waits for you.
 
 You can also **hold** a container (Container > Updates > Hold), which pauses
-automatic updates for it until you release it, and **skip** a build, which
-stops offering that particular build.
+automatic updates for it until you release it, and **skip** a build (Skip
+on the Updates page, or Container > Updates > Skip this build). A skipped
+build isn't offered anywhere and isn't installed automatically; when a
+newer build of the tag comes out, that one is offered as usual. To get the
+skipped build back, use Offer it again in Container > Updates. Skipping a
+new build doesn't skip a newer tag, which is a different update.
 
 The Plex guard (on by default) postpones automatic updates and restarts of
 Plex while someone is streaming, using Plex's or Tautulli's API.
@@ -149,7 +153,10 @@ Plex while someone is streaming, using Plex's or Tautulli's API.
    web UI check (Monitoring), the web UI has to answer too.
 6. **Rolls back** when verification fails: the previous image and compose
    file come back, the container is recreated from them, you get a
-   notification with the reason, and automatic updates skip that build.
+   notification with the reason, and automatic updates don't install that
+   build again. It's still offered, so you can retry it by hand, and
+   Container > Settings lets automatic updates have it again. Rolling back
+   by hand from the history does the same.
 
 ### Database migrations
 

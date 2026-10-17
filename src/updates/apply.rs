@@ -268,6 +268,7 @@ pub async fn run_update(
                 .prefs
                 .update(identity, |p| {
                     p.update.skipped_digest.clear();
+                    p.update.rolled_back_digest.clear();
                 })
                 .await;
             cleanup_images(app, ctx, identity).await;
@@ -343,7 +344,7 @@ pub async fn run_update(
                     .prefs
                     .update(identity, |p| {
                         if let Some(d) = &latest_digest {
-                            p.update.skipped_digest = d.clone();
+                            p.update.rolled_back_digest = d.clone();
                         }
                     })
                     .await;
@@ -915,7 +916,7 @@ async fn run_rollback(
         .prefs
         .update(identity, |p| {
             if let Some(d) = latest {
-                p.update.skipped_digest = d;
+                p.update.rolled_back_digest = d;
             }
         })
         .await;

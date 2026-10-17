@@ -72,7 +72,8 @@
     try {
       const info = await api.post<UpdateInfo>(`/containers/${encodeURIComponent(status.self.id)}/check`);
       if (status.self) status.self.update = info;
-      ui.toast(hasUpdate(info) ? `Nodestarr ${updateLabel(info)} is available` : 'Nodestarr is up to date', hasUpdate(info) ? 'info' : 'success');
+      if (info.status === 'skipped') ui.toast('Nothing newer than the build you skipped', 'success');
+      else ui.toast(hasUpdate(info) ? `Nodestarr ${updateLabel(info)} is available` : 'Nodestarr is up to date', hasUpdate(info) ? 'info' : 'success');
     } catch (err) {
       ui.error(err);
     }
@@ -94,7 +95,9 @@
             <p class="text-update">Version {updateLabel(s.self.update)} is available.</p>
             {#if session.isAdmin}<Button variant="primary" icon={ArrowUp} onclick={updateNodestarr}>Update Nodestarr</Button>{/if}
           {:else}
-            <p class="muted">{s.self.update?.status === 'up_to_date' ? 'Up to date.' : 'Not checked yet.'}</p>
+            <p class="muted">
+              {s.self.update?.status === 'up_to_date' ? 'Up to date.' : s.self.update?.status === 'skipped' ? "You skipped the new build; you'll be told when a newer one comes out." : 'Not checked yet.'}
+            </p>
             {#if session.isAdmin}<Button variant="ghost" onclick={checkSelf}>Check for a new version</Button>{/if}
           {/if}
           <p class="faint small">Running as container <a href={href(`/containers/${encodeURIComponent(s.self.name)}`)}>{s.self.name}</a> from <span class="mono">{s.self.image}</span></p>

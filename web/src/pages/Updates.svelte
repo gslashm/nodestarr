@@ -205,10 +205,28 @@
     }
   }
 
+  /** Skips the offered build; it leaves the list until a newer build comes out. */
   async function skip(c: ContainerView) {
+    const before = c.prefs.skipped_digest;
     try {
       await api.post(`/containers/${seg(c.id)}/skip`);
-      ui.toast(`Skipped this build of ${c.display_name}`, 'success');
+      if (selected.has(c.id)) {
+        const s = new Set(selected);
+        s.delete(c.id);
+        selected = s;
+      }
+      ui.toast(`Skipped this build of ${c.display_name}; you'll be told when a newer one comes out`, 'success', {
+        label: 'Undo',
+        run: () => void undoSkip(c, before),
+      });
+    } catch (err) {
+      ui.error(err);
+    }
+  }
+
+  async function undoSkip(c: ContainerView, digest: string) {
+    try {
+      await api.post(`/containers/${seg(c.id)}/skip`, { digest });
     } catch (err) {
       ui.error(err);
     }
@@ -229,6 +247,8 @@
         return { text: updateLabel(u) ?? 'Available', tone: 'text-update' };
       case 'up_to_date':
         return { text: 'Up to date', tone: 'text-ok' };
+      case 'skipped':
+        return { text: 'New build skipped', tone: 'faint' };
       case 'error':
         return { text: 'Check failed', tone: 'text-bad' };
       case 'local':

@@ -159,7 +159,8 @@ export function autoPlan(c: ContainerView, now = Date.now() / 1000): AutoPlan | 
   const build = (u.newer_tag ? u.build_change : u.change) ?? UNKNOWN;
   const why = blockedBy(rules, build, false);
   if (why) return no(blocked ?? why);
-  if (c.prefs.skipped_digest && u.latest_digest === c.prefs.skipped_digest) return no('This build was skipped');
+  if (c.prefs.skipped_digest && u.latest_digest === c.prefs.skipped_digest) return no(blocked ?? 'This build was skipped');
+  if (c.prefs.rolled_back_digest && u.latest_digest === c.prefs.rolled_back_digest) return no(blocked ?? 'This build was rolled back before');
   return waitFor(u.first_seen, c.min_age_hours, now, null);
 }
 

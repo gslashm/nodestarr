@@ -121,6 +121,12 @@ All notable changes to Nodestarr are listed here. The format follows
   dashboard as a stopped duplicate of its replacement.
 - On long pages (such as Settings > Updates), scrolling over the sidebar
   scrolled the whole page out of view.
+- Skipping a build now takes it off the Updates page, and out of update
+  badges, counts, the dashboard and Home Assistant, until a newer build
+  comes out or you choose Offer it again. Before, only automatic updates
+  left it alone. A build that was rolled back is no longer marked as
+  skipped: it's still offered, and automatic updates still don't install it
+  again (Container > Settings shows it, with a way to let them).
 - An update that migrates the container's database no longer gets rolled
   back halfway through because its health check or web UI wasn't ready
   within "Give up after". When the container's output shows a migration,

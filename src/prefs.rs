@@ -26,8 +26,14 @@ pub struct UpdatePrefs {
     /// preferences by [`ContainerPrefs::upgrade`], never written.
     #[serde(skip_serializing)]
     pub auto_scope: Option<TagScope>,
-    /// "Skip this version": auto-update ignores this remote digest.
+    /// "Skip this build": the new build with this remote digest isn't
+    /// offered, nor installed automatically (see [`UpdateInfo::apply_skip`]).
+    ///
+    /// [`UpdateInfo::apply_skip`]: crate::updates::UpdateInfo::apply_skip
     pub skipped_digest: String,
+    /// A build that was rolled back: still offered, but automatic updates
+    /// don't install it again.
+    pub rolled_back_digest: String,
     /// Paused after a rollback until cleared or a newer version appears.
     pub held: bool,
     pub min_age_hours: Option<u32>,

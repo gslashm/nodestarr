@@ -148,6 +148,8 @@
           <a class="text-update" href={href(`/containers/${encodeURIComponent(c.name)}/updates`)}>Available: {updateLabel(c.update)}</a>
         {:else if c.update?.status === 'up_to_date'}
           <span class="text-ok">Up to date</span> <span class="faint">(checked <TimeAgo ts={c.update.checked_at} />)</span>
+        {:else if c.update?.status === 'skipped'}
+          <a class="muted" href={href(`/containers/${encodeURIComponent(c.name)}/updates`)}>New build skipped</a> <span class="faint">(checked <TimeAgo ts={c.update.checked_at} />)</span>
         {:else if c.update?.status === 'error'}
           <span class="text-bad">Check failed</span> <span class="faint">{c.update.error}</span>
         {:else if c.update?.status === 'local'}

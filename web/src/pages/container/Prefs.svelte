@@ -217,6 +217,14 @@
               </div>
             </Field>
           {/if}
+          {#if form.update.rolled_back_digest}
+            <Field label="Rolled back build" hint="Automatic updates don't install it again. You can still update to it by hand.">
+              <div class="row-inline">
+                <span class="mono">{shortDigest(form.update.rolled_back_digest)}</span>
+                <button type="button" class="btn small ghost" onclick={() => form && (form.update.rolled_back_digest = '')}>Let automatic updates install it</button>
+              </div>
+            </Field>
+          {/if}
         </div>
       </section>
 
