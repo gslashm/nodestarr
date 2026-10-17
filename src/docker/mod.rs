@@ -7,6 +7,7 @@ pub mod exec;
 pub mod images;
 pub mod inventory;
 pub mod logs;
+pub mod migration;
 pub mod model;
 pub mod raw;
 pub mod reach;

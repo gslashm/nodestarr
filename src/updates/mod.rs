@@ -41,6 +41,9 @@ pub enum UpdateStatus {
     Available,
     /// A newer image was already pulled; recreating the container applies it.
     PendingRecreate,
+    /// The new build of the tag is one the user skipped; nothing is offered
+    /// until a newer build comes out.
+    Skipped,
     /// The last check failed (see `error`).
     Error,
     /// Update checks are disabled for this container.
@@ -103,6 +106,21 @@ impl UpdateInfo {
     pub fn offered(&self) -> Option<&Change> {
         self.change.as_ref().filter(|_| self.has_update())
     }
+
+    /// Follows the build the user skipped (`skipped_digest`, empty for
+    /// none): a new build with that digest is no longer offered, and a
+    /// skipped one is offered again once the skip is cleared. A newer tag is
+    /// a different update, so it's still offered.
+    pub fn apply_skip(&mut self, skipped_digest: &str) {
+        let skipped = !skipped_digest.is_empty()
+            && self.newer_tag.is_none()
+            && self.latest_digest.as_deref() == Some(skipped_digest);
+        match self.status {
+            UpdateStatus::Available if skipped => self.status = UpdateStatus::Skipped,
+            UpdateStatus::Skipped if !skipped => self.status = UpdateStatus::Available,
+            _ => {}
+        }
+    }
 }
 
 /// One row of update history.
@@ -117,6 +135,9 @@ pub struct HistoryEntry {
     pub from_version: Option<String>,
     pub to_version: Option<String>,
     pub rollback_tag: Option<String>,
+    /// applied | failed | rolled_back | reverted (undone by a manual
+    /// rollback) | left_running (still migrating its data when verification
+    /// gave up, so not rolled back).
     pub status: String,
     pub trigger: Option<String>,
     pub task_id: Option<String>,
@@ -258,7 +279,7 @@ impl UpdateService {
                         to_ref: r.get(5)?,
                         from_version: r.get(6)?,
                         to_version: r.get(7)?,
-                        can_rollback: rollback_tag.is_some() && status == "applied",
+                        can_rollback: rollback_tag.is_some() && matches!(status.as_str(), "applied" | "left_running"),
                         rollback_tag,
                         status,
                         trigger: r.get(10)?,
@@ -285,5 +306,54 @@ impl UpdateService {
             self.inner.last_check.store(crate::util::now(), std::sync::atomic::Ordering::Relaxed);
         }
         self.inner.bus.publish(crate::events::Event::UpdateCheck { running: v, last_check: self.last_check() });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::updates::classify::Bump;
+
+    fn new_build(latest: &str) -> UpdateInfo {
+        UpdateInfo {
+            status: UpdateStatus::Available,
+            current_digest: Some("a".into()),
+            latest_digest: Some(latest.into()),
+            change: Some(Change { bump: Bump::Rebuild, ..Default::default() }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_skipped_build_is_not_offered_until_the_skip_is_cleared() {
+        let mut i = new_build("b");
+        i.apply_skip("b");
+        assert_eq!(i.status, UpdateStatus::Skipped);
+        assert!(!i.has_update());
+        assert!(i.offered().is_none());
+        i.apply_skip("");
+        assert_eq!(i.status, UpdateStatus::Available);
+        assert!(i.offered().is_some());
+    }
+
+    #[test]
+    fn only_the_skipped_build_is_hidden() {
+        // A newer build than the one skipped.
+        let mut i = new_build("c");
+        i.apply_skip("b");
+        assert_eq!(i.status, UpdateStatus::Available);
+        // A newer tag is still offered.
+        let mut i = new_build("b");
+        i.newer_tag = Some(NewerTag { tag: "2.0".into(), scope: TagScope::Major, first_seen: None });
+        i.apply_skip("b");
+        assert_eq!(i.status, UpdateStatus::Available);
+        // An image already pulled waits to be applied.
+        let mut i = new_build("b");
+        i.status = UpdateStatus::PendingRecreate;
+        i.apply_skip("b");
+        assert_eq!(i.status, UpdateStatus::PendingRecreate);
+        let mut i = UpdateInfo { status: UpdateStatus::UpToDate, ..new_build("b") };
+        i.apply_skip("b");
+        assert_eq!(i.status, UpdateStatus::UpToDate);
     }
 }

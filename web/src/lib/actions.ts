@@ -140,6 +140,7 @@ export async function checkNow(c: ContainerView): Promise<UpdateInfo | null> {
     c.update = info;
     const label = updateLabel(info);
     if (info.status === 'error') ui.toast(`Check failed: ${info.error}`, 'error');
+    else if (info.status === 'skipped') ui.toast(`${c.display_name}: nothing newer than the build you skipped`, 'success');
     else ui.toast(label ? `${c.display_name}: update available (${label})` : `${c.display_name} is up to date`, label ? 'info' : 'success');
     return info;
   } catch (err) {

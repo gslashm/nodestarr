@@ -210,6 +210,11 @@
           {:else if u?.status === 'up_to_date'}
             <span class="big text-ok">Up to date</span>
             <span class="what">Running the newest build of <strong>{currentTag}</strong>.</span>
+          {:else if u?.status === 'skipped'}
+            <span class="big muted"><SkipForward size={20} /> New build skipped</span>
+            <span class="what">
+              You skipped the new build of <strong>{currentTag}</strong>{u.latest_version ? ` (${u.latest_version})` : ''}, so it isn't offered. You'll be told when a newer one comes out.
+            </span>
           {:else if u?.status === 'error'}
             <span class="big text-bad">Couldn't check</span>
             <span class="what">{u.error}</span>

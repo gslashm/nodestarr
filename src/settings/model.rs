@@ -299,6 +299,10 @@ pub struct Updates {
     pub settle_secs: u32,
     /// Max seconds to wait for healthy/responding after an update.
     pub verify_timeout_secs: u32,
+    /// Max minutes to wait instead when the new container's output shows a
+    /// data migration. One still migrating then is left running, not
+    /// rolled back.
+    pub migration_timeout_mins: u32,
     pub rollback_on_failure: bool,
     /// Take a backup before updating containers that have backups enabled.
     pub backup_before_update: bool,
@@ -328,6 +332,7 @@ impl Default for Updates {
             ignore_prereleases: true,
             settle_secs: 15,
             verify_timeout_secs: 180,
+            migration_timeout_mins: 60,
             rollback_on_failure: true,
             backup_before_update: true,
             keep_rollback_images: 2,

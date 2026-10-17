@@ -144,6 +144,8 @@ pub async fn check_one(app: &App, entry: &Entry, fresh: bool) -> UpdateInfo {
     if info.has_update() {
         classify_update(app, s, &reference, &mut info, previous.as_deref(), new_build).await;
     }
+    // After classifying, so a skip cleared later offers the build as it was.
+    info.apply_skip(&prefs.update.skipped_digest);
     info
 }
 

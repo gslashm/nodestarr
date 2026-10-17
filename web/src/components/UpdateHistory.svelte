@@ -18,6 +18,7 @@
     applied: { label: 'Updated', tone: 'ok' },
     failed: { label: 'Failed', tone: 'bad' },
     rolled_back: { label: 'Rolled back', tone: 'warn' },
+    left_running: { label: 'Left running', tone: 'warn' },
     reverted: { label: 'Undone later', tone: 'idle' },
   };
 

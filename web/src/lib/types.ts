@@ -65,6 +65,8 @@ export type UpdateStatus =
   | 'up_to_date'
   | 'available'
   | 'pending_recreate'
+  /** The new build is one the user skipped; nothing is offered until a newer one. */
+  | 'skipped'
   | 'error'
   | 'ignored'
   | 'local'
@@ -188,6 +190,8 @@ export interface PrefsBrief {
   notes: boolean;
   held: boolean;
   skipped_digest: string;
+  /** A build that was rolled back: still offered, but not installed automatically. */
+  rolled_back_digest: string;
   backup_enabled: boolean;
   alerts_muted: boolean;
   /** Dismissed "needs attention" items: kind to fingerprint, "*" for always. */
@@ -1268,6 +1272,7 @@ export interface Settings {
     ignore_prereleases: boolean;
     settle_secs: number;
     verify_timeout_secs: number;
+    migration_timeout_mins: number;
     rollback_on_failure: boolean;
     backup_before_update: boolean;
     keep_rollback_images: number;
@@ -1380,6 +1385,7 @@ export interface ContainerPrefs {
     policy: UpdatePolicy | null;
     auto_install: AutoInstall | null;
     skipped_digest: string;
+    rolled_back_digest: string;
     held: boolean;
     min_age_hours: number | null;
   };

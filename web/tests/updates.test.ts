@@ -16,7 +16,7 @@ function container(update: Record<string, unknown> | null, over: Record<string, 
     policy: 'auto',
     auto_install: DEFAULTS,
     min_age_hours: 0,
-    prefs: { held: false, skipped_digest: '', dismissed: {} },
+    prefs: { held: false, skipped_digest: '', rolled_back_digest: '', dismissed: {} },
     update: update && { status: 'available', current_digest: 'a', latest_digest: 'b', first_seen: NOW - 10 * 3600, newer_tag: null, change: null, build_change: null, ...update },
     ...over,
   } as unknown as ContainerView;
@@ -43,6 +43,7 @@ test('updates found before types existed still get one', () => {
   assert.equal(changeOf({ status: 'available', change: null, newer_tag: null } as never)?.bump, 'unknown');
   assert.equal(changeOf({ status: 'available', change: null, newer_tag: { tag: '2', scope: 'major' } } as never)?.bump, 'major');
   assert.equal(changeOf({ status: 'up_to_date', change: change() } as never), null);
+  assert.equal(changeOf({ status: 'skipped', change: change() } as never), null);
 });
 
 test('the rules match the server', () => {
@@ -60,9 +61,11 @@ test('the plan says what automatic updates will do', () => {
   assert.equal(autoPlan(container({ change: change() }, { policy: 'notify' }), NOW), null);
   assert.equal(autoPlan(container(null), NOW), null);
   assert.deepEqual(autoPlan(container({ change: change() }), NOW), { install: true, reason: '', after: null, tag: null });
-  assert.equal(autoPlan(container({ change: change() }, { prefs: { held: true, skipped_digest: '' } }), NOW)?.reason, 'On hold');
+  assert.equal(autoPlan(container({ change: change() }, { prefs: { held: true, skipped_digest: '', rolled_back_digest: '' } }), NOW)?.reason, 'On hold');
   assert.match(autoPlan(container({ change: change({ bump: 'major' }) }), NOW)?.reason ?? '', /Major/);
-  assert.match(autoPlan(container({ change: change() }, { prefs: { held: false, skipped_digest: 'b' } }), NOW)?.reason ?? '', /skipped/);
+  assert.match(autoPlan(container({ change: change() }, { prefs: { held: false, skipped_digest: '', rolled_back_digest: 'b' } }), NOW)?.reason ?? '', /rolled back/);
+  // A build that was skipped is no update at all.
+  assert.equal(autoPlan(container({ status: 'skipped', change: change() }, { prefs: { held: false, skipped_digest: 'b', rolled_back_digest: '' } }), NOW), null);
   // Too new: installs once it's old enough.
   const young = autoPlan(container({ change: change(), first_seen: NOW - 3600 }, { min_age_hours: 6 }), NOW);
   assert.equal(young?.install, true);
@@ -78,6 +81,10 @@ test('a newer tag needs tag switching, else the new build of the tag installs', 
   // No new build of the tag: the reason is the tag's.
   const onlyTag = { ...newer, latest_digest: 'a', build_change: null };
   assert.match(autoPlan(container(onlyTag), NOW)?.reason ?? '', /tag/);
+  // The new build was skipped: it isn't installed instead, so the newer tag waits, for its own reason.
+  const skippedBuild = autoPlan(container(newer, { prefs: { held: false, skipped_digest: 'b', rolled_back_digest: '' } }), NOW);
+  assert.equal(skippedBuild?.install, false);
+  assert.match(skippedBuild?.reason ?? '', /tag/);
 });
 
 test('rules read as a sentence', () => {

@@ -25,6 +25,7 @@ use serde_json::json;
 use crate::activity::{Actor, NewActivity};
 use crate::app::App;
 use crate::compose::{FileChange, StackRef};
+use crate::docker::migration::MigrationWatch;
 use crate::docker::model::{LABEL_PROJECT, LABEL_SERVICE};
 use crate::docker::{Entry, actions, recreate};
 use crate::error::{AppError, Result};
@@ -228,7 +229,7 @@ pub async fn run_update(
         }
     };
     let verdict = if new_id.is_empty() {
-        Err("the new container could not be found".to_string())
+        Err(Unverified::failed("the new container could not be found"))
     } else {
         verify(app, ctx, &entry, &new_id).await
     };
@@ -267,6 +268,7 @@ pub async fn run_update(
                 .prefs
                 .update(identity, |p| {
                     p.update.skipped_digest.clear();
+                    p.update.rolled_back_digest.clear();
                 })
                 .await;
             cleanup_images(app, ctx, identity).await;
@@ -295,16 +297,54 @@ pub async fn run_update(
             );
             Ok(json!({ "changed": true, "from_version": from_version, "to_version": to_version }))
         }
-        Err(reason) => {
+        Err(Unverified { reason, migrating }) => {
             ctx.log(format!("Verification failed: {reason}"));
             let latest_digest = app.updates.get(identity).and_then(|i| i.latest_digest.clone());
-            if settings.updates.rollback_on_failure {
+            if migrating {
+                // Rolling back now would hand data the new version has
+                // (partly) migrated to a version that may not read it.
+                let reason = format!("still migrating its data ({reason})");
+                ctx.log("Not rolling back: the new version is left running to finish migrating");
+                if let Applied::Standalone(r) = &applied
+                    && let Err(err) = recreate::finalize(&app.docker.api, r).await
+                {
+                    ctx.log(format!("Could not remove the old container: {err}"));
+                }
+                record_history(
+                    app,
+                    identity,
+                    &name,
+                    &old_ref,
+                    &new_ref,
+                    from_version.as_deref(),
+                    attempted_version.as_deref(),
+                    rollback_tag.as_deref(),
+                    None,
+                    "left_running",
+                    trigger,
+                    ctx.id(),
+                    &reason,
+                )
+                .await;
+                notify_failure(
+                    app,
+                    &name,
+                    identity,
+                    &format!(
+                        "The new version was {reason} when Nodestarr stopped waiting. It was left running rather \
+                         than rolled back, since the previous version may not be able to read migrated data; \
+                         check its logs."
+                    ),
+                    false,
+                );
+                Err(AppError::conflict(format!("update applied but not confirmed: {reason}; it was left running")))
+            } else if settings.updates.rollback_on_failure {
                 let rb = rollback_applied(app, ctx, &entry, applied, rollback_tag.as_deref(), &old_ref, actor).await;
                 let _ = app
                     .prefs
                     .update(identity, |p| {
                         if let Some(d) = &latest_digest {
-                            p.update.skipped_digest = d.clone();
+                            p.update.rolled_back_digest = d.clone();
                         }
                     })
                     .await;
@@ -423,18 +463,40 @@ pub fn stop_timeout(app: &App) -> Option<u32> {
     (t > 0).then_some(t)
 }
 
+/// Why a new container didn't pass verification.
+struct Unverified {
+    reason: String,
+    /// It was still migrating its data when Nodestarr stopped waiting, so
+    /// rolling back could leave the previous version with data it can't
+    /// read: it's left running instead.
+    migrating: bool,
+}
+
+impl Unverified {
+    fn failed(reason: impl Into<String>) -> Self {
+        Self { reason: reason.into(), migrating: false }
+    }
+}
+
 /// Waits for the new container to settle and, when it has a web UI check,
-/// to answer HTTP.
-async fn verify(app: &App, ctx: &TaskCtx, entry: &Entry, new_id: &str) -> std::result::Result<(), String> {
+/// to answer HTTP. A container whose output shows a data migration gets the
+/// longer migration limit.
+async fn verify(app: &App, ctx: &TaskCtx, entry: &Entry, new_id: &str) -> std::result::Result<(), Unverified> {
     let settings = app.settings.get();
     let settle = Duration::from_secs(settings.updates.settle_secs as u64);
     let timeout = Duration::from_secs(settings.updates.verify_timeout_secs as u64);
+    let migration_limit = Duration::from_secs(settings.updates.migration_timeout_mins as u64 * 60);
+    let log_ctx = ctx.clone();
+    let watch = MigrationWatch::start(&app.docker.api, new_id, migration_limit, move |l| log_ctx.log(l));
+    let gave_up = |reason: String| Unverified { reason, migrating: watch.is_migrating() };
     ctx.log(format!("Waiting for the container to settle ({}s)", settle.as_secs()));
     let started = tokio::time::Instant::now();
-    match actions::wait_until_stable(&app.docker.api, new_id, settle, timeout, &ctx.cancel_token()).await {
+    match actions::wait_until_stable(&app.docker.api, new_id, settle, timeout, &ctx.cancel_token(), Some(&watch)).await
+    {
         Ok(actions::Stability::Stable) => {}
-        Ok(actions::Stability::Failed(msg)) | Ok(actions::Stability::TimedOut(msg)) => return Err(msg),
-        Err(err) => return Err(err.to_string()),
+        Ok(actions::Stability::Failed(msg)) => return Err(Unverified::failed(msg)),
+        Ok(actions::Stability::TimedOut(msg)) => return Err(gave_up(msg)),
+        Err(err) => return Err(gave_up(err.to_string())),
     }
     if let Some(check) = crate::monitor::uptime::check_for(app, entry) {
         ctx.log(format!("Checking that {} answers", crate::util::redact_url(&check.url)));
@@ -444,11 +506,11 @@ async fn verify(app: &App, ctx: &TaskCtx, entry: &Entry, new_id: &str) -> std::r
                 ctx.log(format!("Web UI answered in {} ms", res.latency_ms));
                 break;
             }
-            if started.elapsed() >= timeout {
-                return Err(format!("web UI did not answer: {}", res.error.unwrap_or_default()));
+            if started.elapsed() >= watch.limit(timeout, started.elapsed()) {
+                return Err(gave_up(format!("web UI did not answer: {}", res.error.unwrap_or_default())));
             }
             if ctx.is_cancelled() {
-                return Err("cancelled".into());
+                return Err(gave_up("cancelled".into()));
             }
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
@@ -797,7 +859,7 @@ async fn run_rollback(
         .call(move |c| {
             use rusqlite::OptionalExtension;
             let sql = "SELECT id, from_ref, to_ref, rollback_tag, compose_before, from_version FROM update_history
-                       WHERE identity = ?1 AND status = 'applied' AND rollback_tag IS NOT NULL AND (?2 IS NULL OR id = ?2)
+                       WHERE identity = ?1 AND status IN ('applied', 'left_running') AND rollback_tag IS NOT NULL AND (?2 IS NULL OR id = ?2)
                        ORDER BY ts DESC, id DESC LIMIT 1";
             Ok(c.query_row(sql, params![id_owned, history_id], |r| {
                 Ok(Row {
@@ -844,8 +906,8 @@ async fn run_rollback(
         rec.new_id
     };
     if !new_id.is_empty() {
-        if let Err(reason) = verify(app, ctx, &entry, &new_id).await {
-            ctx.log(format!("Warning: the rolled back container is not healthy: {reason}"));
+        if let Err(u) = verify(app, ctx, &entry, &new_id).await {
+            ctx.log(format!("Warning: the rolled back container is not healthy: {}", u.reason));
         }
         app.docker.refresh(&new_id).await;
     }
@@ -854,7 +916,7 @@ async fn run_rollback(
         .prefs
         .update(identity, |p| {
             if let Some(d) = latest {
-                p.update.skipped_digest = d;
+                p.update.rolled_back_digest = d;
             }
         })
         .await;

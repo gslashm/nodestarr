@@ -365,6 +365,7 @@ async fn put_spec(
             std::time::Duration::from_secs(5),
             std::time::Duration::from_secs(60),
             &ctx.cancel_token(),
+            None,
         )
         .await?
         {
@@ -752,6 +753,12 @@ async fn skip_version(
             .ok_or_else(|| AppError::conflict("no update to skip"))?,
     };
     app.prefs.update(&e.summary.identity, |p| p.update.skipped_digest = digest.clone()).await?;
+    // Show the change right away rather than at the next check.
+    if let Some(info) = app.updates.get(&e.summary.identity) {
+        let mut info = (*info).clone();
+        info.apply_skip(&digest);
+        app.updates.set(&e.summary.identity, info).await;
+    }
     app.bus.publish(crate::events::Event::Prefs { identity: e.summary.identity.clone() });
     Ok(Json(json!({ "skipped_digest": digest })))
 }
