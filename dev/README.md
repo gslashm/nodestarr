@@ -8,6 +8,7 @@ on without the real thing. Python 3.10 or newer, standard library only.
 | `pve-mock.py` | A Proxmox VE API with one node (and a second cluster member with a guest of its own), a few LXCs, a VM and a template, storages, snapshots, vzdump backups, tasks with logs, disks with SMART data, ZFS and LVM pools, package updates and history data. HTTPS with a fresh self-signed certificate on port 8006 (needs `openssl`). |
 | `host-helper.py` | A stand-in for the host helper that disk health runs on the nodes over SSH (`src/proxmox/disks/helper.sh`), answering for the mock's nodes. |
 | `fakedisks.py` | The disks both of them show, so they tell the same story: a RAID-Z2 with a failing disk and a scrub running, a degraded mirror with a disk pulled, a SnapRAID array with a sleeping disk, an mdadm mirror rebuilding, NVMe system disks, a USB disk with a bogus serial number, and a second node. |
+| `smoke-disks.sh` | Linux: builds Nodestarr and runs it against `pve-mock.py` and `host-helper.py` without Docker, reads the disks and pools and runs a self-test. |
 | `webhook-sink.py` | Prints every request it receives, pretty-printing JSON. Port 9099. |
 
 ```sh
