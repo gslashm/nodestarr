@@ -125,6 +125,11 @@ test('warranty and age', () => {
   assert.equal(ageFrom('2021-03-14', now), 'bought 5 years ago');
   assert.equal(ageFrom('2026-01-01', now), 'bought 9 months ago');
   assert.equal(ageFrom('2030-01-01', now), '');
+  // Calendar days are counted, so the hour, time zone and daylight saving
+  // don't change the answer.
+  assert.equal(ageFrom('2026-01-01', Date.parse('2026-10-16T23:59:00')), 'bought 9 months ago');
+  assert.equal(ageFrom('2026-01-01', Date.parse('2026-10-16T00:01:00')), 'bought 9 months ago');
+  assert.equal(warranty('2026-02-30', now), null);
 });
 
 test('attribute tones', () => {

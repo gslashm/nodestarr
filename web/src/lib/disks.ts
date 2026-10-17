@@ -209,12 +209,22 @@ function span(days: number): string {
   return plural(d, 'day');
 }
 
+/** Whole calendar days from today to a "YYYY-MM-DD" date (negative if it's
+ *  past), or null if it isn't one. Counts dates, not hours, so the time of day,
+ *  time zone and daylight saving can't tip it by one. */
+function daysUntil(date: string, now: number): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!m) return null;
+  const day = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  if (Number.isNaN(day) || new Date(day).getUTCDate() !== +m[3]) return null;
+  const t = new Date(now);
+  return (day - Date.UTC(t.getFullYear(), t.getMonth(), t.getDate())) / 86_400_000;
+}
+
 /** Warranty status from a "YYYY-MM-DD" end date. */
 export function warranty(until: string, now = Date.now()): { text: string; tone: Tone } | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(until)) return null;
-  const end = Date.parse(`${until}T00:00:00`);
-  if (Number.isNaN(end)) return null;
-  const days = Math.round((end - now) / 86_400_000);
+  const days = daysUntil(until, now);
+  if (days === null) return null;
   if (days < 0) return { text: `Warranty ended ${span(days)} ago`, tone: 'idle' };
   if (days <= 90) return { text: `Warranty ends in ${span(days)}`, tone: 'warn' };
   return { text: `Under warranty for ${span(days)}`, tone: 'ok' };
@@ -222,10 +232,9 @@ export function warranty(until: string, now = Date.now()): { text: string; tone:
 
 /** How old a disk is, from its purchase date (whole years, like an age). */
 export function ageFrom(purchased: string, now = Date.now()): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(purchased)) return '';
-  const start = Date.parse(`${purchased}T00:00:00`);
-  if (Number.isNaN(start) || start > now) return '';
-  const days = Math.round((now - start) / 86_400_000);
+  const until = daysUntil(purchased, now);
+  if (until === null || until > 0) return '';
+  const days = -until;
   if (days >= 365) return `bought ${plural(Math.floor(days / 365.25), 'year')} ago`;
   return `bought ${span(days)} ago`;
 }
