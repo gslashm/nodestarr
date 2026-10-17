@@ -6,7 +6,7 @@
     value = $bindable(''),
     id = undefined,
     kind = 'daily',
-  }: { value: string; id?: string; kind?: 'check' | 'daily' } = $props();
+  }: { value: string; id?: string; kind?: 'check' | 'daily' | 'test' } = $props();
 
   const reading = $derived(describeCron(value));
   const presets = $derived(cronPresets(kind));

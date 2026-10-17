@@ -2,9 +2,10 @@
 // them without compressing on the fly. Skips files that don't shrink.
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
-const DIST = new URL('../dist/', import.meta.url).pathname;
+const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 const COMPRESSIBLE = /\.(js|css|html|svg|json|webmanifest|txt|map)$/;
 
 async function* walk(dir) {

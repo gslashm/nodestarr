@@ -2,6 +2,7 @@
 //! backups, tasks, disks and pending host updates.
 
 pub mod client;
+pub mod disks;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,6 +38,18 @@ pub struct NodeStatus {
     pub pve_version: String,
     pub kernel: String,
     pub ksm_shared: u64,
+}
+
+/// One cluster member as `/cluster/resources` reports it, so guest usage
+/// can be set against the capacity of the node each guest runs on.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NodeSummary {
+    pub node: String,
+    pub online: bool,
+    pub cpu: f64,
+    pub cpus: f64,
+    pub mem: u64,
+    pub maxmem: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -75,6 +88,8 @@ pub struct Storage {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Overview {
     pub node: NodeStatus,
+    /// Every node in the cluster (just this one when it isn't clustered).
+    pub nodes: Vec<NodeSummary>,
     pub guests: Vec<Guest>,
     pub storages: Vec<Storage>,
     pub fetched_at: i64,
@@ -262,6 +277,7 @@ impl ProxmoxService {
                 kernel: status["kversion"].as_str().unwrap_or_default().to_string(),
                 ksm_shared: v_u64(&status["ksm"]["shared"]),
             },
+            nodes: Vec::new(),
             guests: Vec::new(),
             storages: Vec::new(),
             fetched_at: crate::util::now(),
@@ -293,6 +309,14 @@ impl ProxmoxService {
                         is_self: Some(vmid) == configured_self,
                     });
                 }
+                Some("node") => ov.nodes.push(NodeSummary {
+                    node: r["node"].as_str().unwrap_or_default().to_string(),
+                    online: r["status"].as_str() == Some("online"),
+                    cpu: v_f64(&r["cpu"]),
+                    cpus: v_f64(&r["maxcpu"]),
+                    mem: v_u64(&r["mem"]),
+                    maxmem: v_u64(&r["maxmem"]),
+                }),
                 Some("storage") if r["node"].as_str() == Some(node.as_str()) => {
                     ov.storages.push(Storage {
                         storage: r["storage"].as_str().unwrap_or_default().to_string(),
@@ -310,6 +334,7 @@ impl ProxmoxService {
                 _ => {}
             }
         }
+        ov.nodes.sort_by(|a, b| a.node.cmp(&b.node));
         ov.guests.sort_by_key(|g| g.vmid);
         ov.storages.sort_by(|a, b| a.storage.cmp(&b.storage));
         if configured_self.is_none()

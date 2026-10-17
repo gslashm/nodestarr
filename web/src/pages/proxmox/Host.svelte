@@ -1,6 +1,7 @@
 <!--
   The Proxmox node itself: details, storages, history charts, physical
-  disks with their health, and pending package updates.
+  disks with their health (from disk health when it's on, so opening this
+  page doesn't wake sleeping disks), and pending package updates.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -9,15 +10,19 @@
   import Meter from '../../components/Meter.svelte';
   import Spinner from '../../components/Spinner.svelte';
   import { api, errorMessage } from '../../lib/api';
+  import { MEDIA, diskSize, tempTone, verdictOf } from '../../lib/disks';
   import { bytes, duration, plural } from '../../lib/format';
+  import { href } from '../../lib/router.svelte';
   import { session } from '../../lib/session.svelte';
-  import type { PveAptUpdate, PveDisk, PveOverview } from '../../lib/types';
+  import type { DiskHealthOverview, DiskView, PveAptUpdate, PveDisk, PveOverview } from '../../lib/types';
+  import HealthBadge from './disks/HealthBadge.svelte';
   import { ui } from '../../lib/ui.svelte';
   import RrdCharts from './RrdCharts.svelte';
 
   let { overview }: { overview: PveOverview; selfVmid: number | null; reload: () => Promise<void> } = $props();
 
   let disks = $state<PveDisk[] | null>(null);
+  let health = $state<DiskView[] | null>(null);
   let disksError = $state('');
   let apt = $state<PveAptUpdate[] | null>(null);
   let aptError = $state('');
@@ -35,12 +40,24 @@
   }
 
   onMount(() => {
+    // Disk health already has every disk's SMART data; asking Proxmox again
+    // would wake the sleeping ones.
     api
+      .get<DiskHealthOverview>('/proxmox/disk-health')
+      .then((r) => {
+        if (r.enabled) health = r.disks.filter((d) => d.present && d.node === n.node);
+        else return loadPveDisks();
+      })
+      .catch(() => loadPveDisks());
+    void loadApt();
+  });
+
+  function loadPveDisks() {
+    return api
       .get<{ disks: PveDisk[] }>('/proxmox/disks')
       .then((r) => (disks = r.disks))
       .catch((err) => (disksError = errorMessage(err)));
-    void loadApt();
-  });
+  }
 
   async function refreshApt() {
     try {
@@ -95,8 +112,31 @@
 
   <div class="cols">
     <section class="panel">
-      <div class="panel-head"><h2>Disks</h2></div>
-      {#if disksError}
+      <div class="panel-head">
+        <h2>Disks</h2>
+        {#if health}<a class="btn small ghost" href={href('/proxmox/disks')}>Health and history</a>{/if}
+      </div>
+      {#if health}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Device</th><th>Model</th><th class="num">Size</th><th>Health</th><th class="num">Temp</th></tr></thead>
+            <tbody>
+              {#each health as d (d.id)}
+                {@const v = verdictOf(d)}
+                <tr>
+                  <td class="mono small"><a href={href(`/proxmox/disks/${encodeURIComponent(d.id)}`)}>{d.devpath}</a> <span class="faint">{MEDIA[d.media]}</span></td>
+                  <td class="small">{d.model ?? ''}{d.used_by ? ` (${d.used_by})` : ''}</td>
+                  <td class="num">{diskSize(d.size)}</td>
+                  <td><HealthBadge tone={v.tone} label={v.label} /></td>
+                  <td class="num"><span class="text-{tempTone(d.temperature, d.temp_limit) || 'ok'}">{d.temperature !== null ? `${d.temperature}°` : '–'}</span></td>
+                </tr>
+              {:else}
+                <tr><td colspan="5" class="faint">No disks read yet.</td></tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {:else if disksError}
         <p class="panel-body text-bad">{disksError}</p>
       {:else if !disks}
         <p class="panel-body faint"><Spinner size={13} /> Loading…</p>

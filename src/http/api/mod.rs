@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod backups;
 pub mod containers;
+pub mod disks;
 pub mod integrations;
 pub mod monitoring;
 pub mod proxmox;
@@ -26,4 +27,5 @@ pub fn routes() -> Router<App> {
         .merge(monitoring::routes())
         .merge(integrations::routes())
         .merge(proxmox::routes())
+        .merge(disks::routes())
 }

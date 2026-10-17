@@ -2,8 +2,9 @@
 
 When Docker runs inside a Proxmox LXC or VM, Nodestarr can also show the
 Proxmox node and its guests: power actions, snapshots, vzdump backups,
-tasks, disks, storage and pending package updates. It talks to the Proxmox
-API with an API token.
+tasks, storage and pending package updates, and the health of the nodes'
+disks and pools ([Disk health and pools](disk-health.md)). It talks to the
+Proxmox API with an API token.
 
 ## Create an API token
 
@@ -23,7 +24,7 @@ What the permissions are for:
 
 | Privilege | Used for |
 |---|---|
-| `Sys.Audit` | Node status, tasks and their logs, disks, package updates, history charts |
+| `Sys.Audit` | Node status, tasks and their logs, disks and their SMART data, ZFS and LVM pools, package updates, history charts |
 | `Sys.Modify` | Refreshing the package lists (the same as Updates > Refresh in Proxmox) |
 | `VM.Audit` | Listing guests, their status, history and snapshots |
 | `VM.PowerMgmt` | Start, shut down, reboot, stop, suspend and resume |
@@ -71,20 +72,31 @@ no longer matches and the connection fails until you test and save again.
 
 **Proxmox** in the sidebar:
 
-- **Guests**: CPU, memory and root disk of the node, every LXC and VM with
-  its state, usage and uptime, and per guest: start, shut down, reboot,
+- **Guests**: CPU, memory and root disk of the node; how its CPU, memory,
+  disk and network split across its guests, as donut charts (the busiest
+  guests each get a slice, the rest share one; CPU and memory also show
+  what the node uses itself and what is free, and in a cluster you can
+  switch between nodes); every LXC and VM with its state, usage and
+  uptime, and per guest: start, shut down, reboot,
   force stop, suspend and resume (VMs), snapshots, "Back up now" (vzdump
   with mode, notes and protection) and history charts.
 - **Backups**: the vzdump backups on each storage, with size, notes and
   protection. Restoring stays in the Proxmox interface.
 - **Tasks**: recent Proxmox tasks with their logs.
+- **Disks**: every physical disk of the nodes with its SMART health over
+  time, ZFS, mdadm, SnapRAID and LVM thin pools with the redundancy they
+  have left, scrubs and rebuilds, and SMART self-tests, also on schedules.
+  See [Disk health and pools](disk-health.md); self-tests, mdadm and
+  SnapRAID need [host access](disk-health.md#setting-up-host-access) over
+  SSH.
 - **Node**: version, kernel, CPU, uptime, load, storage usage, disks with
   their health and wear, pending package updates, and history charts from
   an hour to a year.
 
-Alerts can watch the node's memory and its storages (Settings > Monitoring
-and alerts), and finished backup and snapshot tasks started from Nodestarr
-can notify you (`proxmox.task`).
+Alerts can watch the node's memory and its storages, and the disks' health
+and temperature and the pools (Settings > Monitoring and alerts). Finished
+backup and snapshot tasks started from Nodestarr can notify you
+(`proxmox.task`), and so can failed self-tests (`disk.test`).
 
 Nodestarr reads Proxmox every 20 seconds while a Proxmox page is open, and
 about once a minute otherwise for the alerts.

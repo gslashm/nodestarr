@@ -30,10 +30,12 @@
     yMax?: number;
     /** The y axis reaches at least this high, so flat or empty data doesn't look noisy. */
     yMinTop?: number;
+    /** Lets the y axis start above 0 (at most this low), for values like temperatures. */
+    yFloor?: number;
     label?: string;
   }
 
-  let { data, series, height = 200, yFormat = (v) => String(v), yMax, yMinTop = 1, label = 'Chart' }: Props = $props();
+  let { data, series, height = 200, yFormat = (v) => String(v), yMax, yMinTop = 1, yFloor, label = 'Chart' }: Props = $props();
 
   let host: HTMLDivElement | undefined = $state();
   let plot: uPlotType | null = null;
@@ -71,7 +73,7 @@
       legend: { show: true, live: true },
       scales: {
         x: { time: true },
-        y: { range: (_u, min, max) => [Math.min(0, min), yMax ?? Math.max(max * 1.1, yMinTop)] },
+        y: { range: (_u, min, max) => [yFloor !== undefined ? Math.min(yFloor, min) : Math.min(0, min), yMax ?? Math.max(max * 1.1, yMinTop)] },
       },
       axes: [
         {

@@ -26,18 +26,32 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import fakedisks
+
 TOKEN = "PVEAPIToken=nodestarr@pve!nodestarr=11111111-2222-3333-4444-555555555555"
 NODE = "pve"
+# A second cluster member, only listed in the cluster resources (so the
+# connection test still fills in NODE on its own).
+NODE2 = "pve2"
 GIB = 1024**3
 START = int(time.time()) - 6 * 86400
 LOCK = threading.Lock()
 
+# "use" is what a running guest reports: CPU (a range, as a fraction of its
+# cores), memory in GiB, and network bytes in and out.
 guests = {
-    100: {"type": "lxc", "name": "docker", "status": "running", "maxcpu": 4, "maxmem": 8 * GIB, "maxdisk": 256 * GIB, "template": 0, "tags": "docker;media"},
+    100: {"type": "lxc", "name": "docker", "status": "running", "maxcpu": 4, "maxmem": 8 * GIB, "maxdisk": 256 * GIB, "template": 0, "tags": "docker;media",
+          "use": {"cpu": (0.02, 0.15), "mem": 7.3, "netin": 123_456_789, "netout": 23_456_789}},
     101: {"type": "qemu", "name": "windows-test", "status": "stopped", "maxcpu": 4, "maxmem": 8 * GIB, "maxdisk": 128 * GIB, "template": 0, "tags": ""},
     102: {"type": "lxc", "name": "debian-template", "status": "stopped", "maxcpu": 1, "maxmem": 512 * 1024**2, "maxdisk": 8 * GIB, "template": 1, "tags": ""},
+    103: {"type": "lxc", "name": "pihole", "status": "running", "maxcpu": 1, "maxmem": 512 * 1024**2, "maxdisk": 8 * GIB, "template": 0, "tags": "dns",
+          "use": {"cpu": (0.01, 0.03), "mem": 0.25, "netin": 41_234_567, "netout": 38_765_432}},
+    104: {"type": "lxc", "name": "jellyfin", "status": "running", "maxcpu": 2, "maxmem": 4 * GIB, "maxdisk": 32 * GIB, "template": 0, "tags": "media",
+          "use": {"cpu": (0.05, 0.25), "mem": 2.4, "netin": 9_876_543, "netout": 456_789_012}},
+    200: {"type": "lxc", "name": "backup-server", "node": NODE2, "status": "running", "maxcpu": 2, "maxmem": 4 * GIB, "maxdisk": 64 * GIB, "template": 0, "tags": "",
+          "use": {"cpu": (0.01, 0.05), "mem": 1.6, "netin": 3_456_789_012, "netout": 12_345_678}},
 }
-snapshots = {100: [{"name": "before_sonarr_v5", "description": "Before moving Sonarr to v5", "snaptime": START + 3600}], 101: [], 102: []}
+snapshots = {100: [{"name": "before_sonarr_v5", "description": "Before moving Sonarr to v5", "snaptime": START + 3600}], 101: [], 102: [], 103: [], 104: [], 200: []}
 backups = [
     {"volid": "backups:backup/vzdump-lxc-100-2026_10_13-03_00_01.tar.zst", "content": "backup", "ctime": START + 4 * 86400, "format": "tar.zst", "size": 9_812_345_678, "vmid": 100, "subtype": "lxc", "notes": "docker"},
     {"volid": "backups:backup/vzdump-lxc-100-2026_10_14-03_00_02.tar.zst", "content": "backup", "ctime": START + 5 * 86400, "format": "tar.zst", "size": 9_901_234_567, "vmid": 100, "subtype": "lxc", "notes": "docker", "protected": 1},
@@ -100,9 +114,10 @@ def rrd(kind, vid, timeframe):
 def guest_resource(vid, g):
     running = g["status"] == "running"
     up = int(time.time()) - START if running else 0
-    return {"id": f"{g['type']}/{vid}", "type": g["type"], "vmid": vid, "name": g["name"], "node": NODE, "status": g["status"],
-            "cpu": random.uniform(0.01, 0.2) if running else 0, "maxcpu": g["maxcpu"], "mem": int(7.3 * GIB) if running else 0, "maxmem": g["maxmem"],
-            "disk": int(0.4 * g["maxdisk"]), "maxdisk": g["maxdisk"], "netin": 123_456_789 if running else 0, "netout": 23_456_789 if running else 0,
+    use = g.get("use", {"cpu": (0.01, 0.2), "mem": 1, "netin": 0, "netout": 0})
+    return {"id": f"{g['type']}/{vid}", "type": g["type"], "vmid": vid, "name": g["name"], "node": g.get("node", NODE), "status": g["status"],
+            "cpu": random.uniform(*use["cpu"]) if running else 0, "maxcpu": g["maxcpu"], "mem": int(use["mem"] * GIB) if running else 0, "maxmem": g["maxmem"],
+            "disk": int(0.4 * g["maxdisk"]), "maxdisk": g["maxdisk"], "netin": use["netin"] if running else 0, "netout": use["netout"] if running else 0,
             "diskread": 3_456_789_012 if running else 0, "diskwrite": 2_345_678_901 if running else 0, "uptime": up, "template": g["template"], "tags": g["tags"]}
 
 
@@ -151,7 +166,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.ok([{"node": NODE, "status": "online", "id": f"node/{NODE}", "type": "node", "cpu": 0.06, "maxcpu": 8, "mem": 11 * GIB, "maxmem": 16 * GIB,
                              "disk": 31 * GIB, "maxdisk": 94 * GIB, "uptime": int(time.time()) - START, "level": "", "ssl_fingerprint": "1E:7E"}])
         if path == f"/nodes/{NODE}/status" and method == "GET":
-            return self.ok({"uptime": int(time.time()) - START, "loadavg": ["0.42", "0.37", "0.31"], "cpu": 0.061, "wait": 0.002, "idle": 0,
+            return self.ok({"uptime": int(time.time()) - START, "loadavg": ["0.42", "0.37", "0.31"], "cpu": 0.18, "wait": 0.002, "idle": 0,
                             "memory": {"total": 16 * GIB, "used": 11 * GIB, "free": 5 * GIB, "available": 5 * GIB}, "swap": {"total": 8 * GIB, "used": int(0.4 * GIB), "free": int(7.6 * GIB)},
                             "rootfs": {"total": 94 * GIB, "used": 31 * GIB, "avail": 63 * GIB, "free": 63 * GIB},
                             "cpuinfo": {"model": "Intel(R) Core(TM) i7-7700K CPU @ 4.20GHz", "cores": 4, "sockets": 1, "cpus": 8, "mhz": "4200.000", "hvm": "1", "user_hz": 100},
@@ -159,8 +174,10 @@ class Handler(BaseHTTPRequestHandler):
                             "ksm": {"shared": 0}, "boot-info": {"mode": "efi", "secureboot": 0},
                             "current-kernel": {"sysname": "Linux", "release": "6.14.11-2-pve", "machine": "x86_64", "version": "#1 SMP PREEMPT_DYNAMIC"}})
         if path == "/cluster/resources" and method == "GET":
-            res = [{"id": f"node/{NODE}", "type": "node", "node": NODE, "status": "online", "cpu": 0.06, "maxcpu": 8, "mem": 11 * GIB, "maxmem": 16 * GIB,
-                    "disk": 31 * GIB, "maxdisk": 94 * GIB, "uptime": int(time.time()) - START, "level": "", "cgroup-mode": 2}]
+            res = [{"id": f"node/{NODE}", "type": "node", "node": NODE, "status": "online", "cpu": 0.18, "maxcpu": 8, "mem": 11 * GIB, "maxmem": 16 * GIB,
+                    "disk": 31 * GIB, "maxdisk": 94 * GIB, "uptime": int(time.time()) - START, "level": "", "cgroup-mode": 2},
+                   {"id": f"node/{NODE2}", "type": "node", "node": NODE2, "status": "online", "cpu": 0.04, "maxcpu": 4, "mem": 3 * GIB, "maxmem": 8 * GIB,
+                    "disk": 12 * GIB, "maxdisk": 60 * GIB, "uptime": int(time.time()) - START, "level": "", "cgroup-mode": 2}]
             res += [guest_resource(v, g) for v, g in guests.items()]
             res += [
                 {"id": f"storage/{NODE}/local", "type": "storage", "storage": "local", "node": NODE, "status": "available", "plugintype": "dir", "content": "iso,vztmpl,backup", "shared": 0, "disk": 31 * GIB, "maxdisk": 94 * GIB},
@@ -172,12 +189,12 @@ class Handler(BaseHTTPRequestHandler):
         m = re.fullmatch(rf"/nodes/{NODE}/rrddata", path)
         if m and method == "GET":
             return self.ok(rrd("node", None, query.get("timeframe", "hour")))
-        m = re.fullmatch(rf"/nodes/{NODE}/(lxc|qemu)/(\d+)/(.*)", path)
+        m = re.fullmatch(r"/nodes/([\w-]+)/(lxc|qemu)/(\d+)/(.*)", path)
         if m:
-            kind, vid, rest = m.group(1), int(m.group(2)), m.group(3)
+            node, kind, vid, rest = m.group(1), m.group(2), int(m.group(3)), m.group(4)
             g = guests.get(vid)
-            if not g or g["type"] != kind:
-                return self.fail(500, f"Configuration file 'nodes/{NODE}/{kind}/{vid}.conf' does not exist")
+            if not g or g["type"] != kind or g.get("node", NODE) != node:
+                return self.fail(500, f"Configuration file 'nodes/{node}/{kind}/{vid}.conf' does not exist")
             return self.guest(method, kind, vid, g, rest, query, body)
         m = re.fullmatch(rf"/nodes/{NODE}/storage/([\w-]+)/content", path)
         if m and method == "GET":
@@ -229,13 +246,37 @@ class Handler(BaseHTTPRequestHandler):
                     {"Package": "openssl", "Title": "Secure Sockets Layer toolkit", "OldVersion": "3.5.1-1", "Version": "3.5.1-1+deb13u1", "Priority": "optional", "Origin": "Debian", "Section": "utils", "Arch": "amd64", "Description": "..."},
                 ])
             return self.ok(start_task("aptupdate", "", ["starting apt-get update", "Hit:1 http://deb.debian.org/debian trixie InRelease", "Reading package lists...", "Done"], seconds=1))
-        if path == f"/nodes/{NODE}/disks/list" and method == "GET":
+        if path == "/cluster/status" and method == "GET":
             return self.ok([
-                {"devpath": "/dev/nvme0n1", "model": "Samsung SSD 970 EVO Plus 500GB", "serial": "S4EVNX0N123456", "size": 500_107_862_016, "type": "nvme", "health": "PASSED", "wearout": 97, "used": "LVM", "gpt": 1, "rpm": 0, "vendor": "unknown"},
-                {"devpath": "/dev/sda", "model": "ST8000VE001-3CC101", "serial": "WRQ032XP", "size": 8_001_563_222_016, "type": "hdd", "health": "PASSED", "wearout": "N/A", "used": "ext4", "gpt": 1, "rpm": 7200, "vendor": "ATA     "},
-                {"devpath": "/dev/sdb", "model": "ST8000VE001-3CC101", "serial": "WRQ032YQ", "size": 8_001_563_222_016, "type": "hdd", "health": "PASSED", "wearout": "N/A", "used": "ext4", "gpt": 1, "rpm": 7200, "vendor": "ATA     "},
-                {"devpath": "/dev/sdc", "model": "TOSHIBA HDWG11A", "serial": "X0R0A0QFFAXG", "size": 10_000_831_348_736, "type": "hdd", "health": "FAILED", "wearout": "N/A", "used": "ext4", "gpt": 1, "rpm": 7200, "vendor": "ATA     "},
+                {"type": "cluster", "id": "cluster", "name": "homelab", "nodes": 2, "quorate": 1, "version": 4},
+                {"type": "node", "id": f"node/{NODE}", "name": NODE, "ip": "127.0.0.1", "online": 1, "local": 1, "nodeid": 1, "level": ""},
+                {"type": "node", "id": f"node/{NODE2}", "name": NODE2, "ip": "127.0.0.2", "online": 1, "local": 0, "nodeid": 2, "level": ""},
             ])
+        m = re.fullmatch(r"/nodes/([\w-]+)/(time|disks/list|disks/smart|disks/zfs|disks/lvm|disks/lvmthin)", path)
+        if m and method == "GET":
+            node, what = m.group(1), m.group(2)
+            if node not in fakedisks.NODES:
+                return self.fail(500, f"no such node '{node}'")
+            if what == "time":
+                now = int(time.time())
+                return self.ok({"time": now, "localtime": now + time.localtime().tm_gmtoff, "timezone": time.tzname[0]})
+            if what == "disks/list":
+                disks = fakedisks.pve_disk_list(node)
+                if query.get("include-partitions") not in ("1", "true"):
+                    disks = [d for d in disks if "parent" not in d]
+                return self.ok(disks)
+            if what == "disks/smart":
+                data = fakedisks.pve_smart(node, query.get("disk", ""))
+                return self.ok(data) if data else self.fail(500, f"disk '{query.get('disk')}' not found")
+            if what == "disks/zfs":
+                return self.ok(fakedisks.pve_zfs(node)[0])
+            if what == "disks/lvm":
+                return self.ok(fakedisks.pve_lvm(node)[0])
+            return self.ok(fakedisks.pve_lvm(node)[1])
+        m = re.fullmatch(r"/nodes/([\w-]+)/disks/zfs/([\w.:-]+)", path)
+        if m and method == "GET":
+            detail = fakedisks.pve_zfs(m.group(1))[1].get(m.group(2))
+            return self.ok(detail) if detail else self.fail(500, f"pool '{m.group(2)}' not found")
         return self.fail(501, f"Method '{method} {path}' not implemented")
 
     def guest(self, method, kind, vid, g, rest, query, body):

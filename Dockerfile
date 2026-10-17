@@ -4,7 +4,8 @@
 #
 # Three stages: the web UI is built with Node, then embedded into a static
 # (musl) Rust binary, which runs on a small Alpine image together with the
-# Docker CLI and its Compose plugin (Nodestarr drives stacks through them).
+# Docker CLI and its Compose plugin (Nodestarr drives stacks through them)
+# and the OpenSSH client (for host access to Proxmox nodes, disk health).
 #
 # Build arguments:
 #   NODESTARR_REPO  GitHub "owner/name" that publishes Nodestarr releases. Turns on
@@ -49,7 +50,7 @@ RUN touch src/main.rs src/lib.rs \
 # 3. Runtime
 # ---------------------------------------------------------------------------
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates tzdata docker-cli docker-cli-compose
+RUN apk add --no-cache ca-certificates tzdata docker-cli docker-cli-compose openssh-client openssh-keygen
 COPY --from=build /src/target/release/nodestarr /usr/local/bin/nodestarr
 
 ENV NODESTARR_DATA_DIR=/config \

@@ -20,6 +20,7 @@ use crate::mqtt::MqttService;
 use crate::notify::Notifier;
 use crate::prefs::PrefsStore;
 use crate::proxmox::ProxmoxService;
+use crate::proxmox::disks::DiskService;
 use crate::registry::RegistryClient;
 use crate::settings::{SettingsStore, Severity};
 use crate::tasks::TaskManager;
@@ -42,6 +43,8 @@ pub struct AppState {
     pub notifier: Notifier,
     pub integrations: IntegrationService,
     pub proxmox: ProxmoxService,
+    /// Proxmox disk health, pools and self-tests.
+    pub disks: DiskService,
     pub monitor: MonitorService,
     pub uptime: UptimeService,
     pub mqtt: MqttService,
@@ -115,6 +118,7 @@ pub async fn build(boot: BootConfig) -> anyhow::Result<App> {
     let notifier = Notifier::new(http.clone(), settings.clone(), db.clone());
     let integrations = IntegrationService::new(http.clone(), bus.clone());
     let proxmox = ProxmoxService::new(settings.clone(), docker.clone());
+    let disks = DiskService::new(bus.clone(), &boot.data_dir);
     let monitor = MonitorService::new(db.clone(), bus.clone());
     let uptime = UptimeService::new(bus.clone());
     let mqtt = MqttService::new();
@@ -136,6 +140,7 @@ pub async fn build(boot: BootConfig) -> anyhow::Result<App> {
         notifier,
         integrations,
         proxmox,
+        disks,
         monitor,
         uptime,
         mqtt,
@@ -172,6 +177,7 @@ pub async fn start_background(app: &App) {
     crate::integrations::start(app.clone());
     crate::mqtt::start(app.clone());
     crate::proxmox::start(app.clone());
+    crate::proxmox::disks::start(app.clone());
     crate::notify::start(app.clone());
 }
 

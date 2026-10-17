@@ -6,7 +6,7 @@
 src/            the server (Rust)
 web/            the web UI (Svelte 5, TypeScript, Vite), embedded into the binary
 docs/           documentation
-dev/            stand-ins for Proxmox and webhooks (see dev/README.md)
+dev/            stand-ins for Proxmox (with disks and the host helper) and webhooks (see dev/README.md)
 packaging/      systemd unit
 .github/        CI and release workflows
 Dockerfile, compose.yaml
@@ -31,7 +31,7 @@ Dockerfile, compose.yaml
 | `integrations` | API clients for the supported apps, API key discovery. |
 | `notify` | Notification channels, quiet hours and de-duplication. |
 | `mqtt`, `metrics` | Home Assistant over MQTT; Prometheus metrics. |
-| `proxmox` | Proxmox VE API client (certificate pinning) and guest operations. |
+| `proxmox` | Proxmox VE API client (certificate pinning) and guest operations. `proxmox::disks` is disk health: SMART parsing and judging (`smart`), pools and arrays (`pools`), mapping pool members to disks (`blockdev`), background reading (`scan`), self-tests (`selftest`), history (`store`) and the SSH host helper (`host`, `helper.sh`). |
 | `tasks`, `scheduler`, `activity`, `events` | Long-running operations with logs and locks; cron jobs; the activity log; the in-process event bus. |
 | `selfupdate`, `files`, `ops` | Updating Nodestarr's own container; config file editing with versions; shared container and stack operations. |
 | `error`, `logging`, `util` | The error type and its API mapping; log setup and the in-memory log ring for System > Logs; helpers (atomic writes, path confinement, CIDR lists). |

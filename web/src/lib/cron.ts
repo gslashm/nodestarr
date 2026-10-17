@@ -48,13 +48,21 @@ export interface CronPreset {
 }
 
 /** Presets offered next to a schedule field, labeled in the configured time format. */
-export function cronPresets(kind: 'check' | 'daily'): CronPreset[] {
+export function cronPresets(kind: 'check' | 'daily' | 'test'): CronPreset[] {
   if (kind === 'check') {
     return [
       { label: 'Every hour', value: '17 * * * *' },
       { label: 'Every 6 hours', value: '17 */6 * * *' },
       { label: 'Every 12 hours', value: '17 */12 * * *' },
       { label: 'Once a day', value: '17 5 * * *' },
+    ];
+  }
+  if (kind === 'test') {
+    return [
+      { label: `Sundays at ${clock(3, 0)}`, value: '0 3 * * 0' },
+      { label: `Saturdays at ${clock(1, 0)}`, value: '0 1 * * 6' },
+      { label: `1st of the month at ${clock(2, 0)}`, value: '0 2 1 * *' },
+      { label: `Every night at ${clock(2, 30)}`, value: '30 2 * * *' },
     ];
   }
   return [

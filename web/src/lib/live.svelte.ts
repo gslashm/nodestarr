@@ -40,7 +40,8 @@ type ServerEvent =
   | { type: 'alert'; data: AlertView }
   | { type: 'toast'; data: { level: 'info' | 'success' | 'warning' | 'error'; message: string } }
   | { type: 'settings' }
-  | { type: 'prefs'; data: { identity: string } };
+  | { type: 'prefs'; data: { identity: string } }
+  | { type: 'disks' };
 
 const HIDE_GRACE_MS = 60_000;
 const TRAIL = 40;
@@ -75,6 +76,8 @@ class Live {
   uptime = $state<Record<string, UptimeStatus>>({});
   /** Bumped when stacks change; stack pages refetch when it does. */
   stacksVersion = $state(0);
+  /** Bumped when Proxmox disk health, pools or self-tests change. */
+  disksVersion = $state(0);
   serverVersion = $state<string | null>(null);
 
   list = $derived(Object.values(this.containers).sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
@@ -331,6 +334,9 @@ class Live {
         break;
       case 'prefs':
         this.scheduleRefresh();
+        break;
+      case 'disks':
+        this.disksVersion++;
         break;
     }
   }

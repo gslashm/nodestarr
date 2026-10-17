@@ -1,6 +1,7 @@
 //! The settings document. Every struct uses `#[serde(default)]` so missing
 //! fields take their defaults.
 
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -681,6 +682,10 @@ pub struct Proxmox {
     pub self_vmid: Option<u32>,
     /// Default storage for "Back up now".
     pub backup_storage: String,
+    /// Disk health (SMART) and storage pools.
+    pub disks: DiskHealth,
+    /// SSH access to the nodes, for self-tests and what the API doesn't show.
+    pub host_access: HostAccess,
 }
 
 impl Default for Proxmox {
@@ -695,7 +700,88 @@ impl Default for Proxmox {
             node: String::new(),
             self_vmid: None,
             backup_storage: String::new(),
+            disks: DiskHealth::default(),
+            host_access: HostAccess::default(),
         }
+    }
+}
+
+/// SMART self-test types.
+pub const TEST_KINDS: &[&str] = &["short", "long", "conveyance"];
+/// Which disks a test schedule covers.
+pub const TEST_TARGETS: &[&str] = &["all", "hdd", "ssd", "nvme", "list"];
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiskHealth {
+    /// Read SMART data and pool status in the background.
+    pub enabled: bool,
+    /// Minutes between SMART reads (pool status is read every 5 minutes).
+    pub sample_minutes: u32,
+    /// Also read disks that are spun down, which wakes them. Without host
+    /// access every read goes through Proxmox, which always wakes them.
+    pub wake_sleeping: bool,
+    /// Days of SMART history, test results and events to keep.
+    pub retention_days: u32,
+    /// Self-tests running at once on one node (0: no limit).
+    pub max_parallel_tests: u32,
+    /// Notify about passed self-tests too, not only failed ones.
+    pub notify_passed: bool,
+    pub schedules: Vec<TestSchedule>,
+}
+
+impl Default for DiskHealth {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            sample_minutes: 60,
+            wake_sleeping: false,
+            retention_days: 730,
+            max_parallel_tests: 0,
+            notify_passed: false,
+            schedules: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestSchedule {
+    pub id: String,
+    pub name: String,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    /// short, long or conveyance.
+    pub kind: String,
+    pub cron: String,
+    /// all, hdd, ssd (SATA and NVMe), nvme, or list (the disks in `ids`).
+    #[serde(default = "all_disks")]
+    pub disks: String,
+    #[serde(default)]
+    pub ids: Vec<String>,
+    /// Nodes to include; empty for all.
+    #[serde(default)]
+    pub nodes: Vec<String>,
+}
+
+fn all_disks() -> String {
+    "all".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HostAccess {
+    pub enabled: bool,
+    /// SSH user; the helper needs root for smartctl.
+    pub user: String,
+    pub port: u16,
+    /// SSH address per node. A node without one uses its cluster address
+    /// (or, for the node the API talks to, the API's host).
+    pub addresses: BTreeMap<String, String>,
+}
+
+impl Default for HostAccess {
+    fn default() -> Self {
+        Self { enabled: false, user: "root".into(), port: 22, addresses: BTreeMap::new() }
     }
 }
 
@@ -768,6 +854,16 @@ pub enum AlertKind {
     Disk,
     /// No successful backup for `threshold` hours (containers with backups on).
     BackupAge,
+    /// A Proxmox disk's SMART data shows a problem (failing health, bad
+    /// sectors, a failed self-test, worn-out flash).
+    DiskHealth,
+    /// A Proxmox disk is hotter than `threshold` °C (hard disks; SSDs use
+    /// their own limit or `threshold` + 20).
+    DiskTemperature,
+    /// A storage pool is degraded, faulted or has data errors.
+    PoolHealth,
+    /// A ZFS pool or SnapRAID array wasn't scrubbed for `threshold` days.
+    PoolScrubAge,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -805,6 +901,10 @@ pub fn default_alert_rules() -> Vec<AlertRule> {
         rule("container-memory", AlertKind::ContainerMemory, 90.0, 300, Severity::Warning, true),
         rule("container-cpu", AlertKind::ContainerCpu, 95.0, 900, Severity::Info, false),
         rule("backup-age", AlertKind::BackupAge, 48.0, 0, Severity::Warning, true),
+        rule("disk-health", AlertKind::DiskHealth, 0.0, 0, Severity::Error, true),
+        rule("disk-temperature", AlertKind::DiskTemperature, 50.0, 600, Severity::Warning, true),
+        rule("pool-health", AlertKind::PoolHealth, 0.0, 0, Severity::Error, true),
+        rule("pool-scrub-age", AlertKind::PoolScrubAge, 35.0, 0, Severity::Info, true),
     ]
 }
 
@@ -933,6 +1033,12 @@ impl Settings {
         if let Some(scope) = self.updates.default_auto_scope.take() {
             self.updates.auto_install = AutoInstall::from_scope(scope);
         }
+        // Alert kinds added in later versions start with their defaults.
+        for rule in default_alert_rules() {
+            if !self.monitoring.rules.iter().any(|r| r.kind == rule.kind) {
+                self.monitoring.rules.push(rule);
+            }
+        }
     }
 
     /// Checks the whole document; returns a user-facing message on the first problem.
@@ -1005,6 +1111,49 @@ impl Settings {
             }
             if px.token_secret.is_empty() {
                 return Err("Proxmox token secret is required".into());
+            }
+        }
+        let dh = &px.disks;
+        if dh.sample_minutes < 5 {
+            return Err("disk health checks need at least 5 minutes between them".into());
+        }
+        if dh.retention_days < 7 {
+            return Err("keep disk history for at least 7 days".into());
+        }
+        let mut schedule_ids = std::collections::HashSet::new();
+        for t in &dh.schedules {
+            if t.id.trim().is_empty() || !schedule_ids.insert(t.id.as_str()) {
+                return Err(format!("self-test schedule '{}' needs a unique id", t.name));
+            }
+            if t.name.trim().is_empty() {
+                return Err("self-test schedules need a name".into());
+            }
+            if !TEST_KINDS.contains(&t.kind.as_str()) {
+                return Err(format!("{}: the test type must be short, long or conveyance", t.name));
+            }
+            if !TEST_TARGETS.contains(&t.disks.as_str()) {
+                return Err(format!("{}: unknown disk selection '{}'", t.name, t.disks));
+            }
+            if t.disks == "list" && t.ids.is_empty() {
+                return Err(format!("{}: choose at least one disk", t.name));
+            }
+            parse_cron(&t.cron).map_err(|e| format!("{}: {e}", t.name))?;
+        }
+        let ha = &px.host_access;
+        let user_ok = ha.user.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c == '_')
+            && ha.user.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
+        if !user_ok {
+            return Err("the SSH user must be a plain user name like root".into());
+        }
+        if ha.port == 0 {
+            return Err("the SSH port can't be 0".into());
+        }
+        for (node, addr) in &ha.addresses {
+            let addr = addr.trim();
+            let host_ok =
+                addr.chars().all(|c| c.is_ascii_alphanumeric() || ".:-_[]%".contains(c)) && !addr.starts_with('-');
+            if !host_ok {
+                return Err(format!("the SSH address for {node} must be a host name or IP address"));
             }
         }
 
@@ -1134,6 +1283,58 @@ mod tests {
         let mut fresh = Settings::default();
         fresh.upgrade();
         assert_eq!(fresh.updates.auto_install, AutoInstall::default());
+    }
+
+    #[test]
+    fn new_alert_kinds_are_added_to_stored_rules() {
+        let mut s: Settings = serde_json::from_str(
+            r#"{"monitoring": {"rules": [{"id": "disk", "kind": "disk", "enabled": false, "threshold": 80}]}}"#,
+        )
+        .unwrap();
+        s.upgrade();
+        assert_eq!(s.monitoring.rules.len(), default_alert_rules().len());
+        // Existing rules keep their choices.
+        let disk = s.monitoring.rules.iter().find(|r| r.kind == AlertKind::Disk).unwrap();
+        assert!(!disk.enabled);
+        assert_eq!(disk.threshold, 80.0);
+        assert!(s.monitoring.rules.iter().any(|r| r.kind == AlertKind::PoolHealth));
+        // Running it again changes nothing.
+        s.upgrade();
+        assert_eq!(s.monitoring.rules.len(), default_alert_rules().len());
+    }
+
+    #[test]
+    fn disk_health_validation() {
+        let mut s = Settings::default();
+        let schedule = TestSchedule {
+            id: "weekly".into(),
+            name: "Weekly short test".into(),
+            enabled: true,
+            kind: "short".into(),
+            cron: "0 3 * * 0".into(),
+            disks: "all".into(),
+            ids: vec![],
+            nodes: vec![],
+        };
+        s.proxmox.disks.schedules.push(schedule.clone());
+        s.validate().unwrap();
+        s.proxmox.disks.schedules.push(schedule.clone());
+        assert!(s.validate().is_err(), "duplicate ids");
+        s.proxmox.disks.schedules.pop();
+        s.proxmox.disks.schedules[0].kind = "erase".into();
+        assert!(s.validate().is_err());
+        s.proxmox.disks.schedules[0].kind = "long".into();
+        s.proxmox.disks.schedules[0].disks = "list".into();
+        assert!(s.validate().is_err(), "a list needs disks");
+        s.proxmox.disks.schedules[0].ids = vec!["WDC_X".into()];
+        s.validate().unwrap();
+        s.proxmox.host_access.user = "-oProxyCommand".into();
+        assert!(s.validate().is_err());
+        s.proxmox.host_access.user = "root".into();
+        s.proxmox.host_access.addresses.insert("pve".into(), "-oProxyCommand=x".into());
+        assert!(s.validate().is_err());
+        s.proxmox.host_access.addresses.insert("pve".into(), "fe80::1%vmbr0".into());
+        s.validate().unwrap();
     }
 
     #[test]
