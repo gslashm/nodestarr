@@ -23,6 +23,10 @@ clears. The defaults:
 | Host memory | less than 10% of the Docker host's memory is available for 5 minutes | warning |
 | Proxmox memory | the Proxmox node uses more than 90% of its memory for 5 minutes | warning |
 | Proxmox storage | a Proxmox storage is more than 90% full | warning |
+| Disk health | a disk of a Proxmox node needs attention or is failing, judged from its SMART data (temperature aside) | error |
+| Disk temperature | a hard disk of a Proxmox node is hotter than 50 °C for 10 minutes (SSDs and NVMe drives: their own limit, or 20 °C more) | warning |
+| Pool health | a ZFS pool, mdadm or SnapRAID array or LVM thin pool is degraded, faulted or has errors | error |
+| Pool scrub age | a ZFS pool or SnapRAID array wasn't scrubbed for 35 days | info |
 | Restart loop | a container restarted 3 times within 10 minutes | error |
 | Unhealthy | a container's health check fails for 2 minutes | warning |
 | Unexpected exit | a container exits with an error without being stopped | error |
@@ -32,9 +36,10 @@ clears. The defaults:
 | Container CPU | a container uses more than 95% CPU for 15 minutes (off by default) | info |
 | Backup age | a container with backups on has no backup newer than 48 hours | warning |
 
-Change thresholds, durations and severities, or turn rules off, in Settings
-> Monitoring and alerts. Mute a noisy container on its Settings tab. Active
-and recent alerts are on Monitoring > Alerts, where you can dismiss them.
+Change thresholds, durations and severities, or turn rules off, in
+Settings > Monitoring and alerts. Mute a noisy container on its Settings
+tab. Active and recent alerts are on Monitoring > Alerts, where you can
+dismiss them.
 
 ## Uptime checks
 
@@ -90,6 +95,7 @@ Events you can pick from:
 | `alert.fired`, `alert.resolved` | Resource alerts. |
 | `app.health` | An app reports a new health problem (for example "Indexers unavailable" in Sonarr). |
 | `proxmox.task` | A Proxmox task started from Nodestarr finished (backups, snapshots). |
+| `disk.test` | A SMART self-test on a Proxmox disk failed or didn't finish (passed ones too, if turned on in Settings > Proxmox). |
 | `security.login_failed` | Repeated failed sign-ins. |
 | `system.update` | A new Nodestarr version is out. |
 
@@ -159,5 +165,17 @@ scrape_configs:
 | `nodestarr_backup_last_timestamp_seconds` | `identity` | Time of the newest backup. |
 | `nodestarr_alerts_active` | | Firing alerts. |
 | `nodestarr_host_memory_total_bytes`, `nodestarr_host_memory_available_bytes` | | Docker host memory. |
+| `nodestarr_disk_health` | `node`, `device`, `model`, `serial` | A Proxmox disk's verdict: 0 healthy, 1 watch, 2 needs attention, 3 failing. |
+| `nodestarr_disk_smart_passed` | `node`, `device`, `model`, `serial` | 1 when the disk's own SMART health check passes. |
+| `nodestarr_disk_temperature_celsius` | `node`, `device`, `model`, `serial` | Temperature at the last reading. |
+| `nodestarr_disk_reallocated_sectors`, `nodestarr_disk_pending_sectors` | `node`, `device`, `model`, `serial` | Reallocated sectors (grown defects on SAS) and unreadable sectors waiting to be reallocated. |
+| `nodestarr_disk_crc_errors` | `node`, `device`, `model`, `serial` | Interface CRC errors, usually the cable. |
+| `nodestarr_disk_power_on_hours` | `node`, `device`, `model`, `serial` | |
+| `nodestarr_disk_wear_used_percent` | `node`, `device`, `model`, `serial` | Rated write endurance used (SSDs, NVMe). |
+| `nodestarr_disk_asleep` | `node`, `device`, `model`, `serial` | 1 when the disk was spun down at the last check (with host access). |
+| `nodestarr_pool_healthy` | `node`, `pool`, `type` | 1 when the pool works with all its redundancy. `type` is `zfs`, `md`, `snapraid` or `lvmthin`. |
+| `nodestarr_pool_size_bytes`, `nodestarr_pool_used_bytes` | `node`, `pool`, `type` | |
+| `nodestarr_pool_failures_tolerated` | `node`, `pool`, `type` | How many more disks can fail without losing data. |
+| `nodestarr_pool_last_scrub_timestamp_seconds` | `node`, `pool`, `type` | When the last scrub finished (ZFS). |
 
 For Home Assistant, see [Home Assistant](home-assistant.md).

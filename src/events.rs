@@ -67,6 +67,8 @@ pub enum Event {
     Prefs {
         identity: String,
     },
+    /// Proxmox disk health, pools or self-tests changed; clients refetch.
+    Disks,
 }
 
 #[derive(Clone)]

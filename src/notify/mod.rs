@@ -42,6 +42,7 @@ pub const EVENT_KINDS: &[(&str, &str)] = &[
     ("alert.resolved", "Resource alert resolved"),
     ("app.health", "App reports a health problem"),
     ("proxmox.task", "Proxmox task finished (backups, snapshots)"),
+    ("disk.test", "Disk self-test failed or didn't finish"),
     ("security.login_failed", "Repeated failed logins"),
     ("system.update", "New Nodestarr version"),
     ("test", "Test message"),

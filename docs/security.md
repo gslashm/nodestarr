@@ -85,6 +85,31 @@ treated as admin without a password. Behind a reverse proxy, add the proxy
 to trusted proxies so the real client address is used. Leave this off if
 your network has guests or devices you don't fully trust.
 
+## SSH access to Proxmox nodes
+
+[Host access](disk-health.md#setting-up-host-access) for disk health
+connects to the Proxmox nodes over SSH, as root by default. It's off until
+you turn it on, and the key can do very little:
+
+- In `authorized_keys`, `command=` ties the key to Nodestarr's helper script
+  and `restrict` turns off terminals and forwarding. Whatever a client asks
+  for, the node runs the helper, which only reads SMART data, pools and
+  arrays, starts and aborts self-tests, starts, pauses and stops ZFS scrubs,
+  and reads from a disk for up to 5 minutes to blink its light. It checks
+  every argument against a strict pattern and passes nothing to a shell.
+  Someone holding the key can't get a shell, read files or change data.
+- The private key stays in Nodestarr's data folder (`ssh/`, readable only by
+  Nodestarr). It isn't part of settings exports, but a backup of
+  Nodestarr's own container includes it, like the database.
+- Each node's host key is pinned by the first successful **Test**; after
+  that, a different host key stops every connection to that node until you
+  forget the old one. The SSH client ignores the system's SSH settings and
+  known hosts and offers only Nodestarr's key.
+- Self-tests and scrubs started through the helper are logged to the
+  node's syslog, and in Nodestarr's activity log with who started them.
+
+To revoke it, remove the line from `authorized_keys` on the nodes.
+
 ## Protections in the web app
 
 - Changes made with a session cookie must carry an `X-Nodestarr-Request`

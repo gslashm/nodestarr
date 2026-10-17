@@ -26,6 +26,8 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import fakedisks
+
 TOKEN = "PVEAPIToken=nodestarr@pve!nodestarr=11111111-2222-3333-4444-555555555555"
 NODE = "pve"
 # A second cluster member, only listed in the cluster resources (so the
@@ -244,13 +246,37 @@ class Handler(BaseHTTPRequestHandler):
                     {"Package": "openssl", "Title": "Secure Sockets Layer toolkit", "OldVersion": "3.5.1-1", "Version": "3.5.1-1+deb13u1", "Priority": "optional", "Origin": "Debian", "Section": "utils", "Arch": "amd64", "Description": "..."},
                 ])
             return self.ok(start_task("aptupdate", "", ["starting apt-get update", "Hit:1 http://deb.debian.org/debian trixie InRelease", "Reading package lists...", "Done"], seconds=1))
-        if path == f"/nodes/{NODE}/disks/list" and method == "GET":
+        if path == "/cluster/status" and method == "GET":
             return self.ok([
-                {"devpath": "/dev/nvme0n1", "model": "Samsung SSD 970 EVO Plus 500GB", "serial": "S4EVNX0N123456", "size": 500_107_862_016, "type": "nvme", "health": "PASSED", "wearout": 97, "used": "LVM", "gpt": 1, "rpm": 0, "vendor": "unknown"},
-                {"devpath": "/dev/sda", "model": "ST8000VE001-3CC101", "serial": "WRQ032XP", "size": 8_001_563_222_016, "type": "hdd", "health": "PASSED", "wearout": "N/A", "used": "ext4", "gpt": 1, "rpm": 7200, "vendor": "ATA     "},
-                {"devpath": "/dev/sdb", "model": "ST8000VE001-3CC101", "serial": "WRQ032YQ", "size": 8_001_563_222_016, "type": "hdd", "health": "PASSED", "wearout": "N/A", "used": "ext4", "gpt": 1, "rpm": 7200, "vendor": "ATA     "},
-                {"devpath": "/dev/sdc", "model": "TOSHIBA HDWG11A", "serial": "X0R0A0QFFAXG", "size": 10_000_831_348_736, "type": "hdd", "health": "FAILED", "wearout": "N/A", "used": "ext4", "gpt": 1, "rpm": 7200, "vendor": "ATA     "},
+                {"type": "cluster", "id": "cluster", "name": "homelab", "nodes": 2, "quorate": 1, "version": 4},
+                {"type": "node", "id": f"node/{NODE}", "name": NODE, "ip": "127.0.0.1", "online": 1, "local": 1, "nodeid": 1, "level": ""},
+                {"type": "node", "id": f"node/{NODE2}", "name": NODE2, "ip": "127.0.0.2", "online": 1, "local": 0, "nodeid": 2, "level": ""},
             ])
+        m = re.fullmatch(r"/nodes/([\w-]+)/(time|disks/list|disks/smart|disks/zfs|disks/lvm|disks/lvmthin)", path)
+        if m and method == "GET":
+            node, what = m.group(1), m.group(2)
+            if node not in fakedisks.NODES:
+                return self.fail(500, f"no such node '{node}'")
+            if what == "time":
+                now = int(time.time())
+                return self.ok({"time": now, "localtime": now + time.localtime().tm_gmtoff, "timezone": time.tzname[0]})
+            if what == "disks/list":
+                disks = fakedisks.pve_disk_list(node)
+                if query.get("include-partitions") not in ("1", "true"):
+                    disks = [d for d in disks if "parent" not in d]
+                return self.ok(disks)
+            if what == "disks/smart":
+                data = fakedisks.pve_smart(node, query.get("disk", ""))
+                return self.ok(data) if data else self.fail(500, f"disk '{query.get('disk')}' not found")
+            if what == "disks/zfs":
+                return self.ok(fakedisks.pve_zfs(node)[0])
+            if what == "disks/lvm":
+                return self.ok(fakedisks.pve_lvm(node)[0])
+            return self.ok(fakedisks.pve_lvm(node)[1])
+        m = re.fullmatch(r"/nodes/([\w-]+)/disks/zfs/([\w.:-]+)", path)
+        if m and method == "GET":
+            detail = fakedisks.pve_zfs(m.group(1))[1].get(m.group(2))
+            return self.ok(detail) if detail else self.fail(500, f"pool '{m.group(2)}' not found")
         return self.fail(501, f"Method '{method} {path}' not implemented")
 
     def guest(self, method, kind, vid, g, rest, query, body):

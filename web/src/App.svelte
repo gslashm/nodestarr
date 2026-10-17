@@ -34,7 +34,7 @@
     ['/backups/:tab?', () => import('./pages/Backups.svelte')],
     ['/monitoring/:tab?', () => import('./pages/monitoring/Monitoring.svelte')],
     ['/activity/:tab?', () => import('./pages/Activity.svelte')],
-    ['/proxmox/:tab?', () => import('./pages/proxmox/Proxmox.svelte')],
+    ['/proxmox/:tab?/:sub?', () => import('./pages/proxmox/Proxmox.svelte')],
     ['/settings/:section?', () => import('./pages/settings/Settings.svelte')],
     ['/system/:tab?', () => import('./pages/system/System.svelte')],
   ];

@@ -41,6 +41,15 @@ verification, rollback).
 The Nodestarr device has **Updates available** and **Containers running**
 sensors and a **Check for updates** button.
 
+With Proxmox [disk health](disk-health.md) on, every disk of the Proxmox
+nodes is a device too, with a **Temperature** sensor and a **Problem**
+binary sensor: on when the disk needs attention or is failing, with the
+verdict, the reason, its device and node, power-on hours, sector counts,
+cable errors, wear and the last self-test as attributes. Every pool is a
+device with a **Problem** binary sensor (on when it's degraded or has
+errors; its state, the reason, how many more disk failures it survives and
+a running scrub or rebuild are attributes) and a **Used** sensor in percent.
+
 ## Options
 
 - **Buttons to start, stop, restart and update containers** (on by
@@ -67,14 +76,18 @@ For automations or other MQTT clients:
 | `nodestarr/<container>/update` | Home Assistant update entity state |
 | `nodestarr/<container>/set` | Commands: `start`, `stop`, `restart`, `update` (with controls on) |
 | `nodestarr/command` | `check_updates` |
+| `nodestarr/disk/<disk>/state` | `{"problem": "OFF", "verdict": "watch", "reason": "8 sectors reallocated", "temperature": 36, "asleep": false, "device": "/dev/sda", "node": "pve", "serial": "WD-WCC7K1234567", "power_on_hours": 41234, "reallocated_sectors": 8, "pending_sectors": 0, "crc_errors": 0, "wear_used_percent": null, "last_test": "short passed"}` |
+| `nodestarr/pool/<pool>/state` | `{"problem": "ON", "state": "DEGRADED", "reason": "No redundancy left: one more failure loses data", "used_percent": 61.2, "failures_tolerated": 0, "scan": "resilver running", "scan_progress": 42.5, "node": "pve"}` |
 
 `<container>` is the container's identity in lowercase with dashes, for
 example `compose-media-sonarr` for the `sonarr` service of the `media`
-stack.
+stack. `<disk>` is `disk-` with the disk's model and serial number
+(`disk-wdc-wd40efrx-68n32n0-wd-wcc7k1234567`), and `<pool>` is `pool-` with
+the node, type and name (`pool-pve-zfs-tank`).
 
 Nodestarr republishes everything when Home Assistant restarts (it watches
-`homeassistant/status`) and removes the entities of containers that are
-gone.
+`homeassistant/status`) and removes the entities of containers, disks and
+pools that are gone.
 
 ## Prometheus
 

@@ -1,4 +1,4 @@
-<!-- Proxmox VE connection: address, API token, certificate trust, and defaults. -->
+<!-- Proxmox VE connection: address, API token, certificate trust, defaults, disk health and SSH host access. -->
 <script lang="ts">
   import PlugZap from '@lucide/svelte/icons/plug-zap';
   import Button from '../../components/Button.svelte';
@@ -10,6 +10,7 @@
   import Toggle from '../../components/Toggle.svelte';
   import { api, errorMessage } from '../../lib/api';
   import type { Settings } from '../../lib/types';
+  import HostAccessSetup from './HostAccessSetup.svelte';
   import SettingsSection from './SettingsSection.svelte';
 
   let testing = $state(false);
@@ -99,6 +100,45 @@ pveum user token add nodestarr@pve nodestarr --privsep 0`;
         <input id="px-store" class="input mono" bind:value={p.backup_storage} placeholder="backups" spellcheck="false" />
       </Field>
     </Group>
+
+    <Group title="Disk health" hint="SMART data, temperatures and pools of every node, with history.">
+      <Field label="Disk health">
+        <Toggle bind:checked={p.disks.enabled} label="Read SMART data and pool status in the background" />
+      </Field>
+      <Field label="Read SMART data every" id="px-dh-min" hint="Minutes. Pool status (scrubs, resilvers, degraded vdevs) is read every 5 minutes regardless.">
+        <input id="px-dh-min" class="input num short" type="number" min="5" step="5" bind:value={p.disks.sample_minutes} />
+      </Field>
+      <Field label="Sleeping disks">
+        <Toggle
+          bind:checked={p.disks.wake_sleeping}
+          label="Wake disks that are spun down to read them"
+          hint="Off: with host access, a sleeping disk is left alone and keeps its last reading. Through the Proxmox API, reading always wakes it."
+        />
+      </Field>
+      <Field label="Keep history" id="px-dh-keep" hint="Days of SMART readings, self-test results and events.">
+        <input id="px-dh-keep" class="input num short" type="number" min="7" bind:value={p.disks.retention_days} />
+      </Field>
+      <Field label="Self-tests at once" id="px-dh-par" hint="Per node. 0 runs every scheduled test right away; 1 tests one disk at a time, which keeps a pool fast meanwhile.">
+        <input id="px-dh-par" class="input num short" type="number" min="0" bind:value={p.disks.max_parallel_tests} />
+      </Field>
+      <Field label="Notifications">
+        <Toggle bind:checked={p.disks.notify_passed} label="Also notify about passed self-tests" hint="Failed and unfinished tests always notify (event “Disk self-test”). Disk and pool problems are alerts: Settings › Monitoring and alerts." />
+      </Field>
+    </Group>
+
+    <Group title="Host access" hint="SSH to the nodes, for self-tests and what the API can't see.">
+      <Field label="Host access">
+        <Toggle bind:checked={p.host_access.enabled} label="Connect to the nodes over SSH" hint="Runs SMART self-tests, reads mdadm and SnapRAID arrays, controls ZFS scrubs and leaves sleeping disks asleep. Set it up below." />
+      </Field>
+      <Field label="SSH user" id="px-ha-user" hint="The helper needs root to talk to the disks.">
+        <input id="px-ha-user" class="input mono short" bind:value={p.host_access.user} spellcheck="false" autocomplete="off" />
+      </Field>
+      <Field label="SSH port" id="px-ha-port">
+        <input id="px-ha-port" class="input num short" type="number" min="1" max="65535" bind:value={p.host_access.port} />
+      </Field>
+    </Group>
+
+    <HostAccessSetup {p} />
 
     <details class="panel help">
       <summary class="panel-head"><h3>Creating the API token</h3></summary>

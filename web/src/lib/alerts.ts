@@ -82,6 +82,28 @@ export const ALERT_KINDS: Record<string, AlertKindInfo> = {
     threshold: { label: 'Older than', unit: 'hours', min: 1 },
     usesDuration: false,
   },
+  disk_health: {
+    label: 'Disk health',
+    describe: () => 'A Proxmox disk reports a problem: failing SMART health, unreadable sectors, a failed self-test or worn-out flash',
+    usesDuration: false,
+  },
+  disk_temperature: {
+    label: 'Disk temperature',
+    describe: (r) => `A hard disk is hotter than ${r.threshold} °C${lasting(r.duration_secs)} (SSDs: their own limit, or ${r.threshold + 20} °C)`,
+    threshold: { label: 'Hotter than', unit: '°C', min: 30, max: 90 },
+    usesDuration: true,
+  },
+  pool_health: {
+    label: 'Pool health',
+    describe: () => 'A ZFS pool, mdadm or SnapRAID array is degraded or faulted, or has data errors',
+    usesDuration: false,
+  },
+  pool_scrub_age: {
+    label: 'Pool scrub age',
+    describe: (r) => `A ZFS pool or SnapRAID array wasn't scrubbed for ${r.threshold} days`,
+    threshold: { label: 'Older than', unit: 'days', min: 1 },
+    usesDuration: false,
+  },
 };
 
 export function alertKind(kind: string): AlertKindInfo {

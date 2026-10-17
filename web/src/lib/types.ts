@@ -772,6 +772,417 @@ export interface PveDisk {
   used: string | null;
 }
 
+// ------------------------------------------------- Proxmox disk health
+
+/** How much a finding matters; "info" never changes a disk's verdict. */
+export type DiskLevel = 'ok' | 'info' | 'watch' | 'warning' | 'failing';
+export type DiskMedia = 'hdd' | 'ssd' | 'nvme' | 'unknown';
+export type TestOutcome = 'passed' | 'failed' | 'aborted' | 'interrupted' | 'running' | 'unknown';
+export type PoolKind = 'zfs' | 'md' | 'snapraid' | 'lvmthin';
+export type PoolHealth = 'ok' | 'degraded' | 'faulted' | 'unknown';
+
+export interface DiskFinding {
+  level: DiskLevel;
+  code: string;
+  title: string;
+  detail: string;
+}
+
+export interface DiskRole {
+  pool: string;
+  pool_name: string;
+  kind: PoolKind;
+  /** data, parity, spare, log, cache, special, dedup. */
+  role: string;
+  group: string;
+  /** Its name in the pool ("d1" and "parity 2" in SnapRAID). */
+  member: string;
+  state: string | null;
+  ok: boolean;
+}
+
+export interface DiskLabel {
+  bay: string;
+  notes: string;
+  purchased: string;
+  warranty_until: string;
+}
+
+export interface DiskTestSupport {
+  short: boolean;
+  long: boolean;
+  conveyance: boolean;
+  short_minutes: number | null;
+  long_minutes: number | null;
+  conveyance_minutes: number | null;
+  available: boolean;
+  reason: string | null;
+}
+
+export interface DiskLastTest {
+  kind: string;
+  outcome: TestOutcome;
+  status: string;
+  at: number | null;
+  /** The time is estimated from the drive's power-on hours. */
+  estimated: boolean;
+  lba: number | null;
+}
+
+export interface DiskView {
+  id: string;
+  node: string;
+  devpath: string;
+  by_id: string | null;
+  model: string | null;
+  family: string | null;
+  serial: string | null;
+  wwn: string | null;
+  vendor: string | null;
+  firmware: string | null;
+  media: DiskMedia;
+  transport: string | null;
+  size: number | null;
+  rpm: number | null;
+  used_by: string | null;
+  osd: number | null;
+  roles: DiskRole[];
+  mounts: string[];
+  present: boolean;
+  first_seen: number;
+  last_seen: number;
+  sampled_at: number | null;
+  checked_at: number | null;
+  source: 'api' | 'helper' | null;
+  asleep: boolean;
+  /** Spins down between readings, so it's read through the Proxmox API only about once a day. */
+  resting: boolean;
+  error: string | null;
+  passed: boolean | null;
+  verdict: DiskLevel;
+  findings: DiskFinding[];
+  temperature: number | null;
+  temp_limit: number | null;
+  power_on_hours: number | null;
+  power_cycles: number | null;
+  reallocated: number | null;
+  pending: number | null;
+  uncorrectable: number | null;
+  crc_errors: number | null;
+  wear_used: number | null;
+  bytes_written: number | null;
+  load_cycles: number | null;
+  tests: DiskTestSupport;
+  last_test: DiskLastTest | null;
+  label: DiskLabel;
+  smr: boolean;
+  /** Hourly temperatures of the last day, oldest first. */
+  temps: (number | null)[];
+}
+
+export interface PoolMember {
+  name: string;
+  path: string | null;
+  disk: string | null;
+  role: string;
+  state: string | null;
+  ok: boolean;
+  read: number | null;
+  write: number | null;
+  cksum: number | null;
+  note: string | null;
+  slot: number;
+  size: number | null;
+  used: number | null;
+  level: number | null;
+}
+
+export interface PoolGroup {
+  name: string;
+  /** data, log, cache, spare, special, dedup, parity. */
+  class: string;
+  kind: string;
+  parity: number;
+  state: string | null;
+  members: PoolMember[];
+}
+
+export interface PoolScan {
+  kind: string;
+  /** running, paused, finished, canceled, pending, none. */
+  state: string;
+  progress: number | null;
+  eta_secs: number | null;
+  speed: string | null;
+  started_at: number | null;
+  finished_at: number | null;
+  duration_secs: number | null;
+  repaired: string | null;
+  errors: number | null;
+  text: string;
+}
+
+export interface PoolTolerance {
+  designed: number;
+  failed: number;
+  remaining: number;
+}
+
+export interface SnapraidInfo {
+  parity_levels: number;
+  content_files: string[];
+  last_sync: number | null;
+  status_at: number | null;
+  oldest_scrub_days: number | null;
+  median_scrub_days: number | null;
+  newest_scrub_days: number | null;
+  not_scrubbed_pct: number | null;
+  sync_progress: number | null;
+  errors: number | null;
+  busy: boolean;
+  summary: string[];
+}
+
+export interface Pool {
+  id: string;
+  node: string;
+  kind: PoolKind;
+  name: string;
+  state: string;
+  health: PoolHealth;
+  layout: string;
+  size: number | null;
+  used: number | null;
+  free: number | null;
+  fragmentation: number | null;
+  dedup: number | null;
+  groups: PoolGroup[];
+  scan: PoolScan | null;
+  tolerance: PoolTolerance | null;
+  status_text: string | null;
+  action: string | null;
+  errors_text: string | null;
+  data_errors: number | null;
+  metadata_size: number | null;
+  metadata_used: number | null;
+  snapraid: SnapraidInfo | null;
+  findings: DiskFinding[];
+  growth_per_day: number | null;
+  full_in_days: number | null;
+}
+
+export interface DiskTest {
+  id: string;
+  disk: string;
+  node: string;
+  devpath: string;
+  kind: 'short' | 'long' | 'conveyance' | string;
+  /** queued, running, passed, failed, aborted, interrupted, skipped, error. */
+  status: string;
+  queued_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  progress: number | null;
+  expected_secs: number | null;
+  start_hours: number | null;
+  result: string | null;
+  lba: number | null;
+  message: string | null;
+  actor: string | null;
+  schedule: string | null;
+}
+
+export interface TestSchedule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: 'short' | 'long' | 'conveyance';
+  cron: string;
+  disks: 'all' | 'hdd' | 'ssd' | 'nvme' | 'list';
+  ids: string[];
+  nodes: string[];
+  /** Filled in by the server. */
+  next_run?: number | null;
+  covers?: number;
+}
+
+export interface DiskEvent {
+  id: number;
+  subject: string;
+  ts: number;
+  severity: Severity;
+  kind: string;
+  message: string;
+}
+
+export interface NodeAccess {
+  node: string;
+  address: string;
+  ok: boolean;
+  checked_at: number | null;
+  error: string | null;
+  helper: number | null;
+  outdated: boolean;
+  hostname: string | null;
+  smartctl: string | null;
+  zfs: string | null;
+  mdadm: boolean;
+  md_arrays: boolean;
+  snapraid: string | null;
+  snapraid_conf: boolean;
+  host_keys: string[];
+}
+
+export interface DiskSampling {
+  running: boolean;
+  last_run: number | null;
+  last_smart: number | null;
+  next_smart: number | null;
+  error: string | null;
+  node_errors: Record<string, string>;
+}
+
+export interface DiskHealthOverview {
+  enabled: boolean;
+  proxmox: boolean;
+  sampling: DiskSampling;
+  sample_minutes: number;
+  host_access: { enabled: boolean; has_key: boolean; nodes: NodeAccess[] };
+  disks: DiskView[];
+  pools: Pool[];
+  tests: { active: DiskTest[]; recent: DiskTest[] };
+  schedules: TestSchedule[];
+  events: DiskEvent[];
+}
+
+export interface SmartAttribute {
+  id: number;
+  name: string;
+  value: number | null;
+  worst: number | null;
+  thresh: number | null;
+  raw: string;
+  prefail: boolean;
+  /** "" (never), "now" or "past". */
+  failed: string;
+}
+
+export interface SmartSelfTestEntry {
+  kind: string;
+  status: string;
+  outcome: TestOutcome;
+  hours: number | null;
+  lba: number | null;
+  remaining: number | null;
+}
+
+export interface SmartReport {
+  source: 'api' | 'helper';
+  protocol: 'ata' | 'nvme' | 'scsi' | 'unknown';
+  collected_at: number;
+  model: string | null;
+  family: string | null;
+  serial: string | null;
+  firmware: string | null;
+  capacity: number | null;
+  logical_sector: number | null;
+  physical_sector: number | null;
+  rpm: number | null;
+  form_factor: string | null;
+  link_max: string | null;
+  link_now: string | null;
+  trim: boolean | null;
+  erc_read: number | null;
+  erc_write: number | null;
+  smart_available: boolean | null;
+  smart_enabled: boolean | null;
+  passed: boolean | null;
+  temperature: number | null;
+  temp_min_lifetime: number | null;
+  temp_max_lifetime: number | null;
+  temp_warning: number | null;
+  temp_critical: number | null;
+  power_on_hours: number | null;
+  power_cycles: number | null;
+  reallocated: number | null;
+  reallocated_events: number | null;
+  pending: number | null;
+  offline_uncorrectable: number | null;
+  reported_uncorrect: number | null;
+  crc_errors: number | null;
+  command_timeouts: number | null;
+  spin_retries: number | null;
+  load_cycles: number | null;
+  helium: number | null;
+  wear_used: number | null;
+  available_spare: number | null;
+  spare_threshold: number | null;
+  critical_warning: number | null;
+  media_errors: number | null;
+  error_log_entries: number | null;
+  unsafe_shutdowns: number | null;
+  bytes_written: number | null;
+  bytes_read: number | null;
+  grown_defects: number | null;
+  uncorrected_errors: number | null;
+  attributes: SmartAttribute[];
+  self_tests: {
+    short: boolean;
+    long: boolean;
+    conveyance: boolean;
+    short_minutes: number | null;
+    long_minutes: number | null;
+    conveyance_minutes: number | null;
+    running: { kind: string | null; remaining: number | null } | null;
+    log: SmartSelfTestEntry[];
+  };
+  messages: string[];
+  text: string | null;
+}
+
+export interface DiskDetail {
+  disk: DiskView;
+  report: SmartReport | null;
+  has_raw: boolean;
+  test: DiskTest | null;
+  tests: DiskTest[];
+  events: DiskEvent[];
+}
+
+export interface DiskHistoryPoint {
+  ts: number;
+  temp: number | null;
+  temp_max: number | null;
+  poh: number | null;
+  realloc: number | null;
+  pending: number | null;
+  uncorrect: number | null;
+  crc: number | null;
+  wear: number | null;
+  written: number | null;
+  cycles: number | null;
+  /** Share of readings in the bucket that found the disk asleep (0..1). */
+  asleep: number;
+}
+
+export interface HostAccessNode {
+  node: string;
+  address: string | null;
+  configured: boolean;
+  status: NodeAccess | null;
+  host_keys: string[];
+}
+
+export interface HostAccessInfo {
+  enabled: boolean;
+  has_key: boolean;
+  public_key: string | null;
+  install: string | null;
+  helper_version: number;
+  helper_path: string;
+  nodes: HostAccessNode[];
+}
+
 // -------------------------------------------------------------- settings
 
 export interface NotificationProvider {
@@ -904,6 +1315,21 @@ export interface Settings {
     node: string;
     self_vmid: number | null;
     backup_storage: string;
+    disks: {
+      enabled: boolean;
+      sample_minutes: number;
+      wake_sleeping: boolean;
+      retention_days: number;
+      max_parallel_tests: number;
+      notify_passed: boolean;
+      schedules: TestSchedule[];
+    };
+    host_access: {
+      enabled: boolean;
+      user: string;
+      port: number;
+      addresses: Record<string, string>;
+    };
   };
   mqtt: {
     enabled: boolean;

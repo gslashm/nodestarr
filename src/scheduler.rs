@@ -104,7 +104,7 @@ pub fn next_runs(s: &Settings) -> Vec<(Job, Option<DateTime<chrono_tz::Tz>>)> {
 }
 
 /// True when `expr` had an occurrence in (from, to].
-fn fired_between(expr: &str, from: &DateTime<chrono_tz::Tz>, to: &DateTime<chrono_tz::Tz>) -> bool {
+pub(crate) fn fired_between(expr: &str, from: &DateTime<chrono_tz::Tz>, to: &DateTime<chrono_tz::Tz>) -> bool {
     match parse_cron(expr) {
         Ok(cron) => cron.find_next_occurrence(from, false).map(|next| next <= *to).unwrap_or(false),
         Err(_) => false,

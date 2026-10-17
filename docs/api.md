@@ -121,6 +121,30 @@ container or stack run one at a time.
 `POST /proxmox/guests/{vmid}/backup`, `GET /proxmox/tasks`, `GET
 /proxmox/rrd`, `GET /proxmox/disks`, `GET /proxmox/apt`.
 
+[Disk health and pools](disk-health.md). Disk IDs (model and serial, like
+`WDC_WD40EFRX-68N32N0_WD-WCC7K1234567`) and pool IDs (`<node>/<kind>/<name>`,
+like `pve/zfs/tank`) go URL-encoded into paths and queries.
+
+| Method and path | What it does |
+|---|---|
+| `GET /proxmox/disk-health` | Disks, pools, running, waiting and recent self-tests, schedules with their next run, recent changes, and the state of background reading. |
+| `POST /proxmox/disk-health/refresh` | Reads the nodes now, in the background (`{"started": false}` when a read is already running). |
+| `GET /proxmox/disk-health/disks/{id}` | A disk with its latest SMART report, self-tests and changes. `DELETE` forgets a disk that's no longer connected, with its history. |
+| `GET /proxmox/disk-health/disks/{id}/history` | `?days=30`: temperature, sector counts, wear, data written and time asleep, in at most about 400 points. |
+| `GET /proxmox/disk-health/disks/{id}/raw` | The latest `smartctl -j -x` output (with host access). |
+| `POST /proxmox/disk-health/disks/{id}/tests` | `{"kind": "short"}` (or `long`, `conveyance`) queues a self-test. `POST .../tests/abort` aborts it or cancels it while it waits; `DELETE /proxmox/disk-health/tests/{test id}` cancels one by its ID. |
+| `POST /proxmox/disk-health/disks/{id}/identify` | `{"seconds": 30}` (5 to 300): reads from the disk so its activity light blinks. |
+| `PUT /proxmox/disk-health/disks/{id}/label` | `{"bay": "Bay 3", "notes": "", "purchased": "2024-03-01", "warranty_until": "2027-03-01"}`. |
+| `PUT /proxmox/disk-health/schedules` | Replaces the self-test schedules: `[{"id": "weekly-short", "name": "Weekly short test", "enabled": true, "kind": "short", "cron": "0 3 * * 0", "disks": "all", "ids": [], "nodes": []}]`. `disks` is `all`, `hdd`, `ssd` (SATA and NVMe), `nvme`, or `list` for the disks in `ids`; `nodes` empty means all. |
+| `POST /proxmox/disk-health/scrub` | `{"pool": "pve/zfs/tank", "action": "start"}` (or `pause`, `stop`; `start` resumes a paused scrub). ZFS pools, with host access. |
+| `GET /proxmox/disk-health/pool-history` | `?pool=pve%2Fzfs%2Ftank&days=90`: a pool's size and use over time. |
+| `GET /proxmox/disk-health/events` | `?subject=<disk id, or pool:<pool id>>&limit=100`: what changed, newest first. |
+| `GET /proxmox/host-access` | Host access: the public key, the setup commands and each node's address, state and pinned host keys. |
+| `POST /proxmox/host-access/key` | Creates Nodestarr's SSH key, or replaces it. |
+| `POST /proxmox/host-access/test` | `{"node": "pve"}`: connects to a node, pinning its host key the first time. |
+| `DELETE /proxmox/host-access/host-keys/{node}` | Forgets a node's pinned host key (after reinstalling it). |
+| `GET /proxmox/host-access/helper.sh` | The helper script the setup commands install. |
+
 ### Nodestarr itself
 
 `GET /health` (no key needed: `{"status": "ok", "docker": true, "version":
@@ -141,8 +165,8 @@ image is here and from its registry otherwise, without pulling it. `GET
 `GET /api/v1/events` is a server-sent event stream; each message is JSON
 like `{"type": "container", "data": {...}}`. Types include `container`,
 `container_removed`, `stacks_changed`, `task`, `task_log`, `activity`,
-`update`, `update_check`, `uptime`, `app`, `alert`, `toast`, `settings`
-and `prefs`. Add `?stats=1` to also receive live resource samples (`stats` and
+`update`, `update_check`, `uptime`, `app`, `alert`, `toast`, `settings`,
+`prefs` and `disks` (Proxmox disk health changed: fetch it again). Add `?stats=1` to also receive live resource samples (`stats` and
 `host`) every few seconds. A `resync` event means events were missed and
 everything should be fetched again; the stream ends with `signed_out` when
 the key or session is revoked.

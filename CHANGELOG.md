@@ -61,6 +61,33 @@ All notable changes to Nodestarr are listed here. The format follows
   with what the node uses itself and what is free. Pointing at a guest
   highlights it in all four; in a cluster, switch between nodes.
   `GET /proxmox/status` lists the cluster's nodes (`overview.nodes`).
+- **Disk health** (Proxmox > Disks): every physical disk of the Proxmox
+  nodes with its SMART data kept as history and judged into a verdict
+  (healthy, watch, needs attention, failing) with plain-language reasons
+  that weigh how the numbers changed over the last 30 days. A page per disk
+  has history charts from a week to everything kept (two years by
+  default), its self-tests, the SMART
+  attributes explained, where it sits in the case and its warranty, and
+  everything that changed. Disks keep their history when their `/dev`
+  names change or they move between controllers or nodes.
+- **Pools**: ZFS pools, mdadm and SnapRAID arrays and LVM thin pools, drawn
+  as drive bays, with how many more disk failures each survives, capacity
+  and growth (and when it'll be full), scrub, resilver and rebuild progress,
+  parity disks, and what needs attention. ZFS scrubs can be started,
+  paused and stopped.
+- **SMART self-tests**: short, long and conveyance tests started by hand or
+  on schedules ("a weekly short and a monthly long test" in one click),
+  queued while a pool is rebuilding or scrubbing, with their progress, the
+  result read from the drive's own log, and a notification when one fails
+  (`disk.test`).
+- **Host access**: optional SSH to the nodes, through a helper script the
+  key is locked to, for self-tests, mdadm and SnapRAID, full `smartctl`
+  data and leaving sleeping disks asleep. Without it, disks that spin down
+  between readings are noticed and read only about once a day.
+- Alert rules for disk health, disk temperature, pool health and scrub age;
+  disks and pools in Home Assistant (temperature and problem sensors, pool
+  use) and in the Prometheus metrics. API: `/proxmox/disk-health/...` and
+  `/proxmox/host-access/...`.
 - **Automatic updates by type**: choose which types install on their own
   (by default rebuilds, patch and minor versions and updates of unknown
   size), let security fixes install regardless of their size (except major

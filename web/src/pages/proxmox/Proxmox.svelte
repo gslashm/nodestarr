@@ -1,7 +1,7 @@
 <!--
   Proxmox VE: the node Nodestarr runs on and its guests (with power actions,
-  snapshots and vzdump backups), backup archives, node tasks, and the
-  node's disks, package updates and history.
+  snapshots and vzdump backups), disk health and storage pools, backup
+  archives, node tasks, and the node's package updates and history.
 -->
 <script lang="ts">
   import type { Component } from 'svelte';
@@ -15,6 +15,7 @@
   import Tabs from '../../components/Tabs.svelte';
   import { api } from '../../lib/api';
   import { ago } from '../../lib/format';
+  import { live } from '../../lib/live.svelte';
   import { href } from '../../lib/router.svelte';
   import { session } from '../../lib/session.svelte';
   import type { PveOverview } from '../../lib/types';
@@ -28,9 +29,10 @@
     error?: string | null;
   }
 
-  type TabProps = { overview: PveOverview; selfVmid: number | null; reload: () => Promise<void> };
+  type TabProps = { overview: PveOverview; selfVmid: number | null; reload: () => Promise<void>; sub: string | null };
   const loaders: Record<string, () => Promise<{ default: Component<TabProps> }>> = {
     guests: () => import('./Guests.svelte'),
+    disks: () => import('./Disks.svelte'),
     backups: () => import('./PveBackups.svelte'),
     tasks: () => import('./PveTasks.svelte'),
     host: () => import('./Host.svelte'),
@@ -69,12 +71,15 @@
   });
 
   const o = $derived(status?.overview ?? null);
-  const tabList = [
+  // Open disk and pool alerts, as a badge on the Disks tab.
+  const storageAlerts = $derived(live.alerts.filter((a) => a.target.startsWith('pvedisk:') || a.target.startsWith('pool:')).length);
+  const tabList = $derived([
     { key: 'guests', label: 'Guests', path: '/proxmox' },
+    { key: 'disks', label: 'Disks', path: '/proxmox/disks', badge: storageAlerts || null, tone: 'bad' as const },
     { key: 'backups', label: 'Backups', path: '/proxmox/backups' },
     { key: 'tasks', label: 'Tasks', path: '/proxmox/tasks' },
     { key: 'host', label: 'Node', path: '/proxmox/host' },
-  ];
+  ]);
 </script>
 
 <PageHeader
@@ -110,7 +115,7 @@
     {/if}
     {#if o && Tab}
       {#key tab}
-        <Tab overview={o} selfVmid={status.self_vmid ?? null} reload={() => load(true)} />
+        <Tab overview={o} selfVmid={status.self_vmid ?? null} reload={() => load(true)} sub={params.sub ?? null} />
       {/key}
     {/if}
   {/if}

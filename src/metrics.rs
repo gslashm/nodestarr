@@ -139,7 +139,86 @@ pub async fn render(app: &App) -> String {
         o.help("nodestarr_host_memory_available_bytes", "gauge", "Docker host available memory");
         o.sample("nodestarr_host_memory_available_bytes", &[], avail as f64);
     }
+    storage(&mut o, app);
     o.0
+}
+
+/// Proxmox disks and pools.
+fn storage(o: &mut Out, app: &App) {
+    use crate::proxmox::disks::pools::PoolHealth;
+    use crate::proxmox::disks::smart::Level;
+
+    let disks: Vec<_> = app.disks.disks().into_iter().filter(|d| d.present).collect();
+    if !disks.is_empty() {
+        o.help("nodestarr_disk_health", "gauge", "Disk verdict from SMART: 0 ok, 1 watch, 2 warning, 3 failing");
+        o.help("nodestarr_disk_smart_passed", "gauge", "1 when the disk's own SMART health check passes");
+        o.help("nodestarr_disk_temperature_celsius", "gauge", "Disk temperature at the last reading");
+        o.help("nodestarr_disk_reallocated_sectors", "gauge", "Reallocated sectors (grown defects on SAS)");
+        o.help("nodestarr_disk_pending_sectors", "gauge", "Unreadable sectors waiting to be reallocated");
+        o.help("nodestarr_disk_crc_errors", "gauge", "Interface CRC errors (usually cabling)");
+        o.help("nodestarr_disk_power_on_hours", "gauge", "Power-on hours");
+        o.help("nodestarr_disk_wear_used_percent", "gauge", "Percent of rated write endurance used (flash)");
+        o.help("nodestarr_disk_asleep", "gauge", "1 when the disk was spun down at the last check");
+    }
+    for d in &disks {
+        let model = d.model.clone().unwrap_or_default();
+        let serial = d.serial.clone().unwrap_or_default();
+        let labels = [
+            ("node", d.node.as_str()),
+            ("device", d.devpath.as_str()),
+            ("model", model.as_str()),
+            ("serial", serial.as_str()),
+        ];
+        if d.sampled_at.is_some() {
+            let verdict = match d.verdict {
+                Level::Ok | Level::Info => 0.0,
+                Level::Watch => 1.0,
+                Level::Warning => 2.0,
+                Level::Failing => 3.0,
+            };
+            o.sample("nodestarr_disk_health", &labels, verdict);
+        }
+        let metrics: [(&str, Option<f64>); 7] = [
+            ("nodestarr_disk_smart_passed", d.passed.map(|p| if p { 1.0 } else { 0.0 })),
+            ("nodestarr_disk_temperature_celsius", d.temperature),
+            ("nodestarr_disk_reallocated_sectors", d.reallocated.map(|n| n as f64)),
+            ("nodestarr_disk_pending_sectors", d.pending.map(|n| n as f64)),
+            ("nodestarr_disk_crc_errors", d.crc_errors.map(|n| n as f64)),
+            ("nodestarr_disk_power_on_hours", d.power_on_hours.map(|n| n as f64)),
+            ("nodestarr_disk_wear_used_percent", d.wear_used),
+        ];
+        for (name, value) in metrics {
+            if let Some(v) = value {
+                o.sample(name, &labels, v);
+            }
+        }
+        o.sample("nodestarr_disk_asleep", &labels, if d.asleep { 1.0 } else { 0.0 });
+    }
+
+    let pools = app.disks.pools();
+    if !pools.is_empty() {
+        o.help("nodestarr_pool_healthy", "gauge", "1 when the pool works with full redundancy");
+        o.help("nodestarr_pool_size_bytes", "gauge", "Pool size");
+        o.help("nodestarr_pool_used_bytes", "gauge", "Space used in the pool");
+        o.help("nodestarr_pool_failures_tolerated", "gauge", "Further disk failures the pool survives right now");
+        o.help("nodestarr_pool_last_scrub_timestamp_seconds", "gauge", "When the last scrub finished (ZFS)");
+    }
+    for p in &pools {
+        let labels = [("node", p.node.as_str()), ("pool", p.name.as_str()), ("type", p.kind.as_str())];
+        o.sample("nodestarr_pool_healthy", &labels, if p.health == PoolHealth::Ok { 1.0 } else { 0.0 });
+        if let Some(s) = p.size {
+            o.sample("nodestarr_pool_size_bytes", &labels, s as f64);
+        }
+        if let Some(u) = p.used {
+            o.sample("nodestarr_pool_used_bytes", &labels, u as f64);
+        }
+        if let Some(t) = p.tolerance {
+            o.sample("nodestarr_pool_failures_tolerated", &labels, f64::from(t.remaining.max(0)));
+        }
+        if let Some(at) = p.scan.as_ref().filter(|s| s.kind == "scrub").and_then(|s| s.finished_at) {
+            o.sample("nodestarr_pool_last_scrub_timestamp_seconds", &labels, at as f64);
+        }
+    }
 }
 
 #[cfg(test)]

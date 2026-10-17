@@ -265,6 +265,9 @@ async fn observe(app: &App, rule: &AlertRule, state: &mut AlertState, now: i64) 
             state.backup_obs = obs.clone();
             obs
         }
+        AlertKind::DiskHealth | AlertKind::DiskTemperature | AlertKind::PoolHealth | AlertKind::PoolScrubAge => {
+            observe_storage(app, rule, now)
+        }
         AlertKind::UnexpectedExit | AlertKind::Oom => {
             // Event driven; resolve once the container runs again.
             app.docker
@@ -278,6 +281,117 @@ async fn observe(app: &App, rule: &AlertRule, state: &mut AlertState, now: i64) 
                 })
                 .collect()
         }
+    }
+}
+
+/// Disk and pool rules, from the disk service's latest reading. Disks and
+/// pools that weren't read yet (or whose node is unreachable) keep whatever
+/// state their alert is in, rather than resolving.
+fn observe_storage(app: &App, rule: &AlertRule, now: i64) -> Vec<Obs> {
+    let settings = app.settings.get();
+    if !settings.proxmox.enabled || !settings.proxmox.disks.enabled {
+        return Vec::new();
+    }
+    let t = rule.threshold;
+    let disk_obs = |d: &crate::proxmox::disks::DiskView, active: bool, message: String| Obs {
+        target: format!("pvedisk:{}", d.id),
+        name: format!("{} on {}", crate::proxmox::disks::disk_name(d), d.node),
+        active,
+        message,
+    };
+    match rule.kind {
+        AlertKind::DiskHealth => app
+            .disks
+            .disks()
+            .iter()
+            .filter(|d| d.present && d.sampled_at.is_some())
+            .map(|d| match crate::proxmox::disks::health_problem(d) {
+                Some(f) => disk_obs(d, true, format!("{} ({})", f.title, d.devpath)),
+                None => disk_obs(d, false, String::new()),
+            })
+            .collect(),
+        AlertKind::DiskTemperature => {
+            // Only current readings count: not the last one of a disk that's
+            // asleep, read only daily (resting), or couldn't be read lately.
+            let fresh_for = i64::from(settings.proxmox.disks.sample_minutes.max(5)) * 120 + 600;
+            app.disks
+                .disks()
+                .iter()
+                .filter(|d| d.present)
+                .filter_map(|d| {
+                    let temp = d.temperature?;
+                    let current = !d.asleep && !d.resting && d.sampled_at.is_some_and(|at| now - at <= fresh_for);
+                    // Flash drives tolerate more: their own limit or the threshold + 20 °C.
+                    let limit = if d.media.is_flash() { d.temp_limit.unwrap_or(t + 20.0) } else { t };
+                    Some(disk_obs(
+                        d,
+                        current && temp > limit,
+                        format!("{temp:.0} °C, above {limit:.0} °C ({})", d.devpath),
+                    ))
+                })
+                .collect()
+        }
+        AlertKind::PoolHealth => app
+            .disks
+            .pools()
+            .iter()
+            .map(|p| {
+                let problem = p.findings.iter().find(|f| {
+                    f.level >= crate::proxmox::disks::smart::Level::Warning
+                        && matches!(
+                            f.code.as_str(),
+                            "faulted"
+                                | "degraded"
+                                | "data_errors"
+                                | "scrub_errors"
+                                | "snapraid_errors"
+                                | "metadata"
+                                | "parity_small"
+                        )
+                });
+                Obs {
+                    target: format!("pool:{}", p.id),
+                    name: format!("{} on {}", p.name, p.node),
+                    active: problem.is_some(),
+                    message: problem.map(|f| f.title.clone()).unwrap_or_default(),
+                }
+            })
+            .collect(),
+        AlertKind::PoolScrubAge => {
+            let max_days = t.max(1.0);
+            app.disks
+                .pools()
+                .iter()
+                .filter_map(|p| {
+                    use crate::proxmox::disks::pools::PoolKind;
+                    let running = p.scan.as_ref().is_some_and(|s| s.is_active());
+                    let (age_days, never) = match p.kind {
+                        PoolKind::Zfs => {
+                            let last = p.scan.as_ref().filter(|s| s.kind == "scrub").and_then(|s| s.finished_at);
+                            match last {
+                                Some(at) => (Some((now - at) as f64 / 86400.0), false),
+                                None if p.scan.as_ref().is_some_and(|s| s.state == "none") => (None, true),
+                                None => return None,
+                            }
+                        }
+                        PoolKind::Snapraid => (p.snapraid.as_ref()?.oldest_scrub_days.map(f64::from), false),
+                        _ => return None,
+                    };
+                    let stale = never || age_days.is_some_and(|a| a > max_days);
+                    Some(Obs {
+                        target: format!("pool:{}", p.id),
+                        name: format!("{} on {}", p.name, p.node),
+                        active: stale && !running,
+                        message: if never {
+                            "Never scrubbed".into()
+                        } else {
+                            format!("Last scrubbed {:.0} days ago", age_days.unwrap_or(0.0))
+                        },
+                    })
+                })
+                .collect()
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -409,6 +523,10 @@ fn rule_label(kind: AlertKind) -> &'static str {
         AlertKind::Oom => "Out of memory",
         AlertKind::Disk => "Disk usage",
         AlertKind::BackupAge => "Backup age",
+        AlertKind::DiskHealth => "Disk health",
+        AlertKind::DiskTemperature => "Disk temperature",
+        AlertKind::PoolHealth => "Pool health",
+        AlertKind::PoolScrubAge => "Pool scrub age",
     }
 }
 
@@ -445,7 +563,9 @@ async fn fire(app: &App, rule: &AlertRule, target: &str, name: &str, message: &s
     if is_container {
         n = n.target(target, name);
     }
-    app.notifier.send(n.link(app, "/monitoring"));
+    let page =
+        if target.starts_with("pvedisk:") || target.starts_with("pool:") { "/proxmox/disks" } else { "/monitoring" };
+    app.notifier.send(n.link(app, page));
     let activity_kind: &'static str = match rule.kind {
         AlertKind::UnexpectedExit => "container.crashed",
         AlertKind::Oom => "container.oom",

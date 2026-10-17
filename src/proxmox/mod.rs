@@ -2,6 +2,7 @@
 //! backups, tasks, disks and pending host updates.
 
 pub mod client;
+pub mod disks;
 
 use std::sync::Arc;
 use std::time::Duration;

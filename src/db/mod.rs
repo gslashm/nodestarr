@@ -13,7 +13,7 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::error::{AppError, Result};
 
 /// Migrations in order. Never edit an applied migration; add a new one.
-const MIGRATIONS: &[&str] = &[include_str!("migrations/001_init.sql")];
+const MIGRATIONS: &[&str] = &[include_str!("migrations/001_init.sql"), include_str!("migrations/002_disks.sql")];
 
 #[derive(Clone)]
 pub struct Db {

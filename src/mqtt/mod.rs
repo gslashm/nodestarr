@@ -8,6 +8,11 @@
 //!
 //! Nodestarr itself is a device with "updates available" and "containers
 //! running" sensors and a "check for updates" button.
+//!
+//! With Proxmox disk health on, every disk of the nodes is a device too (a
+//! temperature sensor and a "problem" binary sensor whose attributes carry
+//! the verdict and key SMART numbers), and so is every pool (problem and
+//! space used).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -285,6 +290,187 @@ async fn publish_json(client: &AsyncClient, topic: String, payload: &Value, reta
     }
 }
 
+fn storage_on(app: &App) -> bool {
+    let s = app.settings.get();
+    s.proxmox.enabled && s.proxmox.disks.enabled
+}
+
+fn disk_object_id(id: &str) -> String {
+    object_id(&format!("disk-{id}"))
+}
+
+fn pool_object_id(id: &str) -> String {
+    object_id(&format!("pool-{id}"))
+}
+
+/// Discovery configs for the Proxmox disks and pools.
+fn storage_discovery(app: &App, s: &MqttSettings) -> Vec<(String, Value)> {
+    if !storage_on(app) {
+        return Vec::new();
+    }
+    let prefix = &s.discovery_prefix;
+    let avail = availability(s);
+    let mut out = Vec::new();
+    for d in app.disks.disks().iter().filter(|d| d.present) {
+        let id = disk_object_id(&d.id);
+        let state = format!("{}/disk/{id}/state", s.base_topic);
+        let model = d.model.clone().unwrap_or_else(|| "Disk".into());
+        let name = if d.label.bay.is_empty() {
+            format!("{model} {}", d.devpath)
+        } else {
+            format!("{model} ({})", d.label.bay)
+        };
+        let device = json!({
+            "identifiers": [format!("nodestarr_{id}")],
+            "name": name,
+            "manufacturer": d.family.clone().or_else(|| d.vendor.clone()).unwrap_or_else(|| "Disk".into()),
+            "model": model,
+            "serial_number": d.serial,
+            "sw_version": d.firmware,
+            "via_device": "nodestarr",
+        });
+        if d.temperature.is_some() {
+            out.push((
+                format!("{prefix}/sensor/nodestarr_{id}/temperature/config"),
+                json!({
+                    "name": "Temperature",
+                    "unique_id": format!("nodestarr_{id}_temperature"),
+                    "state_topic": state,
+                    "value_template": "{{ value_json.temperature }}",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "\u{b0}C",
+                    "state_class": "measurement",
+                    "device": device,
+                    "availability": avail,
+                }),
+            ));
+        }
+        out.push((
+            format!("{prefix}/binary_sensor/nodestarr_{id}/problem/config"),
+            json!({
+                "name": "Problem",
+                "unique_id": format!("nodestarr_{id}_problem"),
+                "state_topic": state,
+                "value_template": "{{ value_json.problem }}",
+                "json_attributes_topic": state,
+                "device_class": "problem",
+                "device": device,
+                "availability": avail,
+            }),
+        ));
+    }
+    for p in app.disks.pools() {
+        let id = pool_object_id(&p.id);
+        let state = format!("{}/pool/{id}/state", s.base_topic);
+        let device = json!({
+            "identifiers": [format!("nodestarr_{id}")],
+            "name": format!("{} pool {}", p.kind.as_str().to_uppercase(), p.name),
+            "manufacturer": "Nodestarr",
+            "model": p.layout,
+            "via_device": "nodestarr",
+        });
+        out.push((
+            format!("{prefix}/binary_sensor/nodestarr_{id}/problem/config"),
+            json!({
+                "name": "Problem",
+                "unique_id": format!("nodestarr_{id}_problem"),
+                "state_topic": state,
+                "value_template": "{{ value_json.problem }}",
+                "json_attributes_topic": state,
+                "device_class": "problem",
+                "device": device,
+                "availability": avail,
+            }),
+        ));
+        if p.size.is_some() && p.used.is_some() {
+            out.push((
+                format!("{prefix}/sensor/nodestarr_{id}/used/config"),
+                json!({
+                    "name": "Used",
+                    "unique_id": format!("nodestarr_{id}_used"),
+                    "state_topic": state,
+                    "value_template": "{{ value_json.used_percent }}",
+                    "unit_of_measurement": "%",
+                    "state_class": "measurement",
+                    "icon": "mdi:database",
+                    "device": device,
+                    "availability": avail,
+                }),
+            ));
+        }
+    }
+    out
+}
+
+/// The state payload of a disk.
+fn disk_state(d: &crate::proxmox::disks::DiskView) -> Value {
+    use crate::proxmox::disks::smart::Level;
+    let problem = d.verdict >= Level::Warning || d.passed == Some(false);
+    json!({
+        "problem": if problem { "ON" } else { "OFF" },
+        "verdict": d.verdict.as_str(),
+        "reason": d.findings.iter().find(|f| f.level >= Level::Watch).map(|f| f.title.clone()),
+        "temperature": d.temperature,
+        "asleep": d.asleep,
+        "device": d.devpath,
+        "node": d.node,
+        "serial": d.serial,
+        "power_on_hours": d.power_on_hours,
+        "reallocated_sectors": d.reallocated,
+        "pending_sectors": d.pending,
+        "crc_errors": d.crc_errors,
+        "wear_used_percent": d.wear_used,
+        "last_test": d.last_test.as_ref().map(|t| format!("{} {:?}", t.kind, t.outcome).to_lowercase()),
+    })
+}
+
+/// The state payload of a pool.
+fn pool_state(p: &crate::proxmox::disks::pools::Pool) -> Value {
+    use crate::proxmox::disks::pools::PoolHealth;
+    use crate::proxmox::disks::smart::Level;
+    let problem = p.health != PoolHealth::Ok || p.findings.iter().any(|f| f.level >= Level::Warning);
+    json!({
+        "problem": if problem { "ON" } else { "OFF" },
+        "state": p.state,
+        "reason": p.findings.iter().find(|f| f.level >= Level::Watch).map(|f| f.title.clone()),
+        "used_percent": p.size.zip(p.used).filter(|(s, _)| *s > 0).map(|(s, u)| (u as f64 * 1000.0 / s as f64).round() / 10.0),
+        "failures_tolerated": p.tolerance.map(|t| t.remaining.max(0)),
+        "scan": p.scan.as_ref().map(|s| format!("{} {}", s.kind, s.state)),
+        "scan_progress": p.scan.as_ref().and_then(|s| s.progress).map(|x| (x * 1000.0).round() / 10.0),
+        "node": p.node,
+    })
+}
+
+async fn publish_storage_states(app: &App, client: &AsyncClient, s: &MqttSettings) {
+    if !storage_on(app) {
+        return;
+    }
+    for d in app.disks.disks().iter().filter(|d| d.present) {
+        let topic = format!("{}/disk/{}/state", s.base_topic, disk_object_id(&d.id));
+        publish_json(client, topic, &disk_state(d), true).await;
+    }
+    for p in app.disks.pools() {
+        let topic = format!("{}/pool/{}/state", s.base_topic, pool_object_id(&p.id));
+        publish_json(client, topic, &pool_state(&p), true).await;
+    }
+}
+
+/// Which disks and pools exist: when it changes, discovery is resent.
+fn storage_signature(app: &App) -> String {
+    if !storage_on(app) {
+        return String::new();
+    }
+    let mut ids: Vec<String> = app
+        .disks
+        .disks()
+        .into_iter()
+        .filter(|d| d.present)
+        .map(|d| format!("{}:{}:{}", d.id, d.temperature.is_some(), d.label.bay))
+        .collect();
+    ids.extend(app.disks.pools().into_iter().map(|p| p.id));
+    ids.join("|")
+}
+
 async fn publish_states(app: &App, client: &AsyncClient, s: &MqttSettings) {
     let stats = crate::monitor::stats::latest(app);
     let updates = app.updates.all();
@@ -342,6 +528,7 @@ async fn publish_states(app: &App, client: &AsyncClient, s: &MqttSettings) {
         true,
     )
     .await;
+    publish_storage_states(app, client, s).await;
 }
 
 async fn publish_discovery(app: &App, client: &AsyncClient, s: &MqttSettings) {
@@ -358,6 +545,10 @@ async fn publish_discovery(app: &App, client: &AsyncClient, s: &MqttSettings) {
             current.insert(topic.clone());
             publish_json(client, topic, &payload, true).await;
         }
+    }
+    for (topic, payload) in storage_discovery(app, s) {
+        current.insert(topic.clone());
+        publish_json(client, topic, &payload, true).await;
     }
     // Remove entities of containers that no longer exist.
     let stale: Vec<String> = {
@@ -520,6 +711,7 @@ async fn run_session(
     let mut stats_tick =
         tokio::time::interval(Duration::from_secs(app.settings.get().monitoring.sample_secs.max(15) as u64));
     let mut dirty = false;
+    let mut storage = storage_signature(app);
     let mut debounce = tokio::time::interval(Duration::from_secs(2));
     let original = s.clone();
     loop {
@@ -555,6 +747,16 @@ async fn run_session(
             },
             ev = bus.recv() => match ev {
                 Ok(Event::Container(_) | Event::ContainerRemoved { .. } | Event::Update { .. } | Event::Task(_) | Event::Prefs { .. }) => dirty = true,
+                Ok(Event::Disks) if app.mqtt.is_connected() => {
+                    // New or removed disks and pools need discovery; otherwise states will do.
+                    let now = storage_signature(app);
+                    if now != storage {
+                        storage = now;
+                        dirty = true;
+                    } else {
+                        pending.request(Publish::States);
+                    }
+                }
                 Ok(_) => {}
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => dirty = true,
                 Err(_) => return,
@@ -658,6 +860,7 @@ pub fn topics(s: &MqttSettings) -> HashMap<&'static str, String> {
         ("update", format!("{}/<container>/update", s.base_topic)),
         ("commands", format!("{}/<container>/set (start, stop, restart, update)", s.base_topic)),
         ("nodestarr", format!("{}/command (check_updates)", s.base_topic)),
+        ("disks", format!("{}/disk/<disk>/state, {}/pool/<pool>/state", s.base_topic, s.base_topic)),
     ])
 }
 
@@ -673,5 +876,38 @@ mod tests {
         assert_eq!(command_topic(&s, "x"), "nodestarr/x/set");
         let d = nodestarr_discovery(&s, "Nodestarr");
         assert!(d.iter().all(|(t, _)| t.starts_with("homeassistant/")));
+        assert_eq!(disk_object_id("WDC_X_WD-1"), object_id("disk-WDC_X_WD-1"));
+    }
+
+    #[test]
+    fn storage_states() {
+        use crate::proxmox::disks::smart::{Finding, Level};
+        let mut d = crate::proxmox::disks::DiskView {
+            devpath: "/dev/sdc".into(),
+            temperature: Some(38.0),
+            verdict: Level::Watch,
+            findings: vec![Finding {
+                level: Level::Watch,
+                code: "reallocated".into(),
+                title: "8 sectors reallocated".into(),
+                detail: String::new(),
+            }],
+            ..Default::default()
+        };
+        let v = disk_state(&d);
+        assert_eq!(v["problem"], "OFF");
+        assert_eq!(v["reason"], "8 sectors reallocated");
+        assert_eq!(v["temperature"], 38.0);
+        d.verdict = Level::Warning;
+        assert_eq!(disk_state(&d)["problem"], "ON");
+        let p = crate::proxmox::disks::pools::Pool {
+            size: Some(1000),
+            used: Some(333),
+            health: crate::proxmox::disks::pools::PoolHealth::Degraded,
+            ..Default::default()
+        };
+        let v = pool_state(&p);
+        assert_eq!(v["problem"], "ON");
+        assert_eq!(v["used_percent"], 33.3);
     }
 }

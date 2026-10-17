@@ -85,7 +85,10 @@ Svelte UI built in) that idles at about 20 MB of memory and almost no CPU.
   buttons and native update entities), Prometheus metrics, and a REST API
   with API keys.
 - Proxmox VE: the node and its guests with power actions, snapshots,
-  vzdump backups, tasks, disks and pending package updates.
+  vzdump backups, tasks, disks and pending package updates, plus disk
+  health: SMART history and verdicts for every disk, scheduled self-tests,
+  and ZFS, mdadm, SnapRAID and LVM thin pools with their redundancy,
+  scrubs and rebuilds.
 
 **Security**
 - Users with admin or read-only roles, two-step sign-in (TOTP with recovery
@@ -122,7 +125,7 @@ volumes, reverse proxies, running without Docker, and updating.
 - [Backups and restore](docs/backups.md)
 - [Monitoring, alerts and notifications](docs/monitoring.md)
 - [Home Assistant and Prometheus](docs/home-assistant.md)
-- [Proxmox VE](docs/proxmox.md)
+- [Proxmox VE](docs/proxmox.md) and its [disk health and pools](docs/disk-health.md)
 - [Security](docs/security.md)
 - [API](docs/api.md)
 - [Development](docs/development.md) and [UI design notes](web/DESIGN.md)
